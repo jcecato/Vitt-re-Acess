@@ -10,11 +10,11 @@ export const ReferralsTab: React.FC<ReferralsTabProps> = ({ patient, onOpenPdf }
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1.5">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1.5">
           Encaminhamentos
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-4">
           {patient.referrals.map((ref) => {
             const cleanDate = ref.dateStr.replace('PDF · ', '').replace('PDF . ', '');
 
@@ -34,10 +34,10 @@ export const ReferralsTab: React.FC<ReferralsTabProps> = ({ patient, onOpenPdf }
                     <i className="ti ti-send"></i>
                   </div>
                   <div className="grow min-w-0">
-                    <div className="text-[18px] font-semibold text-white leading-tight">
-                      {ref.specialty}
+                    <div className="text-[18px] font-semibold text-white leading-tight uppercase">
+                      {ref.specialty.toUpperCase()}
                     </div>
-                    <div className="text-[15px] text-[#8e8ea6] mt-0.5 leading-snug">
+                    <div className="text-[18px] text-[#8e8ea6] mt-0.5 leading-snug">
                       Data: {cleanDate}
                     </div>
                   </div>

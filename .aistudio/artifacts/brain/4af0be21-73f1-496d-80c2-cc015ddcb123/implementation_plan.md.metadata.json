@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de implementação para a nova aba 'Caixa Surpresa' da clínica Vittare, posicionada após a última aba do menu superior, com contagem regressiva para expiração do ciclo do paciente, estado trancado com teaser elegante, abertura interativa e revelação dos 2 benefícios exclusivos de renovação (Creatina Micronizada 300g entregue e Condição Exclusiva de Renovação com Valor Congelado).",
-  "updatedAt":  "2026-10-30T21:35:53.247881895Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "Plano de implementação para o sistema de acordeon exclusivo e auto-fechamento inteligente na lista de avaliações da aba Check-In. Ao abrir uma avaliação, qualquer outra aberta fecha automaticamente, mantendo no máximo 1 aberta por vez e centralizando o card aberto com scroll suave, prevenindo layout shift e perda de leitura acidental.",
+  "updatedAt": "2026-11-02T15:05:10.864006265Z",
+  "requestFeedback": true,
+  "userFacing": true
 }

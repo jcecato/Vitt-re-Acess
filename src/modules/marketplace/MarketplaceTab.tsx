@@ -16,16 +16,16 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
 
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
-      <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f]">
+      <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f]">
         Curadoria e Indicações
       </div>
 
       {/* Texto de Curadoria com texto justificado e instrução à esquerda */}
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm">
-        <p className="text-[16px] text-white leading-relaxed text-justify">
+        <p className="text-[18px] text-white leading-relaxed text-justify">
           Nossa Curadoria pensa nos mínimos detalhes, e você ganha tempo nas pesquisas e segurança na compra verificada.
         </p>
-        <p className="text-[15px] text-[#5eea8f] italic mt-2 font-medium text-left">
+        <p className="text-[18px] text-[#5eea8f] italic mt-2 font-medium text-left">
           Clique no link verde abaixo
         </p>
       </div>

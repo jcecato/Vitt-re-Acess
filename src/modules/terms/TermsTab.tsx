@@ -13,11 +13,11 @@ export const TermsTab: React.FC<TermsTabProps> = ({ patient }) => {
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1.5">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1.5">
           Orientação
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-4">
           {patient.terms.map((term) => (
             <div
               key={term.id}
@@ -28,10 +28,10 @@ export const TermsTab: React.FC<TermsTabProps> = ({ patient }) => {
                   <i className="ti ti-file-check"></i>
                 </div>
                 <div className="grow min-w-0">
-                  <div className="text-[18px] font-semibold text-white leading-tight truncate">
-                    {term.name}
+                  <div className="text-[18px] font-semibold text-white leading-tight truncate uppercase">
+                    {term.name.toUpperCase()}
                   </div>
-                  <div className="text-[15px] text-[#8e8ea6] mt-0.5 leading-snug">
+                  <div className="text-[18px] text-[#8e8ea6] mt-0.5 leading-snug">
                     Data: {term.dateStr.replace('PDF · ', '')}
                   </div>
                 </div>

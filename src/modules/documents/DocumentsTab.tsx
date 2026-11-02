@@ -14,15 +14,16 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
           Documentos que você nos entregou.
         </div>
-        <div className="text-[16px] text-[#cfd3dc] leading-relaxed mb-3">
+        <p className="text-[18px] text-[#cfd3dc] leading-relaxed mb-3">
           Apresente eles a sua equipe multiprofissional de forma organizada tudo em um só lugar.
-        </div>
+        </p>
 
-        <div className="space-y-2">
+        <div className="space-y-4">
           {patient.documents.map((doc) => {
+            const firstWord = (doc.name || '').split(' ')[0].toUpperCase();
             return (
               <div
                 key={doc.id}
@@ -33,10 +34,10 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
                     <i className={doc.name.includes('Hemograma') ? 'ti ti-flask' : doc.name.includes('Perfil') ? 'ti ti-heart-rate-monitor' : 'ti ti-file'}></i>
                   </div>
                   <div className="grow min-w-0">
-                    <div className="text-[18px] font-semibold text-white leading-tight truncate">
-                      {doc.name}
+                    <div className="text-[18px] font-semibold text-white leading-tight truncate uppercase">
+                      {firstWord}
                     </div>
-                    <div className="text-[15px] text-[#8e8ea6] mt-0.5 leading-snug">
+                    <div className="text-[18px] text-[#8e8ea6] mt-0.5 leading-snug">
                       Data: {doc.dateStr}
                     </div>
                   </div>

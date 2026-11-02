@@ -83,7 +83,7 @@ export const MARIA_PAULA_PATIENT: PatientProfile = {
   consultations: [
     {
       id: 'cons-1',
-      title: '1ª Sessão',
+      title: '1° SESSÃO',
       dateStr: '27/09/2026 · 14:00 hrs',
       duration: '50 min',
       status: 'Concluída',
@@ -94,7 +94,7 @@ export const MARIA_PAULA_PATIENT: PatientProfile = {
     },
     {
       id: 'cons-2',
-      title: '2ª Sessão',
+      title: '2° SESSÃO',
       dateStr: '26/11/2026 · 14:00 hrs',
       status: 'Agendada',
       pdfAvailable: false,
@@ -103,7 +103,7 @@ export const MARIA_PAULA_PATIENT: PatientProfile = {
     },
     {
       id: 'cons-3',
-      title: '3ª Sessão',
+      title: '3° SESSÃO',
       dateStr: '15/01/2027 · 10:00 hrs',
       status: 'Agendada',
       pdfAvailable: false,
@@ -216,14 +216,14 @@ export const MARIA_PAULA_PATIENT: PatientProfile = {
   mealGuides: [
     {
       id: 'guia-1',
-      title: 'Guia 01 | Data: 27/09/2026',
+      title: 'GUIA 01',
       dateStr: '27/09/2026',
       isNew: false,
       pdfAvailable: true
     },
     {
       id: 'guia-2',
-      title: 'Guia 02 | Data: 24/10/2026',
+      title: 'GUIA 02',
       dateStr: '24/10/2026',
       isNew: true,
       pdfAvailable: true

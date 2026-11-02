@@ -54,15 +54,12 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Seção 1: Exames Solicitados organizados por solicitação individual */}
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-3">
           Exames solicitados
-        </div>
-        <div className="text-[16px] text-[#8e8ea6] leading-relaxed mb-2.5">
-          Solicitações e requisições organizadas por data.
         </div>
 
         {/* Cada exame solicitado organizado por div único */}
-        <div className="space-y-2.5">
+        <div className="space-y-4">
           {batches.map((batch) => {
             const isReady = batch.status.toLowerCase() === 'laudo' || batch.status.toLowerCase() === 'disponível';
 
@@ -77,10 +74,12 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                     <i className="ti ti-clipboard-list"></i>
                   </div>
                   <div className="grow min-w-0">
-                    <div className="text-[18px] font-semibold text-white leading-tight">
-                      {batch.title}
+                    <div className="text-[18px] font-semibold text-white leading-tight uppercase">
+                      {batch.title.toLowerCase().includes('bioqu') 
+                        ? 'PAINEL [ BIOQUÍMICO COMPLETO ]' 
+                        : batch.title.toUpperCase()}
                     </div>
-                    <div className="text-[16px] text-[#8e8ea6] mt-1 leading-snug">
+                    <div className="text-[18px] text-[#8e8ea6] mt-1 leading-snug">
                       Data: {batch.dateStr}
                     </div>
                   </div>
@@ -131,14 +130,14 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
 
       {/* Seção 2: Comparativo no final com tabela e gráfico visual (Glicemia, Insulina, etc.) */}
       <div className="pt-1">
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
           Evolução dos Biomarcadores
         </div>
         <div className="text-[16px] text-[#8e8ea6] leading-relaxed mb-2.5">
           Comparativo histórico dos parâmetros laboratoriais.
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {comparisons
             .filter((item) => item.points && item.points.length > 1)
             .map((item) => {

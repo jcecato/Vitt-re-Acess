@@ -62,19 +62,20 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1.5">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1.5">
           Suplementação e Receitas
         </div>
 
-        <div className="space-y-2.5">
+        <div className="space-y-4">
           {sortedProtocols.map((prot, index) => {
             const hasExpired = isExpired(prot.expirationStr) || prot.badge.toLowerCase() === 'descontinuado';
-            const displayTitle = prot.title.startsWith('Receita') ? prot.title : `Receita 0${index + 1}`;
+            const displayTitle = `RECEITA ${String(index + 1).padStart(2, '0')}`;
+            const dateStrClean = prot.expirationStr.replace('Validade: ', '').replace('Data: ', '');
 
             return (
               <div
                 key={prot.id}
-                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 shadow-sm"
+                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm"
               >
                 {/* Linha superior: Ícone de Jarra de Laboratório + Título + Status */}
                 <div className="flex items-center gap-3">
@@ -82,11 +83,11 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
                     <i className="ti ti-flask"></i>
                   </div>
                   <div className="grow min-w-0">
-                    <div className="text-[18px] font-semibold text-white leading-tight">
+                    <div className="text-[18px] font-semibold text-white leading-tight uppercase">
                       {displayTitle}
                     </div>
-                    <div className="text-[15px] text-[#8e8ea6] mt-0.5 leading-snug">
-                      {prot.expirationStr}
+                    <div className="text-[18px] text-[#8e8ea6] mt-0.5 leading-snug">
+                      Data: {dateStrClean}
                     </div>
                   </div>
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { PatientProfile } from '../../types/patient';
-import { LogOut, Clock } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 
 interface PatientHeaderProps {
@@ -41,17 +41,21 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({ patient, activeTab
             </div>
             <div className="min-w-0">
               <div 
-                style={{ width: '243.705px' }}
-                className="text-[20px] text-left font-['Cormorant_Garamond',serif] font-semibold tracking-[0.02em] text-white leading-tight truncate max-w-full"
+                style={{ width: '222px' }}
+                className="text-[24px] text-left font-['Cormorant_Garamond',serif] font-semibold tracking-[0.02em] text-white leading-tight truncate max-w-full"
               >
                 {patient.name}
               </div>
-              <div className="text-[16px] text-[#cfd3dc] font-normal mt-0.5 leading-snug">
+              <div className="text-[18px] text-[#cfd3dc] font-normal mt-0.5 leading-snug">
                 Último Acesso: <span className="text-white font-medium">{patient.lastAccess && /\d{1,2}\/\d{1,2}\/\d{4}/.test(patient.lastAccess) ? patient.lastAccess : '30/10/2026'}</span>
               </div>
-              <div className="text-[16px] text-[#5eea8f] font-medium flex items-center gap-1.5 mt-0.5 font-['Plus_Jakarta_Sans',sans-serif]">
-                <Clock className="w-4 h-4 text-[#5eea8f] shrink-0" />
-                <span className="text-[16px]">Ciclo atual: <strong className="text-white font-semibold">{patient.daysToComplete} dias restantes</strong></span>
+              <div className="text-[18px] text-[#5eea8f] font-medium mt-0.5 font-['Plus_Jakarta_Sans',sans-serif]">
+                <span 
+                  style={{ width: '247px' }}
+                  className="text-[18px] inline-block"
+                >
+                  Ciclo atual: <strong className="text-white font-semibold">{patient.daysToComplete} dias restantes</strong>
+                </span>
               </div>
             </div>
           </div>

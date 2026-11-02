@@ -24,19 +24,19 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
     : [
         {
           id: 'cons-1',
-          title: '1ª Sessão',
+          title: '1° SESSÃO',
           dateStr: '27/09/2026 · 14:00 hrs',
           status: 'Concluída'
         },
         {
           id: 'cons-2',
-          title: '2ª Sessão',
+          title: '2° SESSÃO',
           dateStr: '26/11/2026 · 14:00 hrs',
           status: 'Agendada'
         },
         {
           id: 'cons-3',
-          title: '3ª Sessão',
+          title: '3° SESSÃO',
           dateStr: '15/01/2027 · 10:00 hrs',
           status: 'Agendada'
         }
@@ -81,14 +81,16 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Título da Aba Agenda */}
-      <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1">
+      <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
         Sessões de Consulta
       </div>
 
       {/* Lista das 3 Sessões com Status Inteligente do CRM */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         {sessions.map((sessao, index) => {
-          const displayTitle = sessao.title || `${index + 1}ª Sessão`;
+          const displayTitle = sessao.title
+            ? sessao.title.toUpperCase().replace('ª', '°')
+            : `${index + 1}° SESSÃO`;
 
           return (
             <div
@@ -97,16 +99,16 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
             >
               {/* Linha 1: Título da Sessão + Único Status (Agendada/Concluída/Remarcada/Cancelada) */}
               <div className="flex items-center justify-between gap-2.5">
-                <div className="text-[18px] font-semibold text-white leading-tight">
+                <div className="text-[18px] font-semibold text-white leading-tight uppercase">
                   {displayTitle}
                 </div>
                 {renderStatusBadge(sessao.status)}
               </div>
 
               {/* Linha 2: Data e Hora */}
-              <div className="text-[16px] text-[#8e8ea6] mt-1.5 leading-snug flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-[#7c6af7] shrink-0" />
-                <span>{sessao.dateStr}</span>
+              <div className="text-[18px] text-[#8e8ea6] mt-1.5 leading-snug flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-[#7c6af7] shrink-0" />
+                <span>Data: {sessao.dateStr}</span>
               </div>
 
               {/* Linha 3: Botão Remarcar direcionando ao WhatsApp */}

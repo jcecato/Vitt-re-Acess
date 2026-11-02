@@ -1,18 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { PatientProfile } from '../../types/patient';
-import { Gift, Lock, Unlock, Clock, Sparkles, CheckCircle2, MessageCircle, ShieldCheck } from 'lucide-react';
+import { Gift, Lock, Unlock, Clock, Sparkles, MessageCircle } from 'lucide-react';
 
 interface SurpriseBoxTabProps {
   patient: PatientProfile;
 }
+
+interface GiftOption {
+  id: number;
+  title: string;
+  description?: string;
+}
+
+const GIFT_OPTIONS: GiftOption[] = [
+  {
+    id: 1,
+    title: 'Creatina Premium Ultra Filtrada e Micronizada - 300g',
+  },
+  {
+    id: 2,
+    title: 'Garrafa Premium Térmica para Café — 1000 ml',
+  },
+  {
+    id: 3,
+    title: 'Crédito de Continuidade de R$ 30,00 para utilizar na contratação de um próximo ciclo, sem prazo para retomada.',
+  },
+  {
+    id: 4,
+    title: 'Crédito de Continuidade Exclusivo de R$ 60,00 para utilizar na contratação de um próximo ciclo, com formalização em até 15 dias após o encerramento do ciclo atual.',
+  },
+];
 
 export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
   const firstName = patient.name ? patient.name.trim().split(' ')[0] : 'Maria';
   const daysRemaining = patient.daysToComplete ?? 28;
   const expirationDateStr = '27/11/2026';
 
-  // Controle de estado da caixa: Trancada (com contagem regressiva) vs. Aberta (revelação dos 2 brindes)
+  // Controle de estado da caixa: Trancada (com contagem regressiva) vs. Aberta (revelação dos brindes)
   const [isPreviewUnlocked, setIsPreviewUnlocked] = useState<boolean>(false);
+  
+  // Estado de seleção do brinde (1 a 4)
+  const [selectedGiftId, setSelectedGiftId] = useState<number>(1);
 
   const [timeLeft, setTimeLeft] = useState({
     days: daysRemaining,
@@ -35,19 +63,21 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
   }, []);
 
   const handleOpenWhatsApp = (messageType: 'antecipar' | 'resgatar') => {
+    const chosenGift = GIFT_OPTIONS.find(g => g.id === selectedGiftId) || GIFT_OPTIONS[0];
+    const clinicPhone = '5527997918100';
     const text = messageType === 'antecipar'
-      ? `Olá Dr. João Paulo! Sou ${patient.name} e gostaria de antecipar a renovação do meu ciclo de acompanhamento na Vittare e garantir meus 2 brindes especiais da Caixa Surpresa!`
-      : `Olá Dr. João Paulo! Sou ${patient.name}, meu ciclo na Vittare concluiu e quero resgatar minha Creatina Ultra Micronizada 300g e a Condição de Valor Congelado para o meu novo ciclo!`;
-    window.open(`https://wa.me/5511999999999?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+      ? `Olá Equipe Vittáre! Sou ${patient.name || 'Paciente'} e gostaria de antecipar a renovação do meu ciclo de acompanhamento e garantir meu brinde especial da Caixa Surpresa!`
+      : `Olá Equipe Vittáre! Sou ${patient.name || 'Paciente'}, concluí meu ciclo de acompanhamento e escolhi meu brinde da Caixa Surpresa:\n\n🎁 *${chosenGift.title}*\n\nComo faço para realizar a retirada/utilização?`;
+    window.open(`https://wa.me/${clinicPhone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full pb-3">
       
-      {/* div 1 do componente: Cabeçalho em Cormorant Garamond 20px com Alinhamento à Esquerda */}
+      {/* Cabeçalho */}
       <div className="flex items-center justify-between mb-1">
         <div>
-          <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] leading-tight">
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
             Caixa Surpresa Vittare
           </div>
         </div>
@@ -72,27 +102,27 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
         </button>
       </div>
 
-      {/* div 2 do componente: Bloco de conteúdo da Caixa */}
+      {/* Conteúdo da Caixa */}
       {!isPreviewUnlocked ? (
         /* ============================================================ */
         /* MODO TRANCADO: COM CONTAGEM REGRESSIVA E EXPECTATIVA         */
         /* ============================================================ */
         <div className="space-y-3">
           
-          {/* div 1 (marcado): Cartão Principal da Caixa Misteriosa */}
+          {/* Cartão Principal da Caixa Misteriosa */}
           <div className="relative overflow-hidden bg-gradient-to-b from-[#1b1535] via-[#121124] to-[#0d0d16] border border-[#7c6af7]/35 rounded-2xl p-4 text-center shadow-lg">
             
-            {/* div 1 interno: Halo de iluminação de fundo */}
+            {/* Halo de iluminação de fundo */}
             <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#7c6af7]/15 rounded-full blur-2xl pointer-events-none" />
 
-            {/* div 2 interno: Cadeado posicionado no canto superior em cima da borda (+100% de tamanho) */}
+            {/* Cadeado no canto superior */}
             <div className="absolute top-3 right-3 z-10">
               <span className="w-12 h-12 rounded-full bg-black/60 border-2 border-[#e5a93c]/60 flex items-center justify-center text-[28px] text-[#e5a93c] shadow-md">
                 <i className="ti ti-lock"></i>
               </span>
             </div>
 
-            {/* div 3 interno: Ilustração da Caixa de Surpresa com SVG aumentado em 30% e Span '2' em 50% */}
+            {/* Ilustração da Caixa de Surpresa (Sem número flutuante) */}
             <div 
               onClick={() => setIsPreviewUnlocked(true)}
               className="relative inline-block my-1 cursor-pointer group active:scale-95 transition-transform"
@@ -103,15 +133,9 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
                   <Gift className="w-[52px] h-[52px] animate-bounce text-[#e5a93c]" style={{ animationDuration: '3s' }} />
                 </div>
               </div>
-              <span className="absolute -bottom-1 -right-1 flex h-6 w-6">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#e5a93c] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-6 w-6 bg-[#e5a93c] items-center justify-center text-[13px] font-bold text-black shadow-sm">
-                  2
-                </span>
-              </span>
             </div>
 
-            {/* div 4 interno: Textos ajustados rigorosamente conforme CSS e solicitação */}
+            {/* Textos da Caixa Trancada */}
             <div className="mt-2.5">
               <div className="text-[20px] font-bold text-white leading-tight">
                 Dia {expirationDateStr}
@@ -120,11 +144,11 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
                 (dia que encerra o seu ciclo atual)
               </div>
               <div className="text-[18px] text-[#cfd3dc] font-normal mt-2 leading-snug max-w-sm mx-auto">
-                Você <strong className="text-white font-semibold">{firstName}</strong> poderá abrir essa caixa e revelaremos <strong className="text-white font-semibold">2 brindes exclusivos</strong>!
+                Você <strong className="text-white font-semibold">{firstName}</strong> poderá abrir essa caixa e escolher seu <strong className="text-white font-semibold">brinde exclusivo</strong>!
               </div>
             </div>
 
-            {/* div 5 interno: Painel da Contagem Regressiva */}
+            {/* Painel da Contagem Regressiva */}
             <div className="mt-3.5 pt-3 border-t border-white/[0.08]">
               <div className="flex items-center justify-center gap-1.5 mb-2.5">
                 <Clock className="w-[18px] h-[18px] text-[#5eea8f] shrink-0" />
@@ -166,7 +190,7 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
 
           </div>
 
-          {/* Botão de Toque para Abrir a Caixa / Antecipar */}
+          {/* Botão de Abertura / Ação */}
           <button
             onClick={() => setIsPreviewUnlocked(true)}
             className="w-full min-h-[48px] py-3 px-4 rounded-xl bg-gradient-to-r from-[#0f7a3a] to-[#0b5c2c] hover:from-[#139247] hover:to-[#0f7a3a] border border-[#5eea8f]/40 text-white font-semibold text-[16px] flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition cursor-pointer"
@@ -178,12 +202,11 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
         </div>
       ) : (
         /* ============================================================ */
-        /* MODO DESBLOQUEADO: QUANDO ABRIR A CAIXA                     */
-        /* Revela 'O que o Dr. João Paulo preparou para você' e WhatsApp*/
+        /* MODO DESBLOQUEADO: CAIXA ABERTA                             */
         /* ============================================================ */
-        <div className="space-y-3 animate-fadeIn">
+        <div className="space-y-3.5 animate-fadeIn">
           
-          {/* Banner de Celebração com a Caixa Aberta */}
+          {/* Banner de Celebração */}
           <div className="bg-gradient-to-br from-[#122e1b] via-[#101e18] to-[#0d0d16] border border-[#5eea8f]/40 rounded-2xl p-4 text-center shadow-lg relative overflow-hidden">
             <div className="flex justify-center mb-1.5">
               <span className="w-10 h-10 rounded-2xl bg-[#5eea8f]/20 border border-[#5eea8f]/50 flex items-center justify-center text-[#5eea8f] shadow-sm">
@@ -194,84 +217,80 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
             <div className="text-[20px] font-bold text-white leading-tight">
               Parabéns, {firstName}!
             </div>
-            <div className="text-[15px] text-[#5eea8f] font-medium mt-1">
-              Sua Caixa Surpresa Vittare foi aberta!
+            <div className="text-[19px] text-[#5eea8f] font-medium mt-1">
+              Sua caixa surpresa vittáre foi aberta!
             </div>
-            <div className="text-[14px] text-[#cfd3dc] mt-1.5 leading-relaxed max-w-sm mx-auto">
-              Ao dar início ao seu novo ciclo de acompanhamento, você tem direito imediato a estes <strong>2 brindes exclusivos</strong>:
+            <div className="text-[20px] text-[#cfd3dc] mt-1.5 leading-relaxed max-w-sm mx-auto">
+              Você pode escolher UM brinde
             </div>
           </div>
 
-          {/* O que o Dr. João Paulo preparou para você (Seção detalhada com os 2 brindes) */}
-          <div className="space-y-2.5">
+          {/* Cabeçalho da Lista de Brindes */}
+          <div className="space-y-3">
             <div className="text-[16px] font-semibold text-white flex items-center gap-2 px-1">
               <Sparkles className="w-4 h-4 text-[#e5a93c]" />
-              <span>O que o Dr. João Paulo preparou para você:</span>
+              <span>O que preparamos para você:</span>
             </div>
 
-            {/* BRINDE 1: Creatina Ultra Filtrada e Micronizada 300g */}
-            <div className="bg-white/[0.04] border border-[#5eea8f]/30 rounded-2xl p-4 relative overflow-hidden">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] shrink-0 text-2xl shadow-xs">
-                  💊
-                </div>
-                <div className="grow min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[12px] font-bold text-[#5eea8f] uppercase tracking-wider bg-[#5eea8f]/10 border border-[#5eea8f]/20 rounded-md px-2 py-0.5">
-                      Brinde 1 · Produto Físico
-                    </span>
-                  </div>
-                  <div className="text-[18px] font-bold text-white mt-1 leading-snug">
-                    Creatina Ultra Filtrada e Micronizada 300g
-                  </div>
-                  <div className="text-[14px] text-[#cfd3dc] mt-1.5 leading-relaxed">
-                    Pote lacrado de 300g com pureza 100% farmacêutica e alta absorção intestinal. Entregue diretamente no seu endereço para potencializar seus ganhos de força, retenção de massa magra e foco cognitivo no novo ciclo.
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-2.5 text-[13px] text-[#5eea8f]">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Entrega inclusa sem custo adicional no plano</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Lista unificada com os 4 brindes selecionáveis */}
+            <div className="space-y-2.5">
+              {GIFT_OPTIONS.map((gift) => {
+                const isSelected = selectedGiftId === gift.id;
+                return (
+                  <div
+                    key={gift.id}
+                    onClick={() => setSelectedGiftId(gift.id)}
+                    className={`rounded-2xl p-4 relative overflow-hidden cursor-pointer transition-all active:scale-[0.99] border ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-white/[0.08] to-white/[0.04] border-[#5eea8f] shadow-[0_0_15px_rgba(94,234,143,0.15)]'
+                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5">
+                      {/* Ícone: Quadrado 48x48px com emoji presente */}
+                      <div className="w-12 h-12 min-w-12 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-2xl shadow-xs shrink-0">
+                        🎁
+                      </div>
 
-            {/* BRINDE 2: Valor de Mensalidade Congelado */}
-            <div className="bg-white/[0.04] border border-[#7c6af7]/35 rounded-2xl p-4 relative overflow-hidden">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded-xl bg-[#7c6af7]/10 border border-[#7c6af7]/30 flex items-center justify-center text-[#7c6af7] shrink-0 text-2xl shadow-xs">
-                  💎
-                </div>
-                <div className="grow min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[12px] font-bold text-[#e5a93c] uppercase tracking-wider bg-[#e5a93c]/10 border border-[#e5a93c]/20 rounded-md px-2 py-0.5">
-                      Brinde 2 · Condição Exclusiva
-                    </span>
+                      {/* Nome do produto ou serviço alinhado diretamente */}
+                      <div className="grow min-w-0 pr-1">
+                        <div className="w-[220px] text-justify text-[18px] font-bold text-white leading-snug">
+                          {gift.title}
+                        </div>
+                      </div>
+
+                      {/* Seletor em círculo (Radio) */}
+                      <div className="shrink-0 flex items-center justify-center">
+                        <div
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                            isSelected
+                              ? 'border-[#5eea8f] bg-[#5eea8f]/20 shadow-sm'
+                              : 'border-white/30 bg-transparent'
+                          }`}
+                        >
+                          {isSelected && (
+                            <div className="w-3 h-3 rounded-full bg-[#5eea8f]" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[18px] font-bold text-white mt-1 leading-snug">
-                    Tabela Especial: Valor de Mensalidade Congelado
-                  </div>
-                  <div className="text-[14px] text-[#cfd3dc] mt-1.5 leading-relaxed">
-                    Garantia de manutenção da sua tabela atual sem aplicação de reajuste anual de honorários. Você assegura seu acompanhamento premium com o Dr. João Paulo pelo mesmo valor de investimento do ciclo anterior.
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-2.5 text-[13px] text-[#7c6af7]">
-                    <ShieldCheck className="w-4 h-4 shrink-0 text-[#5eea8f]" />
-                    <span>Vantagem garantida para renovação de ciclo</span>
-                  </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Botão de Resgate no WhatsApp */}
+          {/* Botão de Resgate no WhatsApp com o brinde escolhido */}
           <button
             onClick={() => handleOpenWhatsApp('resgatar')}
             className="w-full min-h-[48px] py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#0f7a3a] via-[#108c43] to-[#0f7a3a] hover:from-[#139247] hover:to-[#108c43] border border-[#5eea8f]/50 text-white font-bold text-[16px] flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition cursor-pointer"
           >
             <MessageCircle className="w-5 h-5 text-white shrink-0" />
-            <span>Garantir Meus 2 Brindes no WhatsApp</span>
+            <span>GARANTIR MEU BRINDE</span>
           </button>
 
-          <div className="text-center text-[12px] text-[#8e8ea6] pt-0.5">
+          {/* Rodapé: 20px cinza */}
+          <div className="text-center text-[20px] text-[#8e8ea6] pt-1 leading-snug">
             Válido exclusivamente para continuidade do acompanhamento com a equipe Vittare.
           </div>
 

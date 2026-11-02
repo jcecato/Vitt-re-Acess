@@ -21,11 +21,11 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ patient, onOpenPdf }
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-2">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-2">
           Seus investimentos
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {sortedFinancial.map((item) => {
             const isPaid = (item.status || '').toLowerCase() === 'pago';
 
@@ -48,8 +48,8 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ patient, onOpenPdf }
                   </span>
                 </div>
 
-                {/* Linha 2 em diante: Estrutura solicitada */}
-                <div className="pt-2.5 space-y-1.5 text-[15px]">
+                {/* Linha 2 em diante: Estrutura padronizada em 18px */}
+                <div className="pt-2.5 space-y-2 text-[18px]">
                   <div className="text-[#cfd3dc]">
                     <span className="text-[#8e8ea6]">Modelo: </span>
                     <strong className="text-white font-medium">{item.model || 'Presencial'}</strong>
@@ -74,15 +74,15 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ patient, onOpenPdf }
                   </div>
                 </div>
 
-                {/* Botão Nota Fiscal padronizado (h: 34px, ícone PDF e download) */}
-                <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-start">
+                {/* Botão Nota Fiscal padronizado em 18px */}
+                <div className="mt-3.5 pt-2.5 border-t border-white/[0.06] flex items-center justify-start">
                   <button
                     onClick={() => onOpenPdf(`Nota Fiscal - ${item.amount}`)}
-                    className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-2 text-[15px] font-medium py-0 px-4 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
+                    className="h-[40px] min-h-[40px] inline-flex items-center gap-2 text-[18px] font-medium py-0 px-3.5 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
                   >
-                    <i className="ti ti-file-type-pdf text-[17px]"></i>
+                    <i className="ti ti-file-type-pdf text-[20px]"></i>
                     <span>Nota Fiscal</span>
-                    <i className="ti ti-download text-[16px] ml-0.5"></i>
+                    <i className="ti ti-download text-[18px] ml-0.5"></i>
                   </button>
                 </div>
               </div>

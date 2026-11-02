@@ -3,7 +3,7 @@ import { INITIAL_PATIENTS } from '../patients/mockPatientData';
 import { db, isFirebaseConfigured } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
-const STORAGE_KEY = 'vittare_patients_store_v6';
+const STORAGE_KEY = 'vittare_patients_store_v7';
 
 class CrmDataService {
   private listeners: Map<string, Set<(patient: PatientProfile) => void>> = new Map();

@@ -16,16 +16,20 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1">
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-3">
           Resultado da avaliação física
         </div>
-        <div className="text-[16px] text-[#8e8ea6] leading-relaxed mb-2.5">
-          Seu laudo com as métricas corporais e bioimpedância.
-        </div>
 
-        <div className="space-y-2">
-          {patient.physicalAssessments.map((item) => {
+        <div className="space-y-4">
+          {patient.physicalAssessments.map((item, index) => {
             const isReady = item.status === 'laudo';
+            const displayTitle = item.title 
+              ? item.title.toUpperCase() 
+              : `AVALIAÇÃO F. ${String(index + 1).padStart(2, '0')}`;
+            const displayDate = item.dateStr.startsWith('Data:') 
+              ? item.dateStr 
+              : (item.dateStr.includes('/') ? `Data: ${item.dateStr}` : item.dateStr);
+
             return (
               <div
                 key={item.id}
@@ -42,11 +46,11 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
                     <i className="ti ti-barbell"></i>
                   </div>
                   <div className="grow min-w-0">
-                    <div className="text-[18px] font-semibold text-white leading-tight">
-                      {item.title}
+                    <div className="text-[18px] font-semibold text-white leading-tight uppercase">
+                      {displayTitle}
                     </div>
-                    <div className="text-[16px] text-[#8e8ea6] mt-1 leading-snug">
-                      {item.dateStr}
+                    <div className="text-[18px] text-[#8e8ea6] mt-1 leading-snug">
+                      {displayDate}
                     </div>
                   </div>
                   {isReady && (

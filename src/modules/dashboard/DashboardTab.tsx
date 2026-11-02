@@ -99,16 +99,16 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           </div>
 
           {/* Linha separação atual + Próxima Consulta com Ícone Pulsante conectado à Agenda */}
-          <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-white/[0.08] text-[16px] text-[#e8e8f0]">
+          <div className="flex items-center gap-2 mt-2.5 pt-2 border-t border-white/[0.08] text-[18px] text-[#e8e8f0]">
             <span className="relative flex h-2.5 w-2.5 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#5eea8f] opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#5eea8f]"></span>
             </span>
             <Calendar className="w-4 h-4 text-[#7c6af7] shrink-0" />
             {nextConsultationDisplay !== '-' ? (
-              <span>Próxima Agenda: <strong className="text-white">{nextConsultationDisplay}</strong></span>
+              <span className="text-[18px]">Próxima Agenda: <strong className="text-white">{nextConsultationDisplay}</strong></span>
             ) : (
-              <span className="text-[#8e8ea6] flex items-center gap-1">
+              <span className="text-[18px] text-[#8e8ea6] flex items-center gap-1">
                 <span>Próxima Agenda:</span>
                 <strong className="text-white font-bold text-lg leading-none">-</strong>
               </span>
@@ -118,14 +118,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           {/* Tags de status das abas com atualizações pendentes (desaparecem do Início assim que o paciente entra e abre a aba) */}
           {pendingQuickLinks.length > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-              <span className="text-[15px] text-[#a5a4b8] font-medium mr-0.5">
+              <span className="text-[17px] text-justify text-[#a5a4b8] font-medium mr-0.5">
                 Novidades em:
               </span>
               {pendingQuickLinks.map(link => (
                 <span
                   key={link.tab}
                   onClick={() => onNavigateTab(link.tab)}
-                  className="inline-flex items-center gap-1.5 text-[15px] font-medium text-white bg-white/10 hover:bg-white/15 border border-[#5eea8f]/30 active:scale-95 rounded-lg py-0.5 px-2.5 shadow-xs cursor-pointer transition select-none"
+                  style={{ width: '279px', fontSize: '17px' }}
+                  className="inline-flex items-center gap-1.5 text-[17px] font-medium text-white bg-white/10 hover:bg-white/15 border border-[#5eea8f]/30 active:scale-95 rounded-lg py-0.5 px-2.5 shadow-xs cursor-pointer transition select-none"
                   title="Toque ou abra esta aba no menu superior para visualizar o conteúdo"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-[#5eea8f] animate-pulse"></span>
@@ -145,7 +146,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       {/* Registros de Atividades (espaçamento de respiro visual de 0.5cm) */}
       <div className="mt-[19px]">
         <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[22px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f]">
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f]">
             Registros de atividades
           </div>
         </div>

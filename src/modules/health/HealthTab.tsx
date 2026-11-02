@@ -13,16 +13,16 @@ export const HealthTab: React.FC<HealthTabProps> = ({ patient }) => {
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium tracking-[0.02em] text-[#5eea8f] mb-1.5">
-          Objetivos e histórico de saúde
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1.5">
+          Anamnese
         </div>
 
         {/* Anotações Gerais */}
-        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 mb-2.5 shadow-sm">
-          <div className="text-[20px] font-['Cormorant_Garamond',serif] font-medium text-[#5eea8f] leading-tight">
+        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 mb-4 shadow-sm">
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold text-[#5eea8f] leading-tight">
             Anotações Gerais
           </div>
-          <div className="text-[16px] text-[#cfd3dc] leading-relaxed pt-1.5">
+          <div className="text-[18px] text-[#cfd3dc] leading-relaxed pt-1.5">
             {patient.crmGeneralNotes || 'Reduzir gordura visceral, melhorar qualidade do sono e manter constância nas refeições conforme o plano traçado.'}
           </div>
         </div>
@@ -34,10 +34,10 @@ export const HealthTab: React.FC<HealthTabProps> = ({ patient }) => {
               <i className="ti ti-file-text"></i>
             </div>
             <div className="grow min-w-0">
-              <div className="text-[18px] font-semibold text-white leading-tight">
-                Anamnese
+              <div className="text-[18px] font-semibold text-white leading-tight uppercase">
+                ANAMNESE
               </div>
-              <div className="text-[15px] text-[#8e8ea6] mt-0.5 leading-snug">
+              <div className="text-[18px] text-[#8e8ea6] mt-0.5 leading-snug">
                 Data: 20/09/2026
               </div>
             </div>

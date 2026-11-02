@@ -6,7 +6,7 @@ export interface NavigationTab {
 
 export const NAVIGATION_TABS: NavigationTab[] = [
   { id: 'inicio', label: 'Início', iconClass: 'ti ti-home' },
-  { id: 'evolucao', label: 'Evolução', iconClass: 'ti ti-chart-line' },
+  { id: 'evolucao', label: 'Check-in', iconClass: 'ti ti-chart-line' },
   { id: 'consultas', label: 'Agenda', iconClass: 'ti ti-calendar' },
   { id: 'exames', label: 'Exames', iconClass: 'ti ti-flask' },
   { id: 'avaliacao', label: 'Avaliação F.', iconClass: 'ti ti-barbell' },
@@ -16,7 +16,7 @@ export const NAVIGATION_TABS: NavigationTab[] = [
   { id: 'docs', label: 'Documentos', iconClass: 'ti ti-folder' },
   { id: 'financeiro', label: 'Financeiro', iconClass: 'ti ti-credit-card' },
   { id: 'termos', label: 'Termos', iconClass: 'ti ti-clipboard-check' },
-  { id: 'saude', label: 'Saúde', iconClass: 'ti ti-heart-rate-monitor' },
+  { id: 'saude', label: 'Anamnese', iconClass: 'ti ti-heart-rate-monitor' },
   { id: 'encam', label: 'Encaminhamentos', iconClass: 'ti ti-send' },
   { id: 'caixa-surpresa', label: 'Caixa Surpresa', iconClass: 'ti ti-gift' }
 ];

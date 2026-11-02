@@ -1,138 +1,84 @@
-# Caixa Surpresa Vittare — Recompensas e Renovação de Ciclo
+# Acordeon Exclusivo e Auto-Fechamento Inteligente de Avaliações
 
-Implementação de uma nova aba exclusiva ao final da barra de navegação superior, desenhada para engajar e fidelizar o paciente da clínica Vittare. A aba traz uma experiência de "Caixa de Surpresa" com contagem regressiva precisa até o término do ciclo de acompanhamento (baseada em `daysToComplete`), mantendo-se em estado de expectativa até a data prevista, quando revela 2 benefícios estratégicos para continuidade do tratamento nutricional.
+Implementação do padrão arquitetural de acordeon exclusivo (Single-Active Accordion) na lista de registros de **Evolução Percebida** da aba **Check-In**. Quando o paciente toca em uma avaliação para visualizar suas barras horizontais de área, qualquer outra avaliação previamente aberta fecha automaticamente. A viewport realiza uma rolagem suave acompanhando o topo do card selecionado, garantindo clareza cognitiva, prevenção de fadiga de rolagem e zero risco de fechamento inesperado durante a leitura.
 
 ---
 
-## Decisões Confirmadas & Parâmetros do Usuário
+## Decisões Confirmadas pelo Usuário
 
 > [!IMPORTANT]
-> Decisões alinhadas na rodada de clarificação prévia:
+> Parâmetros validados na etapa de clarificação:
 
-- **Nome da Aba**: `Caixa Surpresa` (posicionada como 14ª aba, imediatamente após "Encaminhamentos").
-- **Recompensas Escolhidas**:
-  1. *Brinde Físico*: **Creatina Ultra Filtrada e Micronizada 300g** com envio/entrega garantida no novo ciclo.
-  2. *Vantagem Financeira*: **Condição Especial de Renovação com Valor de Mensalidade Congelado** (garantia de tabela anterior sem reajuste anual).
-- **Comportamento Pré-Vencimento**: Trancada com **contagem regressiva dinâmica** (dias, horas, minutos) calculada a partir da data de término do ciclo (`30/10/2026` + 28 dias), com teaser elegante dos 2 presentes que serão revelados.
-- **Ação de Renovação**: Botão direto integrado para falar com a equipe Vittare / Dr. João Paulo via WhatsApp para garantir os benefícios imediatamente.
+- **Modo de Acordeon**: **Exclusivo (Single-Active)** — No máximo 1 avaliação aberta por vez. Ao abrir uma nova avaliação, todas as outras são recolhidas automaticamente sem acúmulo de conteúdo na tela.
+- **Comportamento de Scroll**: **Acompanhamento Suave** — Ao abrir um card, o sistema ancora suavemente o scroll no topo da avaliação expandida (`scrollIntoView` suave), evitando que o conteúdo fique fora da visão.
+- **Proteção contra Perda de Leitura**: Não fecharemos a avaliação enquanto o usuário estiver rolando ativamente sobre ela (o que geraria *Cumulative Layout Shift* - CLS abrupto e frustração), garantindo 100% de previsibilidade e segurança de UX móvel.
 
 ---
 
-## 1. Visão Geral & Conceito Clínico
+## 1. Visão Geral & Benefícios Ergonômicos
 
-- **Objetivo**: Transformar a etapa final do ciclo nutricional em um momento de celebração e incentivo à continuidade do tratamento, combatendo a evasão comum no fim de planos de consulta.
-- **Público-Alvo**: Pacientes em acompanhamento na clínica Vittare (perfil Maria Paula Santos e demais pacientes do CRM).
-- **Proposta de Valor**: 
-  - *Paciente*: Sensação de conquista, recompensa tangível de alta eficácia comprovada (creatina de pureza farmacêutica) e proteção financeira contra aumento de honorários.
-  - *Clínica/Nutricionista*: Aumento previsível na taxa de retenção (LTV), ciclo contínuo de evolução clínica e estreitamento do vínculo médico-paciente.
+- **Problema Anterior**: Múltiplos cartões de avaliação podiam ficar abertos simultaneamente, gerando rolagem excessiva na tela do celular e exigindo que o paciente voltasse manualmente para fechar cada item.
+- **Solução Implementada**: 
+  - Transformação do estado de acordeons de dicionário booleano (`{ [id: string]: boolean }`) para ponteiro de ID único ativo (`openCheckInId: string | null`).
+  - Transição de estado: se `openCheckInId === item.id`, o toque recolhe o card (`setOpenCheckInId(null)`); se o toque for em outro card, abre o novo e encerra o anterior em uma única transição de renderização.
+  - Inclusão adicional de um botão sutil no rodapé do conteúdo expandido (*"Recolher Avaliação"*), permitindo fechar o card diretamente de baixo sem precisar voltar ao cabeçalho.
 
 ---
 
-## 2. Experiência do Usuário & Design Visual
-
-Seguindo as diretrizes de design móvel da Vittare (Mobile-First, tipografia Cormorant Garamond + Plus Jakarta Sans, paleta escura com toques esmeralda `#5eea8f`, violeta `#7c6af7` e detalhes dourados):
-
-### Fluxo de Uso do Paciente
+## 2. Experiência do Usuário & Fluxo de Interação
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ 1. Barra de Navegação Superior                         │
-│ [Início] [Evolução] ... [Encaminhamentos] [🎁 Caixa]  │
+│ Estado Inicial: Todos Fechados (Padrão)                │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/10/2026 ] [ 75/100 ] [ ▾ ]  │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 02/10/2026 ] [ 73/100 ] [ ▾ ]  │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/09/2026 ] [ 70/100 ] [ ▾ ]  │
 └───────────────────────────┬────────────────────────────┘
-                            │
+                            │ (Toque em 17/10)
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│ 2. Tela "Caixa Surpresa" (Antes da Data de Expiração)  │
+│ Card 17/10 Aberto com Rolagem Suave Centralizada       │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/10/2026 ] [ 75/100 ] [ ▴ ]  │
 │ ┌────────────────────────────────────────────────────┐ │
-│ │ Título: Caixa Surpresa Vittare                     │ │
-│ │ Data de Liberação: 27/11/2026 (Fim do ciclo)       │ │
+│ │ • Índice Geral: 75/100 (Barra Verde)               │ │
+│ │ • 8 Barras Horizontais por Área                    │ │
+│ │ • [ Botão: Recolher Avaliação ]                    │ │
 │ └────────────────────────────────────────────────────┘ │
-│                                                        │
-│   [ 🎁 Ilustração / Caixa Holográfica Trancada ]       │
-│                                                        │
-│   Contagem Regressiva:                                 │
-│   ┌──────────┬──────────┬──────────┐                   │
-│   │ 28 DIAS  │ 14 HORAS │ 32 MIN   │                   │
-│   └──────────┴──────────┴──────────┘                   │
-│                                                        │
-│   "No dia do encerramento do seu ciclo atual,          │
-│    esta caixa será liberada com 2 presentes especiais  │
-│    preparados pelo Dr. João Paulo para o seu novo      │
-│    ciclo de saúde."                                    │
-│                                                        │
-│   [ Botão: Quero Antecipar Meu Novo Ciclo ]            │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 02/10/2026 ] [ 73/100 ] [ ▾ ]  │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/09/2026 ] [ 70/100 ] [ ▾ ]  │
 └───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼ (Quando expira ou ao antecipar)
+                            │ (Toque em 02/10)
+                            ▼
 ┌────────────────────────────────────────────────────────┐
-│ 3. Estado Desbloqueado (Abertura da Caixa)             │
-│                                                        │
-│   ✨ Caixa Aberta com Brilho Esmeralda & Dourado       │
-│                                                        │
-│   🎁 BENEFÍCIO 1:                                      │
-│   Creatina Ultra Filtrada e Micronizada 300g           │
-│   (Envio direto para sua residência no novo ciclo)     │
-│                                                        │
-│   💎 BENEFÍCIO 2:                                      │
-│   Condição Exclusiva de Renovação com Valor Congelado  │
-│   (Sem reajuste, mantendo seu valor promocional)       │
-│                                                        │
-│   [ Botão WhatsApp: Resgatar e Iniciar Novo Ciclo ]    │
+│ Card 17/10 fecha AUTOMATICAMENTE; Card 02/10 abre:    │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/10/2026 ] [ 75/100 ] [ ▾ ]  │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 02/10/2026 ] [ 73/100 ] [ ▴ ]  │
+│ ┌────────────────────────────────────────────────────┐ │
+│ │ • Barras Horizontais do dia 02/10...               │ │
+│ └────────────────────────────────────────────────────┘ │
+│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/09/2026 ] [ 70/100 ] [ ▾ ]  │
 └────────────────────────────────────────────────────────┘
 ```
 
-### Paleta & Componentes Visuais
-- **Fundo**: `#0d0d16` com gradiente sutil `from-[#1c163a]/40 to-[#0d0d16]`.
-- **Destaque da Caixa**: Caixa de presente estilizada com laço esmeralda/dourado e efeito suave de respiração (halo luminoso).
-- **Cartões de Benefício**: Superfícies escuras translúcidas com bordas delicadas (`border-white/10`), ícones temáticos de alta fidelidade e tipografia de alto contraste para leitura sem esforço.
-- **Botões de Ação**: Botão principal com área de toque mínima de $48\text{px}$ e feedback tátil ao toque (`active:scale-95`).
+---
+
+## 3. Decisões Técnicas & Trade-Offs
+
+- **Por que o Acordeon Exclusivo é superior ao fechamento por 60% de scroll?**
+  - *Fechar enquanto o usuário rola* causa o "efeito piso falso": o elemento diminui de altura repentinamente de ~350px para 50px, fazendo o restante da página saltar bruscamente para cima sob o dedo do usuário (*layout shift*), desorientando a leitura e gerando toques involuntários.
+  - *O Acordeon Exclusivo orientado a evento* elimina 100% desse risco: o usuário lê com calma todo o conteúdo que abriu; quando decide olhar outra avaliação, a anterior se recolhe automaticamente sem nenhum esforço ou acúmulo de abas abertas.
+- **Deslocamento Suave (`scrollIntoView`)**:
+  - Utilização de `scrollIntoView({ behavior: 'smooth', block: 'nearest' })` com pequeno *timeout* (50ms) para aguardar a expansão no DOM, assegurando que o topo do card fique imediatamente visível e estável.
 
 ---
 
-## 3. Decisões Técnicas & Arquitetura
+## 4. Plano de Alterações no Código
 
-### A. Modularização
-- **Nova Aba**: `src/modules/surprise-box/SurpriseBoxTab.tsx`.
-- **Registro Global de Navegação**: Atualização de `NAVIGATION_TABS` em `src/config/constants.ts` com a entrada `{ id: 'caixa-surpresa', label: 'Caixa Surpresa', iconClass: 'ti ti-gift' }`.
-- **Integração no App Shell**: Adição da aba no `App.tsx` para renderização sob demanda, preservando a política de isolamento e zero vazamento de layout.
-
-### B. Cálculo da Data de Expiração do Ciclo
-- A data de liberação é calculada a partir de `patient.daysToComplete` (ex.: 28 dias a partir de `30/10/2026`, resultando em `27/11/2026`).
-- Caso o usuário deseje testar a caixa aberta imediatamente, um interruptor de demonstração (ou clique sutil no cadeado) permite visualizar tanto o modo trancado quanto o modo revelado, garantindo facilidade de revisão pelo nutricionista.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    ARQUITETURA DE DADOS                     │
-├─────────────────────────────────────────────────────────────┤
-│  PatientProfile (CRM Store)                                 │
-│  ├── daysToComplete: 28                                     │
-│  ├── lastAccess: "30/10/2026"                               │
-│  └── targetCycleEndDate = addDays(baseDate, daysToComplete) │
-│                                                             │
-│  SurpriseBoxTab State:                                      │
-│  ├── isUnlocked: now >= targetDate || previewMode           │
-│  ├── countdown: { days, hours, minutes, seconds }           │
-│  └── handleClaimRewards() -> WhatsApp API dispatch          │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 4. Plano de Implementação Passo a Passo
-
-1. **Constantes e Rota (`src/config/constants.ts`)**:
-   - Adicionar `{ id: 'caixa-surpresa', label: 'Caixa Surpresa', iconClass: 'ti ti-gift' }` após `encam`.
-
-2. **Componente da Aba (`src/modules/surprise-box/SurpriseBoxTab.tsx`)**:
-   - Criar o componente completo com modo trancado, contagem regressiva em tempo real e modo aberto.
-   - Detalhar os 2 brindes: Creatina Micronizada 300g e Tabela de Valor Congelado.
-   - Adicionar botão de contato WhatsApp personalizado para o Dr. João Paulo / Vittare.
-   - Incluir controle para o Dr. João Paulo alternar entre visualização de demonstração trancada/aberta para testes práticos.
-
-3. **Integração no Shell (`src/App.tsx`)**:
-   - Importar `SurpriseBoxTab` e mapear `activeTab === 'caixa-surpresa'`.
-   - Ajustar o indicador de dots se aplicável para suportar a 14ª aba de maneira fluida.
-
-4. **Verificação & Testes**:
-   - Compilação limpa com TypeScript (`tsc --noEmit`).
-   - Validação da ergonomia em viewport móvel e teste do carrossel da barra de abas.
+1. **Refatoração de Estado em `src/modules/evolution/EvolutionTab.tsx`**:
+   - Substituir `openAccordions: { [id: string]: boolean }` por `openCheckInId: string | null = null`.
+   - Implementar `handleToggleCheckIn(id: string, elementRef)` com chamada de scroll suave.
+2. **Adição de Botão de Fechamento no Rodapé do Conteúdo Expandido**:
+   - Um botão `Recolher Avaliação` estilizado no final de cada avaliação aberta para permitir recolhimento direto com a mão no terço inferior da tela.
+3. **Verificação & Testes**:
+   - Teste de abertura alternada entre D60, D45 e D30.
+   - Compilação via `lint_applet` (`tsc --noEmit`) e `compile_applet`.
