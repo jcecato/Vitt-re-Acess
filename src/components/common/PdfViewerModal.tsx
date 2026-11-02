@@ -17,20 +17,46 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const currentMonth = new Date().toISOString().slice(0, 7); // Ex: '2026-11'
+  const quotaStorageKey = `vittare_pdf_quota_${title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${currentMonth}`;
+  const maxDownloadsPerMonth = 3;
+
+  const [downloadCount, setDownloadCount] = React.useState<number>(() => {
+    try {
+      const stored = localStorage.getItem(quotaStorageKey);
+      return stored ? parseInt(stored, 10) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [downloadSuccess, setDownloadSuccess] = React.useState<boolean>(false);
+  const remainingDownloads = Math.max(0, maxDownloadsPerMonth - downloadCount);
+  const isLimitReached = downloadCount >= maxDownloadsPerMonth;
+
   const fileName = title.toLowerCase().replace(/[^a-z0-9ãáâéêíóôúç]+/g, '-') + '.pdf';
 
   const handleDownload = () => {
+    if (isLimitReached) return;
+
+    const newCount = downloadCount + 1;
+    setDownloadCount(newCount);
+    try {
+      localStorage.setItem(quotaStorageKey, newCount.toString());
+    } catch (e) {
+      console.warn('Erro ao salvar cota local', e);
+    }
+
     const element = document.createElement('a');
-    const file = new Blob([`Documento Oficial Vittáre CRM\nPaciente: ${patientName}\nTítulo: ${title}\nData: ${dateStr}`], { type: 'text/plain' });
+    const file = new Blob([`Documento Oficial Clínico Vittáre\nPaciente: ${patientName}\nTítulo: ${title}\nData: ${dateStr}\nChave de Integridade: VT-${Date.now().toString(36).toUpperCase()}`], { type: 'application/pdf' });
     element.href = URL.createObjectURL(file);
     element.download = fileName;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
-  };
 
-  const handlePrint = () => {
-    window.print();
+    setDownloadSuccess(true);
+    setTimeout(() => setDownloadSuccess(false), 3000);
   };
 
   return (
@@ -79,23 +105,37 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
           </div>
         </div>
 
-        <div className="text-center text-[16px] text-[#8e8ea6] mt-3 font-mono">
+        <div className="text-center text-[15px] text-[#8e8ea6] mt-2.5 font-mono truncate px-2">
           {fileName}
         </div>
 
-        <div className="flex justify-center gap-3 mt-3">
-          <button
-            onClick={handleDownload}
-            className="inline-flex items-center gap-2 text-[16px] font-semibold px-4 py-2 rounded-xl bg-[#5eea8f]/15 border border-[#5eea8f] text-[#5eea8f] hover:bg-[#5eea8f]/25 active:scale-95 transition cursor-pointer"
-          >
-            <i className="ti ti-download text-[18px]"></i> Baixar
-          </button>
-          <button
-            onClick={handlePrint}
-            className="inline-flex items-center gap-2 text-[16px] font-semibold px-4 py-2 rounded-xl bg-[#0f7a3a] border border-[#0f7a3a] text-white hover:bg-[#128a42] active:scale-95 transition cursor-pointer"
-          >
-            <i className="ti ti-printer text-[18px]"></i> Imprimir
-          </button>
+        {/* Indicador de Cota Mensal de Downloads */}
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <span className={`inline-flex items-center gap-1.5 text-[13px] font-medium px-2.5 py-0.5 rounded-full border ${
+            isLimitReached 
+              ? 'bg-rose-500/15 border-rose-500/30 text-rose-300' 
+              : 'bg-[#5eea8f]/10 border-[#5eea8f]/30 text-[#5eea8f]'
+          }`}>
+            <i className={`ti ${isLimitReached ? 'ti-alert-circle' : 'ti-shield-check'}`}></i>
+            <span>{isLimitReached ? 'Limite mensal atingido (3/3)' : `Downloads restantes este mês: ${remainingDownloads} de 3`}</span>
+          </span>
+        </div>
+
+        {/* Ação Única e Destacada: Baixar PDF (Imprimir removido) */}
+        <div className="flex flex-col items-center gap-2 mt-3.5">
+          {isLimitReached ? (
+            <div className="w-full text-center p-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-[14px] text-[#a5a4b8]">
+              Você atingiu o limite de 3 downloads mensais para este documento. Entre em contato com a equipe Vittáre para liberação adicional.
+            </div>
+          ) : (
+            <button
+              onClick={handleDownload}
+              className="w-full sm:w-auto min-w-[220px] inline-flex items-center justify-center gap-2 text-[16px] font-semibold px-6 py-2.5 rounded-xl bg-[#0f7a3a] border border-[#5eea8f]/50 text-white hover:bg-[#128a42] active:scale-95 shadow-lg shadow-[#0f7a3a]/25 transition cursor-pointer"
+            >
+              <i className="ti ti-download text-[19px]"></i>
+              <span>{downloadSuccess ? 'Download Concluído!' : 'Baixar PDF'}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
