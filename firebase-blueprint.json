@@ -1,0 +1,54 @@
+{
+  "project": "vittare-crm-patient",
+  "version": "1.0.0",
+  "entities": {
+    "patients": {
+      "description": "Prontuário individual do paciente com isolamento de dados por ID único",
+      "fields": {
+        "id": "string (UID ou CPF)",
+        "name": "string",
+        "initials": "string",
+        "email": "string",
+        "status": "string (Ativo | Em pausa | Concluído)",
+        "activeDays": "number",
+        "daysToComplete": "number",
+        "totalDays": "number",
+        "nextConsultation": "string (data ISO ou legível)",
+        "doctorName": "string",
+        "lyaNotification": "object",
+        "progress": "object (peso, gordura, energia, músculo, cintura, gorduraVisceral)",
+        "professionalNotes": "string",
+        "updatedAt": "timestamp",
+        "syncedFrom": "string (CRM_Vittare_Admin | Webhook | API)"
+      }
+    },
+    "consultations": {
+      "path": "patients/{patientId}/consultations/{consultationId}",
+      "description": "Histórico de consultas realizadas e próximas sessões agendadas"
+    },
+    "exams": {
+      "path": "patients/{patientId}/exams/{examId}",
+      "description": "Exames laboratoriais solicitados e resultados avaliados com valores de referência"
+    },
+    "physicalAssessments": {
+      "path": "patients/{patientId}/physicalAssessments/{assessmentId}",
+      "description": "Laudos de bioimpedância e avaliações físicas"
+    },
+    "mealGuides": {
+      "path": "patients/{patientId}/mealGuides/{guideId}",
+      "description": "Planos e guias alimentares prescritos"
+    },
+    "protocols": {
+      "path": "patients/{patientId}/protocols/{protocolId}",
+      "description": "Prescrições ativas e suplementação com áudio explicativo"
+    },
+    "marketplace": {
+      "path": "marketplace_products/{productId}",
+      "description": "Catálogo de suplementos e acessórios recomendados com links de conveniência"
+    },
+    "financial": {
+      "path": "patients/{patientId}/financial/{paymentId}",
+      "description": "Recibos, investimentos do protocolo e pagamentos pendentes"
+    }
+  }
+}

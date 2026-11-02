@@ -1,0 +1,6 @@
+{
+  "name": "Vittáre Acess™ — CRM do Paciente",
+  "description": "Aplicativo individual por paciente integrado ao ecossistema CRM Vittáre, centralizando consultas, evolução, exames, guias e protocolos com alta fidelidade e sincronização em tempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

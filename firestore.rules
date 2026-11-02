@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Regra de segurança para administradores autorizados do ecossistema Vittáre
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.role == 'admin' ||
+        request.auth.token.email.matches('.*@vittare\\.com\\.br$')
+      );
+    }
+
+    // Regra de segurança para isolamento individual por paciente
+    // Cada paciente só tem acesso de leitura/escrita aos seus próprios registros
+    function isPatientOwner(patientId) {
+      return request.auth != null && request.auth.uid == patientId;
+    }
+
+    // Coleção principal de Pacientes (CRM Individual)
+    match /patients/{patientId} {
+      allow read: if isPatientOwner(patientId) || isAdmin();
+      allow write: if isAdmin(); // Apenas o CRM administrativo pode alterar o perfil mestre
+
+      // Subcoleções do Paciente (consultas, exames, guias, documentos, etc.)
+      match /{subcollection}/{docId} {
+        allow read: if isPatientOwner(patientId) || isAdmin();
+        
+        // Paciente pode criar/atualizar apenas seus próprios documentos enviados
+        allow create, update: if (subcollection == 'documents' && isPatientOwner(patientId)) || isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Coleção de produtos e recomendações (Marketplace)
+    match /marketplace_products/{productId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Coleção para logs de integração e webhooks de sistemas terceiros
+    match /integration_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
