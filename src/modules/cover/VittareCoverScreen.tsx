@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CoverScreenProps } from './types';
 import { useAuth } from '../../auth/AuthContext';
+import { VittareLogo } from './VittareLogo';
 
 export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
   isVisible = true,
@@ -127,45 +128,46 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         }
 
         .vc-logo {
-          width: 74px;
-          height: 74px;
-          border-radius: 22px;
-          display: grid;
-          place-items: center;
-          color: #fff;
-          font-family: 'Sora', 'Inter', sans-serif;
-          font-weight: 800;
-          font-size: 34px;
-          background: linear-gradient(135deg, var(--indigo), var(--green));
-          box-shadow: 0 14px 34px rgba(47, 213, 117, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+          width: 82px;
+          height: 82px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: none;
+          border-radius: 0;
+          box-shadow: none;
         }
 
         .vc-brand {
           margin-top: 6px;
-          font-family: 'Plus Jakarta Sans', 'Sora', sans-serif;
-          font-weight: 600;
-          font-size: 21px;
-          letter-spacing: 0.16em;
+          font-family: 'Cormorant Garamond', Georgia, serif;
+          font-weight: 500;
+          font-size: 27px;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
           color: #dfe9f2;
         }
 
         .vc-brand sup {
           color: var(--green);
-          font-size: 15px;
+          font-size: 14px;
           vertical-align: super;
+          margin-left: -8px;
         }
 
         .vc-slogan {
-          margin-top: 6px;
-          font-family: 'Sora', 'Inter', sans-serif;
-          font-weight: 700;
-          font-size: 26px;
-          line-height: 1.22;
-          letter-spacing: -0.02em;
+          margin-top: 4px;
+          font-family: 'Cormorant Garamond', Georgia, serif;
+          font-weight: normal;
+          font-size: 33px;
+          line-height: 1.14;
+          letter-spacing: -0.01em;
+          color: #dfe9f2;
         }
 
         .vc-slogan span {
+          font-weight: bold;
           background: linear-gradient(90deg, #8bf0b6, var(--green) 60%, var(--green-2));
           -webkit-background-clip: text;
           background-clip: text;
@@ -475,13 +477,15 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
       {/* Cartão Central da Capa */}
       <main className="vc-screen">
         <header className="vc-hero vc-rise" style={{ ['--d' as string]: '0s' }}>
-          <div className="vc-logo">V</div>
+          <div className="vc-logo">
+            <VittareLogo size={80} />
+          </div>
           <h1 className="vc-brand">
-            Vittáre Acess<sup>™</sup>
+            VITTÁRE ACESS<sup>™</sup>
           </h1>
           <p className="vc-slogan">
-            Um toque.<br />
-            <span>Controle total.</span>
+            <span>Tudo para seu acompanhamento,</span><br />
+            na palma da mão.
           </p>
         </header>
 

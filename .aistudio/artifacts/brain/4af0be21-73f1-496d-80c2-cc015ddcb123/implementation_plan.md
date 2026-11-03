@@ -1,84 +1,68 @@
-# Acordeon Exclusivo e Auto-Fechamento Inteligente de Avaliações
+# Cover Screen Slogan Update
 
-Implementação do padrão arquitetural de acordeon exclusivo (Single-Active Accordion) na lista de registros de **Evolução Percebida** da aba **Check-In**. Quando o paciente toca em uma avaliação para visualizar suas barras horizontais de área, qualquer outra avaliação previamente aberta fecha automaticamente. A viewport realiza uma rolagem suave acompanhando o topo do card selecionado, garantindo clareza cognitiva, prevenção de fadiga de rolagem e zero risco de fechamento inesperado durante a leitura.
+Update the cover screen slogan on the Vittáre Acess landing card (`VittareCoverScreen.tsx`) to feature the refined, value-focused phrasing: **"Tudo para seu acompanhamento, na palma da mão."** with green gradient highlighting on the first line.
 
----
-
-## Decisões Confirmadas pelo Usuário
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Parâmetros validados na etapa de clarificação:
-
-- **Modo de Acordeon**: **Exclusivo (Single-Active)** — No máximo 1 avaliação aberta por vez. Ao abrir uma nova avaliação, todas as outras são recolhidas automaticamente sem acúmulo de conteúdo na tela.
-- **Comportamento de Scroll**: **Acompanhamento Suave** — Ao abrir um card, o sistema ancora suavemente o scroll no topo da avaliação expandida (`scrollIntoView` suave), evitando que o conteúdo fique fora da visão.
-- **Proteção contra Perda de Leitura**: Não fecharemos a avaliação enquanto o usuário estiver rolando ativamente sobre ela (o que geraria *Cumulative Layout Shift* - CLS abrupto e frustração), garantindo 100% de previsibilidade e segurança de UX móvel.
+> The user confirmed the following options in Phase 1:
+> - **Confirmed Slogan Phrasing**: "Tudo para seu acompanhamento, na palma da mão."
+> - **Confirmed Gradient Distribution**: Line 1 ("Tudo para seu acompanhamento,") in emerald gradient, Line 2 ("na palma da mão.") in muted neutral tone (#dfe9f2).
 
 ---
 
-## 1. Visão Geral & Benefícios Ergonômicos
+## 1. Overview & Core Concept
 
-- **Problema Anterior**: Múltiplos cartões de avaliação podiam ficar abertos simultaneamente, gerando rolagem excessiva na tela do celular e exigindo que o paciente voltasse manualmente para fechar cada item.
-- **Solução Implementada**: 
-  - Transformação do estado de acordeons de dicionário booleano (`{ [id: string]: boolean }`) para ponteiro de ID único ativo (`openCheckInId: string | null`).
-  - Transição de estado: se `openCheckInId === item.id`, o toque recolhe o card (`setOpenCheckInId(null)`); se o toque for em outro card, abre o novo e encerra o anterior em uma única transição de renderização.
-  - Inclusão adicional de um botão sutil no rodapé do conteúdo expandido (*"Recolher Avaliação"*), permitindo fechar o card diretamente de baixo sem precisar voltar ao cabeçalho.
+- **What It Does**: Refreshes the central slogan of the Vittáre Acess cover card to clearly convey comprehensive health monitoring and clinical precision in an elegant, approachable tone.
+- **Target Audience**: Patients, elderly users, and caregivers accessing the Vittáre Acess portal.
+- **Key Value**: Provides an inspiring, high-value value proposition on the initial landing screen before login/enter.
 
 ---
 
-## 2. Experiência do Usuário & Fluxo de Interação
+## 2. User Experience & Visual Design
+
+- **Typography & Font**:
+  - Font Family: `Cormorant Garamond` (Serif Display)
+  - Line 1: `<span>Tudo para seu acompanhamento,</span>` — Styled with `font-weight: bold;` and emerald gradient (`linear-gradient(90deg, #8bf0b6, var(--green) 60%, var(--green-2))`).
+  - Line 2: `na palma da mão.` — Styled with `font-weight: normal;` and soft light blue-gray tone (`#dfe9f2`).
+- **Layout & Spacing**:
+  - Single line-break (`<br />`) between phrase 1 and phrase 2 to preserve vertical balance and prevent horizontal text overflow on narrow mobile screens.
+
+---
+
+## 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: First-Line Gradient Accent**:
+  - *Chosen Approach*: Apply `-webkit-background-clip: text` only to `<span>Tudo para seu acompanhamento,</span>`.
+  - *Why*: Directs maximum visual emphasis to the core benefit ("Tudo para seu acompanhamento") while keeping the secondary phrase readable and grounded.
+- **Decision 2: Line Break Structure**:
+  - *Chosen Approach*: Explicit line break after the comma.
+  - *Why*: Ensures consistent 2-line rhythm across device viewports without awkward word wraps.
+
+---
+
+## 4. Technical Architecture & Data Strategy
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ Estado Inicial: Todos Fechados (Padrão)                │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/10/2026 ] [ 75/100 ] [ ▾ ]  │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 02/10/2026 ] [ 73/100 ] [ ▾ ]  │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/09/2026 ] [ 70/100 ] [ ▾ ]  │
-└───────────────────────────┬────────────────────────────┘
-                            │ (Toque em 17/10)
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│ Card 17/10 Aberto com Rolagem Suave Centralizada       │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/10/2026 ] [ 75/100 ] [ ▴ ]  │
-│ ┌────────────────────────────────────────────────────┐ │
-│ │ • Índice Geral: 75/100 (Barra Verde)               │ │
-│ │ • 8 Barras Horizontais por Área                    │ │
-│ │ • [ Botão: Recolher Avaliação ]                    │ │
-│ └────────────────────────────────────────────────────┘ │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 02/10/2026 ] [ 73/100 ] [ ▾ ]  │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/09/2026 ] [ 70/100 ] [ ▾ ]  │
-└───────────────────────────┬────────────────────────────┘
-                            │ (Toque em 02/10)
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│ Card 17/10 fecha AUTOMATICAMENTE; Card 02/10 abre:    │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/10/2026 ] [ 75/100 ] [ ▾ ]  │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 02/10/2026 ] [ 73/100 ] [ ▴ ]  │
-│ ┌────────────────────────────────────────────────────┐ │
-│ │ • Barras Horizontais do dia 02/10...               │ │
-│ └────────────────────────────────────────────────────┘ │
-│ [ 🩺 EVOLUÇÃO PERCEBIDA 17/09/2026 ] [ 70/100 ] [ ▾ ]  │
+│                   VittareCoverScreen                   │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ header.vc-hero                                   │  │
+│  │   ├── div.vc-logo (VittareLogo cross icon)       │  │
+│  │   ├── h1.vc-brand ("VITTÁRE ACESS™")            │  │
+│  │   └── p.vc-slogan                                │  │
+│  │         ├── span [Bold + Gradient]               │  │
+│  │         │     "Tudo para seu acompanhamento,"    │  │
+│  │         ├── <br />                               │  │
+│  │         └── "na palma da mão." [Normal + Muted]  │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ form.vc-form (Login fields & Enter button)       │  │
+│  └──────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 3. Decisões Técnicas & Trade-Offs
-
-- **Por que o Acordeon Exclusivo é superior ao fechamento por 60% de scroll?**
-  - *Fechar enquanto o usuário rola* causa o "efeito piso falso": o elemento diminui de altura repentinamente de ~350px para 50px, fazendo o restante da página saltar bruscamente para cima sob o dedo do usuário (*layout shift*), desorientando a leitura e gerando toques involuntários.
-  - *O Acordeon Exclusivo orientado a evento* elimina 100% desse risco: o usuário lê com calma todo o conteúdo que abriu; quando decide olhar outra avaliação, a anterior se recolhe automaticamente sem nenhum esforço ou acúmulo de abas abertas.
-- **Deslocamento Suave (`scrollIntoView`)**:
-  - Utilização de `scrollIntoView({ behavior: 'smooth', block: 'nearest' })` com pequeno *timeout* (50ms) para aguardar a expansão no DOM, assegurando que o topo do card fique imediatamente visível e estável.
-
----
-
-## 4. Plano de Alterações no Código
-
-1. **Refatoração de Estado em `src/modules/evolution/EvolutionTab.tsx`**:
-   - Substituir `openAccordions: { [id: string]: boolean }` por `openCheckInId: string | null = null`.
-   - Implementar `handleToggleCheckIn(id: string, elementRef)` com chamada de scroll suave.
-2. **Adição de Botão de Fechamento no Rodapé do Conteúdo Expandido**:
-   - Um botão `Recolher Avaliação` estilizado no final de cada avaliação aberta para permitir recolhimento direto com a mão no terço inferior da tela.
-3. **Verificação & Testes**:
-   - Teste de abertura alternada entre D60, D45 e D30.
-   - Compilação via `lint_applet` (`tsc --noEmit`) e `compile_applet`.
+- **Affected File**: `/src/modules/cover/VittareCoverScreen.tsx`
+- **Validation**: TypeScript compilation (`tsc --noEmit`) and Vite bundle build (`npm run build`).

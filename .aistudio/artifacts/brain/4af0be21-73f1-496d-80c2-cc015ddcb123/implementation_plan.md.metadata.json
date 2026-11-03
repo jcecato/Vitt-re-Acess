@@ -1,6 +1,6 @@
 {
-  "summary": "Plano de implementação para o sistema de acordeon exclusivo e auto-fechamento inteligente na lista de avaliações da aba Check-In. Ao abrir uma avaliação, qualquer outra aberta fecha automaticamente, mantendo no máximo 1 aberta por vez e centralizando o card aberto com scroll suave, prevenindo layout shift e perda de leitura acidental.",
-  "updatedAt": "2026-11-02T15:05:10.864006265Z",
+  "summary": "Implementation plan for updated cover screen slogan 'Tudo para seu acompanhamento, na palma da mão.' with emerald gradient styling on the first line.",
+  "updatedAt": "2026-11-03T13:46:12.520846694Z",
   "requestFeedback": true,
   "userFacing": true
 }

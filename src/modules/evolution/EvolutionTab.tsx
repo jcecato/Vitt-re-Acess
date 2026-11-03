@@ -6,7 +6,7 @@ interface EvolutionTabProps {
   patient: PatientProfile;
 }
 
-export type AnswerValue = 0 | 1 | 2 | 3 | 'nse';
+export type AnswerValue = 0 | 1 | 2 | 'nse';
 
 export interface QuestionItem {
   id: string;
@@ -113,9 +113,8 @@ export const CHECKIN_AXES: AxisDefinition[] = [
 
 export const SCALE_OPTIONS = [
   { value: 0 as const, label: 'Nunca', ref: '0 dias' },
-  { value: 1 as const, label: 'Em alguns dias', ref: '1 a 3 dias' },
-  { value: 2 as const, label: 'Em vários dias', ref: '4 a 10 dias' },
-  { value: 3 as const, label: 'Quase todos os dias', ref: '11 a 14 dias' },
+  { value: 1 as const, label: 'Às vezes', ref: '1 a 7 dias' },
+  { value: 2 as const, label: 'Frequente', ref: '8 a 15 dias' },
 ];
 
 export interface CheckInRecord {
@@ -241,6 +240,41 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [answers, setAnswers] = useState<{ [qId: string]: AnswerValue }>({});
   const [currentAxisIndex, setCurrentAxisIndex] = useState<number>(0);
+  const [isScrolled, setIsScrolled] = useState<boolean>(false);
+  const [activeAxis, setActiveAxis] = useState<AxisDefinition>(CHECKIN_AXES[0]);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isModalOpen) {
+      setIsScrolled(false);
+      setActiveAxis(CHECKIN_AXES[0]);
+      setSubmitError(null);
+    }
+  }, [isModalOpen]);
+
+  const handleModalScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const scrollTop = container.scrollTop;
+    setIsScrolled(scrollTop > 25);
+
+    const axisSections = container.querySelectorAll<HTMLElement>('[data-axis-id]');
+    const containerRect = container.getBoundingClientRect();
+
+    let matchedAxis = CHECKIN_AXES[0];
+    axisSections.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top - containerRect.top <= 85) {
+        const axisId = el.getAttribute('data-axis-id');
+        const found = CHECKIN_AXES.find(a => a.id === axisId);
+        if (found) {
+          matchedAxis = found;
+        }
+      }
+    });
+
+    setActiveAxis(matchedAxis);
+  };
 
   // Acordeon Exclusivo: no máximo 1 avaliação aberta por vez (iniciam todas fechadas)
   const [openCheckInId, setOpenCheckInId] = useState<string | null>(null);
@@ -329,41 +363,105 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
     }));
   };
 
-  // Envio e Cálculo do Novo Check-in
-  const handleSubmitCheckIn = () => {
-    const axisScoresResult: { [axisId: string]: number } = {};
-    let totalAxesValid = 0;
-    let sumAxesScores = 0;
+  // Cálculo matemático determinístico por eixo e IVP geral conforme especificação clínica:
+  // - Cada eixo contém quatro perguntas, pontuação individual de 0 a 2 e pontuação máxima de 8 pontos.
+  // - Pontuação do eixo = (Soma das respostas válidas / (Número de respostas válidas * 2)) * 100
+  // - 4 respostas válidas: calcular normalmente.
+  // - 3 respostas válidas: calcular com base nas três respostas.
+  // - 2 ou menos respostas válidas: não calcular o eixo.
+  // - "Não consegui avaliar" ('nse') não recebe pontuação e não entra no cálculo.
+  // - IVP geral = (E1 + E2 + E3 + E4 + E5 + E6 + E7 + E8) / 8
+  // - Critério: o índice geral somente será calculado quando os oito eixos apresentarem pontuação válida.
+  const calculateCheckInScores = () => {
+    const axisResults: {
+      axisId: string;
+      axisName: string;
+      validCount: number;
+      score: number | null;
+      isCalculable: boolean;
+    }[] = [];
 
     for (const axis of CHECKIN_AXES) {
       const validAnswers: number[] = [];
       for (const q of axis.questions) {
         const ans = answers[q.id];
-        if (typeof ans === 'number' && ans >= 0 && ans <= 3) {
+        if (typeof ans === 'number' && (ans === 0 || ans === 1 || ans === 2)) {
           validAnswers.push(ans);
         }
       }
 
-      if (validAnswers.length >= 3) {
+      const validCount = validAnswers.length;
+
+      if (validCount >= 3) {
         const sum = validAnswers.reduce((a, b) => a + b, 0);
-        const score = Math.round((sum / (validAnswers.length * 3)) * 100);
-        axisScoresResult[axis.id] = score;
-        sumAxesScores += score;
-        totalAxesValid++;
+        const score = Math.round((sum / (validCount * 2)) * 100);
+        axisResults.push({
+          axisId: axis.id,
+          axisName: axis.name,
+          validCount,
+          score,
+          isCalculable: true
+        });
       } else {
-        axisScoresResult[axis.id] = 0;
+        axisResults.push({
+          axisId: axis.id,
+          axisName: axis.name,
+          validCount,
+          score: null,
+          isCalculable: false
+        });
       }
     }
 
-    const calculatedIvp = totalAxesValid > 0 ? Math.round(sumAxesScores / totalAxesValid) : 75;
-    const delta = calculatedIvp - latestCheckIn.ivp;
+    const invalidAxes = axisResults.filter(r => !r.isCalculable);
+    const canCalculateIvp = invalidAxes.length === 0;
+
+    let ivp: number | null = null;
+    if (canCalculateIvp) {
+      const sumAllAxes = axisResults.reduce((acc, r) => acc + (r.score ?? 0), 0);
+      ivp = Math.round(sumAllAxes / 8);
+    }
+
+    return {
+      axisResults,
+      invalidAxes,
+      canCalculateIvp,
+      ivp
+    };
+  };
+
+  const currentScores = calculateCheckInScores();
+
+  // Envio e Cálculo do Novo Check-in
+  const handleSubmitCheckIn = () => {
+    const { axisResults, invalidAxes, canCalculateIvp, ivp } = calculateCheckInScores();
+
+    if (!canCalculateIvp || ivp === null) {
+      setSubmitError(
+        `O Índice de Vitalidade Percebida (IVP) somente é calculado quando os oito eixos apresentarem pontuação válida (mínimo de 3 respostas válidas por eixo). ${
+          invalidAxes.length === 1
+            ? `O eixo "${invalidAxes[0].axisName}" possui apenas ${invalidAxes[0].validCount} resposta(s) válida(s).`
+            : `Os seguintes ${invalidAxes.length} eixos possuem 2 ou menos respostas válidas: ${invalidAxes.map(a => a.axisName).join(', ')}.`
+        }`
+      );
+      return;
+    }
+
+    setSubmitError(null);
+
+    const axisScoresResult: { [axisId: string]: number } = {};
+    axisResults.forEach(r => {
+      axisScoresResult[r.axisId] = r.score ?? 0;
+    });
+
+    const delta = ivp - latestCheckIn.ivp;
 
     const newRecord: CheckInRecord = {
       id: `chk_${Date.now()}`,
       dateStr: periodInfo.endDateStr,
       periodLabel: periodInfo.periodLabel,
       dayLabel: `D${60 + (checkIns.length - 4) * 15}`,
-      ivp: calculatedIvp,
+      ivp: ivp,
       deltaPoints: delta,
       axisScores: axisScoresResult,
       answers: { ...answers }
@@ -705,146 +803,183 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
           <div 
             className="w-full max-w-[420px] h-[92vh] max-h-[820px] rounded-3xl bg-[#0f1424] border border-[#2b3558] flex flex-col overflow-hidden shadow-2xl font-['Plus_Jakarta_Sans',sans-serif]"
           >
-            {/* Cabeçalho do Modal com Fundo Azul Marinho Escuro */}
-            <div className="p-4 bg-[#141b30] border-b border-white/10 flex items-center justify-between shrink-0">
-              <div>
-                <div className="text-[18px] font-bold text-white leading-tight">
-                  Acompanhamento da Vitalidade
+            {/* Cabeçalho do Modal com Fundo Azul Marinho Escuro:
+                Ao scrollar, substitui "Acompanhamento da Vitalidade" pelo nome do Eixo Atual (ex: SAÚDE COGNITIVA) 
+                fixo no topo mais alto, dinamicamente conforme os eixos passam */}
+            <div className="p-3.5 sm:p-4 bg-[#141b30] border-b border-white/10 flex items-center justify-between shrink-0 min-h-[68px] transition-all duration-200">
+              {!isScrolled ? (
+                <div className="animate-fadeIn">
+                  <div className="text-[18px] font-bold text-white leading-tight">
+                    Acompanhamento da Vitalidade
+                  </div>
+                  <div className="text-[15px] text-[#5eea8f] font-medium mt-0.5">
+                    Período: 19/10 a 02/11 · Últimos 14 dias
+                  </div>
                 </div>
-                <div className="text-[13px] text-[#5eea8f] font-medium mt-0.5">
-                  Período: 19/10 a 02/11 · Últimos 14 dias
+              ) : (
+                <div className="flex items-center gap-2 animate-fadeIn">
+                  <span className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#0f1424] border border-[#5eea8f]/40 shadow-md text-[#5eea8f] font-extrabold text-[16px] sm:text-[17px] uppercase tracking-wider">
+                    {activeAxis.name}
+                  </span>
                 </div>
-              </div>
+              )}
 
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/15 text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0"
+                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/15 text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 ml-2"
                 title="Fechar questionário"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Barra de Progresso de Respostas */}
-            <div className="bg-[#101628] px-4 py-2 border-b border-white/[0.06] flex items-center justify-between text-[12px] text-[#8e8ea6] shrink-0">
-              <span>{answeredCount} de {totalQuestions} perguntas respondidas</span>
-              <div className="w-28 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                <div 
-                  style={{ width: `${Math.round((answeredCount / totalQuestions) * 100)}%` }}
-                  className="h-full bg-[#5eea8f] rounded-full transition-all duration-300"
-                />
-              </div>
-            </div>
-
             {/* Corpo do Questionário (Scrollável com 9:16) */}
-            <div className="grow overflow-y-auto p-4 space-y-6 no-scrollbar">
+            <div 
+              ref={scrollContainerRef}
+              onScroll={handleModalScroll}
+              className="grow overflow-y-auto px-2.5 py-4 sm:px-3.5 space-y-6 no-scrollbar"
+            >
               
               {/* Orientação ao Paciente */}
-              <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 text-[13px] text-[#cfd3dc] leading-relaxed">
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 text-[17px] sm:text-[18px] text-justify text-[#cfd3dc] leading-relaxed">
                 Considere os <strong>últimos 14 dias</strong>. Responda pensando no período como um todo, e não apenas em como você está se sentindo neste momento.
               </div>
 
-              {/* Lista dos 8 Eixos */}
-              {CHECKIN_AXES.map((axis, axisIdx) => (
-                <div key={axis.id} className="space-y-4">
+              {/* Lista dos 8 Eixos com espaçamento ampliado entre eixos */}
+              {CHECKIN_AXES.map((axis) => (
+                <div 
+                  key={axis.id} 
+                  data-axis-id={axis.id}
+                  className="space-y-4 mb-10 pb-4 border-b border-white/[0.06] last:border-b-0 last:mb-2 last:pb-0"
+                >
                   
-                  {/* Cabeçalho do Eixo */}
-                  <div className="sticky top-0 z-10 py-2 px-3 rounded-xl bg-[#18213d] border border-[#2e3b66] shadow-sm flex items-center justify-between">
-                    <span className="text-[16px] font-bold text-white">
-                      {axis.number}. {axis.name}
-                    </span>
-                    <span className="text-[11px] font-semibold text-[#5eea8f] uppercase tracking-wider bg-[#5eea8f]/10 px-2 py-0.5 rounded">
-                      Eixo {axis.number} de 8
+                  {/* Cabeçalho do Eixo no fluxo inicial: não sticky para não gerar cabeçalho duplo, subindo naturalmente ao scrollar */}
+                  <div className="text-center py-2.5 px-3 mb-4">
+                    <span className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#141b30] border border-[#5eea8f]/35 shadow-md text-[#5eea8f] font-extrabold text-[17px] uppercase tracking-wider">
+                      {axis.name}
                     </span>
                   </div>
 
-                  {/* As 4 perguntas do eixo */}
-                  {axis.questions.map((q, qIdx) => {
-                    const sel = answers[q.id];
-                    return (
-                      <div 
-                        key={q.id}
-                        className="bg-[#13192c] border border-white/[0.08] rounded-2xl p-4 shadow-sm space-y-3"
-                      >
-                        {/* Enunciado da Pergunta */}
-                        <div className="text-[16px] font-medium text-white leading-snug">
-                          <span className="text-[#5eea8f] font-bold mr-1.5">{axis.number}.{qIdx + 1}</span>
-                          {q.text}
-                        </div>
-
-                        {/* Botões Segmentados 0 a 3 (Baseado fielmente no template HTML do usuário) */}
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {SCALE_OPTIONS.map(opt => {
-                            const isSelected = sel === opt.value;
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => handleSelectAnswer(q.id, opt.value)}
-                                className={`py-3 text-[18px] font-bold rounded-xl border transition cursor-pointer select-none ${
-                                  isSelected
-                                    ? 'bg-[#4c66e8] border-[#4c66e8] text-white shadow-md'
-                                    : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-[#a5a4b8]'
-                                }`}
-                              >
-                                {opt.value}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Label descritivo da seleção */}
-                        <div className="text-center min-h-[38px] flex flex-col items-center justify-center">
-                          {sel === null || sel === undefined ? (
-                            <span className="text-[14px] text-[#8e8ea6] italic">
-                              Toque em um número de 0 a 3
-                            </span>
-                          ) : sel === 'nse' ? (
-                            <span className="text-[15px] font-medium text-[#cfd3dc] italic">
-                              Não consegui avaliar · <strong className="text-[#8e8ea6] not-italic">Não pontua</strong>
-                            </span>
-                          ) : (
-                            <div>
-                              <div className="text-[16px] font-bold text-white">
-                                {SCALE_OPTIONS[sel].label}
-                              </div>
-                              <div className="text-[13px] text-[#a5a4b8] mt-0.5">
-                                Pontuação: <strong className="text-[#5eea8f]">{sel}</strong> · Referência: {SCALE_OPTIONS[sel].ref}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Botão Especial "Não consegui avaliar" */}
-                        <div className="text-center pt-1 border-t border-white/[0.06]">
-                          <button
-                            type="button"
-                            onClick={() => handleSelectAnswer(q.id, 'nse')}
-                            className={`text-[14px] italic px-3 py-1 rounded-lg transition cursor-pointer ${
-                              sel === 'nse'
-                                ? 'bg-[#3b4766] text-white not-italic font-medium'
-                                : 'text-[#8e8ea6] hover:text-[#cfd3dc] underline'
-                            }`}
+                  {/* As 4 perguntas do eixo com espaço e respiro entre os divs */}
+                  <div className="space-y-4">
+                    {axis.questions.map((q, qIdx) => {
+                      const sel = answers[q.id];
+                      return (
+                        <div 
+                          key={q.id}
+                          className="bg-[#13192c] border border-white/[0.08] rounded-2xl px-2 py-3 sm:p-3 shadow-sm space-y-3"
+                        >
+                          {/* Enunciado da Pergunta com numeração normal (1., 2., 3...), tipografia 19px, hifenação silábica */}
+                          <div 
+                            style={{ 
+                              width: '100%', 
+                              paddingLeft: '4px', 
+                              marginLeft: '0px',
+                              hyphens: 'auto',
+                              WebkitHyphens: 'auto',
+                              wordBreak: 'normal',
+                              overflowWrap: 'break-word'
+                            }}
+                            lang="pt-BR"
+                            className="text-[19px] font-medium text-white leading-snug"
                           >
-                            Não consegui avaliar
-                          </button>
-                        </div>
+                            <span className="text-[#5eea8f] font-bold mr-1.5">{qIdx + 1}.</span>
+                            {q.text}
+                          </div>
 
-                      </div>
-                    );
-                  })}
+                          {/* Botões Segmentados 0, 1 e 2 em 3 Colunas com área interna expandida */}
+                          <div className="grid grid-cols-3 gap-1 sm:gap-2">
+                            {SCALE_OPTIONS.map(opt => {
+                              const isSelected = sel === opt.value;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => {
+                                    handleSelectAnswer(q.id, opt.value);
+                                    if (submitError) setSubmitError(null);
+                                  }}
+                                  className={`py-2 px-1 sm:px-2 rounded-2xl border transition-all cursor-pointer select-none flex flex-col items-center justify-center text-center min-h-[114px] ${
+                                    isSelected
+                                      ? 'bg-[#4c66e8] border-[#4c66e8] text-white shadow-lg shadow-[#4c66e8]/30 scale-[1.02]'
+                                      : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-white'
+                                  }`}
+                                >
+                                  <div className="text-[26px] font-extrabold leading-none mb-1 text-white">
+                                    {opt.value}
+                                  </div>
+                                  <div className="text-[18px] sm:text-[19px] font-bold leading-tight text-white tracking-tight">
+                                    {opt.label}
+                                  </div>
+                                  <div className={`text-[17px] sm:text-[18px] leading-tight font-medium mt-1 ${isSelected ? 'text-[#eef4f8]' : 'text-[#a5a4b8]'}`}>
+                                    {opt.ref}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Opção Adicional "Não consegui avaliar" sem pontuação */}
+                          <div className="text-center pt-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectAnswer(q.id, 'nse');
+                                if (submitError) setSubmitError(null);
+                              }}
+                              className={`text-[16px] italic px-3 py-1.5 rounded-xl transition cursor-pointer text-[#ededed] ${
+                                sel === 'nse'
+                                  ? 'bg-[#3b4766] not-italic font-medium text-white shadow-sm'
+                                  : 'hover:text-white underline'
+                              }`}
+                            >
+                              Não consegui avaliar
+                            </button>
+                          </div>
+
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
 
-              {/* Botão de Envio dentro do Modal */}
+              {/* Status do Cálculo do IVP conforme Regras Clínicas */}
+              {currentScores.canCalculateIvp ? (
+                <div className="mb-3 p-3 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/30 text-center animate-fadeIn">
+                  <div className="text-[16px] font-bold text-[#5eea8f]">
+                    Todos os 8 eixos calculáveis
+                  </div>
+                  <div className="text-[14px] text-white mt-0.5">
+                    Índice de Vitalidade Percebida (IVP): <strong className="text-[18px] text-[#5eea8f]">{currentScores.ivp}</strong> / 100
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-3 p-3 rounded-xl bg-white/[0.03] border border-white/10 text-center text-[13.5px] text-[#cfd3dc]">
+                  <div className="font-semibold text-[#5eea8f]">
+                    {8 - currentScores.invalidAxes.length} de 8 eixos calculáveis
+                  </div>
+                  <div className="text-[12.5px] text-[#a5a4b8] mt-0.5">
+                    O IVP geral será calculado quando os 8 eixos tiverem ao menos 3 respostas válidas.
+                  </div>
+                </div>
+              )}
+
+              {submitError && (
+                <div className="mb-3 p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-[13.5px] leading-relaxed text-center animate-fadeIn">
+                  {submitError}
+                </div>
+              )}
+
+              {/* Botão de Envio dentro do Modal com espaço aumentado entre palavras */}
               <div className="pt-2 pb-4">
                 <button
                   type="button"
                   onClick={handleSubmitCheckIn}
-                  className="w-full min-h-[50px] py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#0f7a3a] via-[#129446] to-[#0f7a3a] hover:from-[#139247] hover:to-[#108c43] border border-[#5eea8f]/50 text-white font-bold text-[17px] tracking-wide flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition cursor-pointer"
+                  className="w-full min-h-[50px] py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#0f7a3a] via-[#129446] to-[#0f7a3a] hover:from-[#139247] hover:to-[#108c43] border border-[#5eea8f]/50 text-white font-bold text-[17px] tracking-[0.25em] flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition cursor-pointer"
                 >
                   <CheckCircle2 className="w-5 h-5 text-white" />
-                  <span>ENVIAR PROGRESSO</span>
+                  <span>ENVIAR&nbsp;&nbsp;&nbsp;PROGRESSO</span>
                 </button>
                 <div className="text-center text-[12px] text-[#8e8ea6] mt-2">
                   Seus dados serão calculados e integrados à sua Curva de Vitalidade instantaneamente.
