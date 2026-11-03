@@ -10,7 +10,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
   const { availablePatients, switchPatient, currentPatient } = useAuth();
 
   // Form State
-  const [login, setLogin] = useState<string>(defaultLogin || currentPatient?.email || 'paciente@vittare.com');
+  const [login, setLogin] = useState<string>(defaultLogin || '');
   const [senha, setSenha] = useState<string>('••••••••');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [rememberDevice, setRememberDevice] = useState<boolean>(true);
@@ -20,13 +20,6 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [recoveryEmail, setRecoveryEmail] = useState<string>('');
-
-  // Sincroniza com perfil inicial se houver
-  useEffect(() => {
-    if (currentPatient?.email && !defaultLogin) {
-      setLogin(currentPatient.email);
-    }
-  }, [currentPatient?.email, defaultLogin]);
 
   // Listener para fechar modal com tecla Escape
   useEffect(() => {
@@ -46,11 +39,13 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
     setIsSubmitting(true);
 
+    const emailToMatch = login.trim() || currentPatient?.email || 'paciente@vittare.com';
+
     // Se o login coincidir com algum paciente disponível, seleciona-o
     const matchedPatient = availablePatients.find(
-      p => p.email.toLowerCase() === login.trim().toLowerCase() ||
-           p.name.toLowerCase().includes(login.trim().toLowerCase())
-    );
+      p => p.email.toLowerCase() === emailToMatch.toLowerCase() ||
+           p.name.toLowerCase().includes(emailToMatch.toLowerCase())
+    ) || availablePatients[0];
 
     if (matchedPatient) {
       switchPatient(matchedPatient.id);
@@ -147,9 +142,9 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
         .vc-brand {
           margin-top: 6px;
-          font-family: 'Sora', 'Inter', sans-serif;
+          font-family: 'Plus Jakarta Sans', 'Sora', sans-serif;
           font-weight: 600;
-          font-size: 15px;
+          font-size: 21px;
           letter-spacing: 0.16em;
           text-transform: uppercase;
           color: #dfe9f2;
@@ -157,7 +152,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
         .vc-brand sup {
           color: var(--green);
-          font-size: 9px;
+          font-size: 15px;
           vertical-align: super;
         }
 
@@ -193,7 +188,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         .vc-group > label {
           font-family: 'Inter', sans-serif;
           font-weight: 600;
-          font-size: 11px;
+          font-size: 16px;
           letter-spacing: 0.14em;
           text-transform: uppercase;
           color: var(--muted);
@@ -230,7 +225,8 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         }
 
         .vc-field input::placeholder {
-          color: #5d6b78;
+          color: #9aa8b6;
+          opacity: 0.85;
         }
 
         .vc-field input:focus {
@@ -284,7 +280,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           align-items: center;
           font-family: 'Inter', sans-serif;
           font-weight: 500;
-          font-size: 12.5px;
+          font-size: 14.5px;
           color: var(--muted);
           cursor: pointer;
         }
@@ -300,7 +296,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           color: var(--green);
           font-family: 'Inter', sans-serif;
           font-weight: 600;
-          font-size: 12.5px;
+          font-size: 14.5px;
           text-decoration: none;
           cursor: pointer;
           transition: 0.2s;
@@ -355,10 +351,10 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           gap: 12px;
           font-family: 'Inter', sans-serif;
           font-weight: 600;
-          font-size: 11px;
+          font-size: 14px;
           letter-spacing: 0.12em;
           text-transform: uppercase;
-          color: #6d7c89;
+          color: #8b9aa7;
         }
 
         .vc-values i {
@@ -485,7 +481,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           </h1>
           <p className="vc-slogan">
             Um toque.<br />
-            <span>Controle total!</span>
+            <span>Controle total.</span>
           </p>
         </header>
 
@@ -509,7 +505,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
               <input
                 id="login"
                 type="text"
-                placeholder="Usuário ou e-mail"
+                placeholder="seu email"
                 autoComplete="username"
                 value={login}
                 onChange={e => setLogin(e.target.value)}
