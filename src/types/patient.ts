@@ -28,6 +28,15 @@ export interface BiomarkerComparison {
   points: BiomarkerPoint[];
 }
 
+export interface AssessmentComparisonMetric {
+  id: string;
+  name: string;
+  reference?: string;
+  unit?: string;
+  higherIsBetter?: boolean;
+  points: BiomarkerPoint[];
+}
+
 export interface ActivityRecord {
   id: string;
   title: string;
@@ -180,6 +189,7 @@ export interface PatientProfile {
   examBatches?: ExamBatch[];
   biomarkerComparisons?: BiomarkerComparison[];
   physicalAssessments: PhysicalAssessmentItem[];
+  physicalAssessmentComparisons?: AssessmentComparisonMetric[];
   mealGuides: MealGuideItem[];
   protocols: ProtocolItem[];
   marketplace: MarketplaceProduct[];

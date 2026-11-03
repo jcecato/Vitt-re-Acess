@@ -37,7 +37,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
                     <div className="text-[18px] font-semibold text-white leading-tight truncate uppercase">
                       {firstWord}
                     </div>
-                    <div className="text-[18px] text-[#8e8ea6] mt-0.5 leading-snug">
+                    <div className="text-[18px] text-[#e0e0ed] mt-0.5 leading-snug">
                       Data: {doc.dateStr}
                     </div>
                   </div>

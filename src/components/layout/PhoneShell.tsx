@@ -8,7 +8,7 @@ export const PhoneShell: React.FC<PhoneShellProps> = ({ children }) => {
   return (
     <div className="relative w-full h-[100dvh] max-h-[100dvh] sm:h-[844px] sm:max-h-[calc(100dvh-2rem)] sm:w-[390px] sm:max-w-[430px] mx-auto bg-[#0d0d16] rounded-none sm:rounded-[44px] border-0 sm:border-[2px] sm:border-[#2c2c40] overflow-hidden shadow-2xl flex flex-col justify-between select-none">
       {/* Dynamic Status bar header (visível na moldura desktop, padrão iPhone 14) */}
-      <div className="hidden sm:flex justify-between items-center px-7 pt-3 pb-1 text-[12px] text-[#8e8ea6] font-medium tracking-tight shrink-0 select-none">
+      <div className="hidden sm:flex justify-between items-center px-7 pt-3 pb-1 text-[12px] text-[#e0e0ed] font-medium tracking-tight shrink-0 select-none">
         <span>09:41</span>
         <div className="w-20 h-4 bg-[#1a1a28] rounded-full mx-auto -mt-1 flex items-center justify-center">
           <div className="w-2.5 h-2.5 rounded-full bg-[#0d0d16]"></div>

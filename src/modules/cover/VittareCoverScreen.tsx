@@ -632,59 +632,14 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
             ×
           </button>
 
-          {modalStep === 1 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <p className="vc-modal-text">
-                Entre no seu <span>e-mail</span>.<br />
-                Encaminhamos para lá inicialmente.
-              </p>
-              <div className="vc-field vc-mail">
-                <svg
-                  className="vc-ic"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <path d="m22 6-10 7L2 6" />
-                </svg>
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  value={recoveryEmail}
-                  onChange={e => setRecoveryEmail(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <button
-                type="button"
-                className="vc-cta"
-                onClick={handleSendRecoveryEmail}
-              >
-                Enviar link de recuperação
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <div className="vc-sent-ic">✓</div>
-              <p className="vc-modal-text">
-                Link enviado!<br />
-                Verifique sua caixa de entrada.
-              </p>
-              <button
-                type="button"
-                className="vc-cta"
-                onClick={handleCloseModal}
-              >
-                Voltar ao login
-              </button>
-            </div>
-          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '10px 0 6px', textAlign: 'center' }}>
+            <p className="vc-modal-text">
+              Entre no seu <span>e-mail</span>.<br />
+              Encaminhamos para e-mail<br />
+              cadastrado inicial, a mesma<br />
+              senha, use-a.
+            </p>
+          </div>
         </div>
       </div>
     </div>

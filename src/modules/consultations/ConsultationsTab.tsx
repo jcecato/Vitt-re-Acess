@@ -115,7 +115,7 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
               </div>
 
               {/* Linha 2: Data e Hora */}
-              <div className="text-[18px] text-[#8e8ea6] mt-1.5 leading-snug flex items-center gap-2">
+              <div className="text-[18px] text-[#e0e0ed] mt-1.5 leading-snug flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-[#7c6af7] shrink-0" />
                 <span>Data: {sessao.dateStr}</span>
               </div>

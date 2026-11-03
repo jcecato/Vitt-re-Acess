@@ -162,21 +162,21 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
                   <div className="text-[20px] font-bold text-white tabular-nums leading-none">
                     {String(timeLeft.days).padStart(2, '0')}
                   </div>
-                  <div className="text-[11px] text-[#8e8ea6] font-medium uppercase mt-1">Dias</div>
+                  <div className="text-[11px] text-[#e0e0ed] font-medium uppercase mt-1">Dias</div>
                 </div>
 
                 <div className="bg-black/40 border border-white/10 rounded-xl py-2 px-1 text-center">
                   <div className="text-[20px] font-bold text-white tabular-nums leading-none">
                     {String(timeLeft.hours).padStart(2, '0')}
                   </div>
-                  <div className="text-[11px] text-[#8e8ea6] font-medium uppercase mt-1">Horas</div>
+                  <div className="text-[11px] text-[#e0e0ed] font-medium uppercase mt-1">Horas</div>
                 </div>
 
                 <div className="bg-black/40 border border-white/10 rounded-xl py-2 px-1 text-center">
                   <div className="text-[20px] font-bold text-white tabular-nums leading-none">
                     {String(timeLeft.minutes).padStart(2, '0')}
                   </div>
-                  <div className="text-[11px] text-[#8e8ea6] font-medium uppercase mt-1">Min</div>
+                  <div className="text-[11px] text-[#e0e0ed] font-medium uppercase mt-1">Min</div>
                 </div>
 
                 <div className="bg-black/40 border border-white/10 rounded-xl py-2 px-1 text-center">
@@ -290,7 +290,7 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
           </button>
 
           {/* Rodapé: 20px cinza */}
-          <div className="text-center text-[20px] text-[#8e8ea6] pt-1 leading-snug">
+          <div className="text-center text-[20px] text-[#e0e0ed] pt-1 leading-snug">
             Válido exclusivamente para continuidade do acompanhamento com a equipe Vittare.
           </div>
 

@@ -51,25 +51,25 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ patient, onOpenPdf }
                 {/* Linha 2 em diante: Estrutura padronizada em 18px */}
                 <div className="pt-2.5 space-y-2 text-[18px]">
                   <div className="text-[#cfd3dc]">
-                    <span className="text-[#8e8ea6]">Modelo: </span>
+                    <span className="text-[#e0e0ed]">Modelo: </span>
                     <strong className="text-white font-medium">{item.model || 'Presencial'}</strong>
                   </div>
                   <div className="text-[#cfd3dc]">
-                    <span className="text-[#8e8ea6]">Plano Contratado: </span>
+                    <span className="text-[#e0e0ed]">Plano Contratado: </span>
                     <strong className="text-white font-medium">{item.planName || 'Protocolo Vittáre Premium'}</strong>
                   </div>
                   <div className="text-[#cfd3dc]">
-                    <span className="text-[#8e8ea6]">Forma: </span>
+                    <span className="text-[#e0e0ed]">Forma: </span>
                     <span className="text-white font-medium">{item.method || 'Pix'}</span>
                   </div>
                   {item.condition && (
                     <div className="text-[#cfd3dc]">
-                      <span className="text-[#8e8ea6]">Condição: </span>
+                      <span className="text-[#e0e0ed]">Condição: </span>
                       <span className="text-white font-medium">{item.condition}</span>
                     </div>
                   )}
                   <div className="text-[#cfd3dc]">
-                    <span className="text-[#8e8ea6]">Data: </span>
+                    <span className="text-[#e0e0ed]">Data: </span>
                     <span className="text-white font-medium">{item.dateStr}</span>
                   </div>
                 </div>

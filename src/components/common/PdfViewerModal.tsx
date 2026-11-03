@@ -105,7 +105,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
           </div>
         </div>
 
-        <div className="text-center text-[15px] text-[#8e8ea6] mt-2.5 font-mono truncate px-2">
+        <div className="text-center text-[15px] text-[#e0e0ed] mt-2.5 font-mono truncate px-2">
           {fileName}
         </div>
 

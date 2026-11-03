@@ -576,7 +576,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
                     {item.ivp}/100
                   </span>
                   <ChevronDown 
-                    className={`w-6 h-6 text-[#8e8ea6] transition-transform duration-200 ${
+                    className={`w-6 h-6 text-[#e0e0ed] transition-transform duration-200 ${
                       isOpen ? 'rotate-180 text-[#5eea8f]' : ''
                     }`} 
                   />
@@ -596,7 +596,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
                       <span className="text-[28px] font-bold text-[#5eea8f] tabular-nums leading-none">
                         {item.ivp}
                       </span>
-                      <span className="text-[18px] font-semibold text-[#8e8ea6]">/100</span>
+                      <span className="text-[18px] font-semibold text-[#e0e0ed]">/100</span>
                     </div>
 
                     <div className="h-3 bg-white/[0.08] rounded-full mt-2.5 overflow-hidden">
@@ -765,7 +765,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
                     </text>
                     
                     {/* Rótulo do Check-in (1°, 2°, 3°...) com font-size 16px */}
-                    <text x={p.x} y="100" fill="#8e8ea6" fontSize="16" textAnchor="middle" fontWeight="600">
+                    <text x={p.x} y="100" fill="#e0e0ed" fontSize="16" textAnchor="middle" fontWeight="600">
                       {p.label}
                     </text>
                   </g>
@@ -790,7 +790,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
         <div className="text-[20px] text-[#cfd3dc] leading-relaxed font-normal">
           {getAiFeedback()}
         </div>
-        <div className="text-[18px] text-[#8e8ea6] mt-3 pt-2.5 border-t border-white/[0.06] leading-snug">
+        <div className="text-[18px] text-[#e0e0ed] mt-3 pt-2.5 border-t border-white/[0.06] leading-snug">
           Instrumento de percepção de saúde e funcionalidade autorreferida da clínica Vittáre.
         </div>
       </div>
@@ -981,7 +981,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
                   <CheckCircle2 className="w-5 h-5 text-white" />
                   <span>ENVIAR&nbsp;&nbsp;&nbsp;PROGRESSO</span>
                 </button>
-                <div className="text-center text-[12px] text-[#8e8ea6] mt-2">
+                <div className="text-center text-[12px] text-[#e0e0ed] mt-2">
                   Seus dados serão calculados e integrados à sua Curva de Vitalidade instantaneamente.
                 </div>
               </div>

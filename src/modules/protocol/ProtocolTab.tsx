@@ -86,7 +86,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
                     <div className="text-[18px] font-semibold text-white leading-tight uppercase">
                       {displayTitle}
                     </div>
-                    <div className="text-[18px] text-[#8e8ea6] mt-0.5 leading-snug">
+                    <div className="text-[18px] text-[#e0e0ed] mt-0.5 leading-snug">
                       Data: {dateStrClean}
                     </div>
                   </div>
@@ -100,7 +100,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
                     <div className="relative inline-block" title="Download em PDF bloqueado: validade da receita expirada">
                       <button
                         disabled
-                        className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-white/[0.04] border border-white/10 text-[#8e8ea6] opacity-60 cursor-not-allowed"
+                        className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-white/[0.04] border border-white/10 text-[#e0e0ed] opacity-60 cursor-not-allowed"
                       >
                         <i className="ti ti-file-type-pdf text-[17px]"></i>
                         <span>PDF</span>
@@ -152,13 +152,13 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
               </div>
               <button 
                 onClick={() => setSelectedRecipe(null)}
-                className="text-[#8e8ea6] hover:text-white p-1 text-2xl cursor-pointer"
+                className="text-[#e0e0ed] hover:text-white p-1 text-2xl cursor-pointer"
               >
                 <i className="ti ti-x"></i>
               </button>
             </div>
 
-            <div className="text-[14px] text-[#8e8ea6] mb-3">
+            <div className="text-[14px] text-[#e0e0ed] mb-3">
               {selectedRecipe.expirationStr}
             </div>
 

@@ -32,7 +32,7 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
                     <div className="text-[18px] font-semibold text-white leading-tight uppercase">
                       {displayTitle}
                     </div>
-                    <div className="text-[18px] text-[#8e8ea6] mt-1 leading-snug">
+                    <div className="text-[18px] text-[#e0e0ed] mt-1 leading-snug">
                       Data: {guide.dateStr || '20/10/2026'}
                     </div>
                   </div>
@@ -53,7 +53,7 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
                     <div className="relative inline-block" title="Download em PDF bloqueado após conclusão do ciclo">
                       <button
                         disabled
-                        className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-white/[0.04] border border-white/10 text-[#8e8ea6] opacity-60 cursor-not-allowed"
+                        className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-white/[0.04] border border-white/10 text-[#e0e0ed] opacity-60 cursor-not-allowed"
                       >
                         <i className="ti ti-file-type-pdf text-[17px]"></i>
                         <span>PDF</span>

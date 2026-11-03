@@ -68,24 +68,29 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                 key={batch.id}
                 className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm transition hover:border-white/15"
               >
-                {/* Linha Superior: Ícone + Título + Status */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#5eea8f]/15 text-[#5eea8f] flex items-center justify-center text-[20px] shrink-0">
+                {/* Linha Superior: Ícone + Título (Largura Expandida) */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#5eea8f]/15 text-[#5eea8f] flex items-center justify-center text-[20px] shrink-0 mt-0.5">
                     <i className="ti ti-clipboard-list"></i>
                   </div>
-                  <div className="grow min-w-0">
-                    <div className="text-[18px] font-semibold text-white leading-tight uppercase">
+                  <div className="grow min-w-0 w-full">
+                    {/* Título do Exame com largura total para acomodar nomes longos */}
+                    <div className="text-[18px] font-semibold text-white leading-tight uppercase w-full">
                       {batch.title.toLowerCase().includes('bioqu') 
                         ? 'PAINEL [ BIOQUÍMICO COMPLETO ]' 
                         : batch.title.toUpperCase()}
                     </div>
-                    <div className="text-[18px] text-[#8e8ea6] mt-1 leading-snug">
-                      Data: {batch.dateStr}
+
+                    {/* Linha 2: Data + Span de Status movido para baixo com alinhamento perfeito */}
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <span className="text-[16px] text-[#e0e0ed] leading-none">
+                        Data: {batch.dateStr}
+                      </span>
+                      <span className="text-[14px] font-semibold text-white px-2.5 py-1 rounded bg-[#0f7a3a] shrink-0 uppercase tracking-wider leading-none">
+                        {batch.status}
+                      </span>
                     </div>
                   </div>
-                  <span className="text-[14px] font-semibold text-white px-2 py-0.5 rounded bg-[#0f7a3a] shrink-0 uppercase tracking-wider">
-                    {batch.status}
-                  </span>
                 </div>
 
                 {/* Linha de Ações: PDF (com cadeado 50% maior se expirado) e Visualizar */}
@@ -94,7 +99,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                     <div className="relative inline-block" title="Download em PDF bloqueado após conclusão do ciclo">
                       <button
                         disabled
-                        className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-white/[0.04] border border-white/10 text-[#8e8ea6] opacity-60 cursor-not-allowed"
+                        className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-white/[0.04] border border-white/10 text-[#e0e0ed] opacity-60 cursor-not-allowed"
                       >
                         <i className="ti ti-file-type-pdf text-[17px]"></i>
                         <span>PDF</span>
@@ -133,7 +138,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
           Evolução dos Biomarcadores
         </div>
-        <div className="text-[16px] text-[#8e8ea6] leading-relaxed mb-2.5">
+        <div className="text-[18px] text-[#e0e0ed] leading-relaxed mb-2.5">
           Comparativo histórico dos parâmetros laboratoriais.
         </div>
 
@@ -165,7 +170,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
               const isReductionGood = !item.name.toLowerCase().includes('vitamina');
 
               let arrow = '↔';
-              let badgeColor = 'text-[#8e8ea6] bg-white/[0.05] border-white/10';
+              let badgeColor = 'text-[#e0e0ed] bg-white/[0.05] border-white/10';
 
               if (pctChange < -0.05) {
                 arrow = '↓';
@@ -179,7 +184,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                   : 'text-[#5eea8f] bg-[#5eea8f]/10 border-[#5eea8f]/25';
               } else {
                 arrow = '↔';
-                badgeColor = 'text-[#8e8ea6] bg-white/[0.05] border-white/10';
+                badgeColor = 'text-[#e0e0ed] bg-white/[0.05] border-white/10';
               }
 
               return (
@@ -187,21 +192,21 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                   key={item.id}
                   className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm"
                 >
-                  {/* Linha superior: Nome em 18px, Ref em 17px abaixo e Badge calculada em 16px */}
+                  {/* Linha superior: Nome em 19px/218px, Ref em 17px abaixo e Badge calculada em 18px */}
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex flex-col min-w-0 pr-1">
                       <strong 
                         style={{ paddingLeft: '0px' }}
-                        className="text-white font-semibold text-[18px] leading-tight w-[221px] max-w-full break-words"
+                        className="text-white font-semibold text-[19px] leading-tight w-[218px] max-w-full break-words"
                       >
                         {item.name}
                       </strong>
-                      <span className="text-[#8e8ea6] text-[17px] font-normal leading-snug mt-0.5">
+                      <span className="text-[#e0e0ed] text-[17px] font-normal leading-snug mt-0.5">
                         {item.reference}
                       </span>
                     </div>
 
-                    <span className={`text-[16px] font-semibold border px-2.5 py-0.5 rounded-lg shrink-0 flex items-center gap-1.5 ${badgeColor}`}>
+                    <span className={`text-[18px] font-semibold border px-2.5 py-0.5 rounded-lg shrink-0 flex items-center gap-1.5 ${badgeColor}`}>
                       <span className="text-[20px] leading-none font-bold">{arrow}</span>
                       <span>{formattedPct}%</span>
                     </span>
@@ -285,12 +290,12 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                                   <circle cx={c.x} cy={c.y} r="4" fill="#5eea8f" stroke="#14142a" strokeWidth="2" />
                                   <circle cx={c.x} cy={c.y} r="1.5" fill="#ffffff" />
 
-                                  {/* Apenas o número acima do ponto com fonte 15px nítida */}
+                                  {/* Apenas o número acima do ponto com fonte 18px nítida */}
                                   <text
                                     x={c.x}
-                                    y={c.y - 9}
+                                    y={c.y - 10}
                                     fill="#ffffff"
-                                    fontSize="15"
+                                    fontSize="18"
                                     fontStyle="normal"
                                     fontWeight="bold"
                                     textAnchor="middle"
@@ -298,17 +303,17 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                                     {numericOnly}
                                   </text>
 
-                                {/* Data abaixo do gráfico em 12px */}
-                                <text
-                                  x={c.x}
-                                  y="58"
-                                  fill="#8e8ea6"
-                                  fontSize="12"
-                                  fontWeight="normal"
-                                  textAnchor="middle"
-                                >
-                                  {c.pt.date}
-                                </text>
+                                  {/* Data abaixo do gráfico em 14px */}
+                                  <text
+                                    x={c.x}
+                                    y="58"
+                                    fill="#e0e0ed"
+                                    fontSize="14"
+                                    fontWeight="normal"
+                                    textAnchor="middle"
+                                  >
+                                    {c.pt.date}
+                                  </text>
                               </g>
                             );
                           })}
@@ -342,7 +347,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                     {selectedBatch.title}
                   </span>
                 </div>
-                <div className="text-[15px] text-[#8e8ea6] mt-0.5">
+                <div className="text-[15px] text-[#e0e0ed] mt-0.5">
                   Laudo emitido em {selectedBatch.dateStr}
                 </div>
               </div>
@@ -359,7 +364,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
             </div>
 
             {/* Lista dos Resultados do Lote Específico */}
-            <div className="overflow-y-auto space-y-2 py-3 pr-1 my-1 grow max-h-[60vh]">
+            <div className="overflow-y-auto space-y-2.5 py-3 pr-1 my-1 grow max-h-[60vh]">
               {selectedBatch.results.map((ex) => {
                 const isOk = ex.status === 'ok';
                 const isWarn = ex.status === 'atenção';
@@ -368,62 +373,64 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                 return (
                   <div
                     key={ex.id}
-                    className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 flex items-center justify-between gap-2.5"
+                    className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 flex flex-col gap-2"
                   >
-                    <div className="min-w-0">
-                      <div className="text-[17px] font-semibold text-white truncate leading-tight">
-                        {ex.name}
-                      </div>
-                      <div className="text-[15px] text-[#8e8ea6] leading-tight mt-1">
-                        {ex.reference}
-                      </div>
+                    {/* Linha 1: Nome do Exame em Destaque Full Width (21px) */}
+                    <div className="text-[21px] font-bold text-white leading-tight break-words">
+                      {ex.name}
                     </div>
 
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span
-                        className={`text-[17px] font-bold whitespace-nowrap ${
-                          isOk ? 'text-[#5eea8f]' : 'text-white'
-                        }`}
-                      >
-                        {ex.value}
+                    {/* Linha 2: Ref alinhada à esquerda (17px) | Valor (17px) e Tag OK/Atenção/Baixo alinhados à direita */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[17px] text-[#e0e0ed] font-normal leading-none truncate">
+                        {ex.reference}
                       </span>
 
-                      {isOk && (
-                        <span className="text-[13px] font-semibold text-white px-2 py-0.5 rounded bg-[#0f7a3a] uppercase tracking-wider">
-                          ok
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className={`text-[17px] font-bold whitespace-nowrap ${
+                            isOk ? 'text-[#5eea8f]' : 'text-white'
+                          }`}
+                        >
+                          {ex.value}
                         </span>
-                      )}
-                      {isWarn && (
-                        <span className="text-[13px] font-semibold text-white px-2 py-0.5 rounded bg-[#a35a07] uppercase tracking-wider">
-                          atenção
-                        </span>
-                      )}
-                      {isLow && (
-                        <span className="text-[13px] font-semibold text-white px-2 py-0.5 rounded bg-[#b42318] uppercase tracking-wider">
-                          baixo
-                        </span>
-                      )}
+
+                        {isOk && (
+                          <span className="text-[13px] font-bold text-white px-2 py-0.5 rounded bg-[#0f7a3a] uppercase tracking-wider">
+                            ok
+                          </span>
+                        )}
+                        {isWarn && (
+                          <span className="text-[13px] font-bold text-white px-2 py-0.5 rounded bg-[#a35a07] uppercase tracking-wider">
+                            atenção
+                          </span>
+                        )}
+                        {isLow && (
+                          <span className="text-[13px] font-bold text-white px-2 py-0.5 rounded bg-[#b42318] uppercase tracking-wider">
+                            baixo
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Rodapé do Modal com Informação e Botão "X" no lado INFERIOR DIREITO para Idosos */}
+            {/* Rodapé do Modal com Informação e Botão Fechar no lado INFERIOR DIREITO */}
             <div className="pt-3 border-t border-white/10 flex items-center justify-between shrink-0">
-              <span className="text-[14px] text-[#8e8ea6]">
+              <span className="text-[16px] text-[#e0e0ed]">
                 {selectedBatch.results.length} biomarcadores analisados
               </span>
 
-              {/* Botão X Inferior Direito */}
+              {/* Botão Fechar sem ícone 'i' e com texto 'Fechar' em 17px */}
               <button
                 type="button"
                 onClick={() => setSelectedBatch(null)}
-                className="h-[40px] px-4.5 rounded-xl bg-[#5eea8f]/15 hover:bg-[#5eea8f]/25 text-[#5eea8f] border border-[#5eea8f]/35 text-[15px] font-semibold flex items-center gap-2 cursor-pointer active:scale-95 transition"
-                title="Fechar resultados (X)"
+                className="h-[40px] px-5 rounded-xl bg-[#5eea8f]/15 hover:bg-[#5eea8f]/25 text-[#5eea8f] border border-[#5eea8f]/35 flex items-center justify-center cursor-pointer active:scale-95 transition"
+                title="Fechar resultados"
               >
-                <i className="ti ti-x text-[18px]"></i>
-                <span>Fechar (X)</span>
+                <span className="text-[17px] font-semibold">Fechar</span>
               </button>
             </div>
           </div>

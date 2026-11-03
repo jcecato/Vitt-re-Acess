@@ -207,9 +207,77 @@ export const MARIA_PAULA_PATIENT: PatientProfile = {
     {
       id: 'av-2',
       title: 'Avaliação F. 02',
-      dateStr: 'Aguardando laudo',
-      status: 'aguardando',
-      pdfAvailable: false
+      dateStr: 'Data: 28/10/2026',
+      status: 'laudo',
+      pdfAvailable: true
+    }
+  ],
+
+  physicalAssessmentComparisons: [
+    {
+      id: 'comp-peso-atual',
+      name: 'Peso Atual',
+      reference: 'Meta clínica: 75,0 kg',
+      unit: 'kg',
+      higherIsBetter: false,
+      points: [
+        { date: '27/09/2026', value: 82.5, valueDisplay: '82,5 kg' },
+        { date: '28/10/2026', value: 78.8, valueDisplay: '78,8 kg' }
+      ]
+    },
+    {
+      id: 'comp-peso-ideal',
+      name: 'Peso Ideal',
+      reference: 'Faixa estipulada clínica',
+      unit: 'kg',
+      points: [
+        { date: '27/09/2026', value: 74.0, valueDisplay: '74,0 kg' },
+        { date: '28/10/2026', value: 74.0, valueDisplay: '74,0 kg' }
+      ]
+    },
+    {
+      id: 'comp-imc',
+      name: 'IMC',
+      reference: 'Ref. 18,5 – 24,9 kg/m²',
+      unit: 'kg/m²',
+      higherIsBetter: false,
+      points: [
+        { date: '27/09/2026', value: 27.2, valueDisplay: '27,2' },
+        { date: '28/10/2026', value: 25.8, valueDisplay: '25,8' }
+      ]
+    },
+    {
+      id: 'comp-gordura',
+      name: '% de Gordura',
+      reference: 'Meta clínica: < 20%',
+      unit: '%',
+      higherIsBetter: false,
+      points: [
+        { date: '27/09/2026', value: 26.5, valueDisplay: '26,5%' },
+        { date: '28/10/2026', value: 22.8, valueDisplay: '22,8%' }
+      ]
+    },
+    {
+      id: 'comp-massa-muscular',
+      name: '% de Massa Muscular',
+      reference: 'Meta clínica: > 35%',
+      unit: '%',
+      higherIsBetter: true,
+      points: [
+        { date: '27/09/2026', value: 34.2, valueDisplay: '34,2%' },
+        { date: '28/10/2026', value: 36.4, valueDisplay: '36,4%' }
+      ]
+    },
+    {
+      id: 'comp-circunferencia',
+      name: 'Circunferência Abdominal',
+      reference: 'Ref. < 94 cm',
+      unit: 'cm',
+      higherIsBetter: false,
+      points: [
+        { date: '27/09/2026', value: 94.0, valueDisplay: '94 cm' },
+        { date: '28/10/2026', value: 88.0, valueDisplay: '88 cm' }
+      ]
     }
   ],
 

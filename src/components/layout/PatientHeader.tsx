@@ -63,7 +63,7 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({ patient, activeTab
           <button
             onClick={logout}
             title="Sair do aplicativo"
-            className="p-2 rounded-xl text-[#8e8ea6] hover:text-white hover:bg-white/10 active:scale-95 transition cursor-pointer shrink-0"
+            className="p-2 rounded-xl text-[#e0e0ed] hover:text-white hover:bg-white/10 active:scale-95 transition cursor-pointer shrink-0"
           >
             <LogOut className="w-4.5 h-4.5" />
           </button>

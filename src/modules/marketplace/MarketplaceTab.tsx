@@ -44,7 +44,7 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
               <div className="text-[18px] font-semibold text-white leading-snug truncate">
                 {item.name}
               </div>
-              <div className="text-[16px] text-[#8e8ea6] mt-0.5">
+              <div className="text-[16px] text-[#e0e0ed] mt-0.5">
                 Atualizado: {item.dateStr}
               </div>
 

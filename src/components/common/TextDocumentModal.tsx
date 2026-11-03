@@ -42,13 +42,13 @@ export const TextDocumentModal: React.FC<TextDocumentModalProps> = ({
             <h2 className="text-[20px] font-['Cormorant_Garamond',serif] font-medium text-white tracking-[0.02em] mt-1 leading-snug">
               {title}
             </h2>
-            <div className="text-[14px] text-[#8e8ea6] mt-0.5">
+            <div className="text-[14px] text-[#e0e0ed] mt-0.5">
               Paciente: <strong className="text-white">{patientName}</strong> · Data: {dateStr}
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="text-[#8e8ea6] hover:text-white p-1 text-2xl cursor-pointer transition rounded-lg hover:bg-white/10"
+            className="text-[#e0e0ed] hover:text-white p-1 text-2xl cursor-pointer transition rounded-lg hover:bg-white/10"
             title="Fechar"
           >
             <i className="ti ti-x"></i>
@@ -78,7 +78,7 @@ export const TextDocumentModal: React.FC<TextDocumentModalProps> = ({
 
         {/* Footer */}
         <div className="pt-3 border-t border-white/10 shrink-0 flex items-center justify-between gap-3">
-          <span className="text-[13px] text-[#8e8ea6]">Visualização em tela máxima</span>
+          <span className="text-[13px] text-[#e0e0ed]">Visualização em tela máxima</span>
           <button
             onClick={onClose}
             className="h-[34px] min-h-[34px] max-h-[34px] px-5 rounded-xl bg-[#5eea8f]/15 hover:bg-[#5eea8f]/25 border border-[#5eea8f]/40 text-[#5eea8f] text-[15px] font-semibold flex items-center justify-center transition active:scale-95 cursor-pointer"

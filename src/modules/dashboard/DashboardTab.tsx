@@ -110,7 +110,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           {nextConsultationDisplay !== '-' ? (
             <span className="text-[18px]">Próxima Agenda: <strong className="text-white">{nextConsultationDisplay}</strong></span>
           ) : (
-            <span className="text-[18px] text-[#8e8ea6] flex items-center gap-1">
+            <span className="text-[18px] text-[#e0e0ed] flex items-center gap-1">
               <span>Próxima Agenda:</span>
               <strong className="text-white font-bold text-lg leading-none">-</strong>
             </span>
@@ -144,14 +144,14 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         ? 'bg-[#5eea8f]'
                         : act.dotType === 'act'
                         ? 'bg-[#9b8cff]'
-                        : 'border-2 border-dashed border-[#8e8ea6]'
+                        : 'border-2 border-dashed border-[#e0e0ed]'
                     }`}
                   />
                   <div className="grow min-w-0">
                     <div className="text-[18px] font-semibold text-white leading-tight">
                       {act.title}
                     </div>
-                    <div className="text-[16px] text-[#8e8ea6] mt-1 leading-tight">
+                    <div className="text-[16px] text-[#e0e0ed] mt-1 leading-tight">
                       {act.dateStr}
                     </div>
                   </div>
@@ -168,7 +168,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                   )}
 
                   <i
-                    className={`ti ti-chevron-right text-[16px] text-[#8e8ea6] shrink-0 transition-transform duration-200 ${
+                    className={`ti ti-chevron-right text-[16px] text-[#e0e0ed] shrink-0 transition-transform duration-200 ${
                       isOpen ? 'rotate-90 text-white' : ''
                     }`}
                   ></i>
