@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for updated cover screen slogan 'Tudo para seu acompanhamento, na palma da mão.' with emerald gradient styling on the first line.",
-  "updatedAt": "2026-11-03T13:46:12.520846694Z",
+  "summary": "Plano de implementação para ampliação do espaçamento vertical entre o cabeçalho/meta clínica e o gráfico de curvas nas avaliações físicas, empurrando o container do gráfico para baixo e dobrando a área de respiro em todos os cards comparativos.",
+  "updatedAt": "2026-11-03T18:01:30.162143911Z",
   "requestFeedback": true,
   "userFacing": true
 }

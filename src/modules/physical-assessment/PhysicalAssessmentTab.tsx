@@ -264,7 +264,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
                   className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm"
                 >
                   {/* Linha superior: Nome em 19px/218px, Ref em 17px abaixo e Badge calculada em 18px */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-start justify-between gap-2 mb-3.5">
                     <div className="flex flex-col min-w-0 pr-1">
                       <strong 
                         style={{ paddingLeft: '0px' }}
@@ -273,7 +273,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
                         {item.name}
                       </strong>
                       {item.reference && (
-                        <span className="text-[#e0e0ed] text-[17px] font-normal leading-snug mt-0.5">
+                        <span className="text-[#e0e0ed] text-[17px] font-normal leading-snug mt-1">
                           {item.reference}
                         </span>
                       )}
@@ -318,7 +318,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
                     const areaPath = `${curvePath} L ${end.x} 48 L ${start.x} 48 Z`;
 
                     return (
-                      <div className="w-full h-16 px-1 my-1">
+                      <div className="w-full h-16 px-1 mt-4 mb-1">
                         <svg viewBox="0 0 320 64" className="w-full h-full overflow-visible">
                           <defs>
                             <linearGradient id={`grad-eval-${item.id}`} x1="0" y1="0" x2="0" y2="1">

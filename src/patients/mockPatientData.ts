@@ -77,6 +77,22 @@ export const MARIA_PAULA_PATIENT: PatientProfile = {
       badge: 'agendado',
       dotType: 'fut',
       description: 'Sua revisão está confirmada. Vamos reavaliar sua composição corporal e ajustar o protocolo.'
+    },
+    {
+      id: 'act-4',
+      title: 'Bioimpedância inicial',
+      dateStr: 'Data: 27/09/2026 · há 32 dias',
+      badge: 'feito',
+      dotType: 'done',
+      description: 'Avaliação da composição corporal inicial realizada na 1ª consulta com peso base e percentual de gordura registrados.'
+    },
+    {
+      id: 'act-5',
+      title: 'Protocolo Fase 1 iniciado',
+      dateStr: 'Data: 27/09/2026 · há 32 dias',
+      badge: 'feito',
+      dotType: 'done',
+      description: 'Início do protocolo metabólico e suplementação celular prescrita pelo Dr. João Paulo com duração de 60 dias.'
     }
   ],
 
