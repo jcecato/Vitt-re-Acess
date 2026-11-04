@@ -51,6 +51,26 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
         }
       ];
 
+  // Helper para verificar se a sessão é passada ou concluída
+  const isSessionPast = (sessao: ConsultationItem): boolean => {
+    const normalized = (sessao.status || '').toLowerCase();
+    if (normalized === 'concluída' || normalized === 'concluida' || normalized === 'realizada') {
+      return true;
+    }
+    if (sessao.dateStr) {
+      const match = sessao.dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (match) {
+        const [, day, month, year] = match;
+        const sessionDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10), 23, 59, 59);
+        const now = new Date();
+        if (sessionDate < now) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
   // Helper para renderizar a única opção de status correspondente
   const renderStatusBadge = (status: string) => {
     const normalized = status.toLowerCase();
@@ -101,6 +121,8 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
             ? sessao.title.toUpperCase().replace('ª', '°')
             : `${index + 1}° SESSÃO`;
 
+          const isPast = isSessionPast(sessao);
+
           return (
             <div
               key={sessao.id || `sessao-${index}`}
@@ -117,20 +139,32 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
               {/* Linha 2: Data e Hora */}
               <div className="text-[18px] text-[#e0e0ed] mt-1.5 leading-snug flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-[#7c6af7] shrink-0" />
-                <span>Data: {sessao.dateStr}</span>
+                <span className="text-[18px]">Data: {sessao.dateStr}</span>
               </div>
 
-              {/* Linha 3: Botão Remarcar que abre o modal informativo com X */}
+              {/* Linha 3: Botão Remarcar (cinza e desabilitado se a data for passada/concluída, verde e ativo se for futura) */}
               <div className="flex flex-wrap items-center gap-2 mt-3 pt-2.5 border-t border-white/[0.06]">
-                <button
-                  type="button"
-                  onClick={() => handleOpenRemarcarModal(displayTitle)}
-                  title="Remarcar Sessão"
-                  className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-2 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-white/[0.08] border border-white/20 hover:bg-[#25D366]/20 hover:border-[#25D366] text-white hover:text-[#5eea8f] active:scale-95 transition cursor-pointer"
-                >
-                  <MessageSquareShare className="w-4 h-4 text-[#5eea8f]" />
-                  <span>Remarcar</span>
-                </button>
+                {isPast ? (
+                  <button
+                    type="button"
+                    disabled
+                    title="Sessão concluída ou anterior à data atual (remarcação indisponível)"
+                    className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-2 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-white/[0.04] border border-white/10 text-[#8b98a6] opacity-60 cursor-not-allowed select-none"
+                  >
+                    <MessageSquareShare className="w-4 h-4 text-[#8b98a6]" />
+                    <span>Remarcar</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenRemarcarModal(displayTitle)}
+                    title="Remarcar Sessão"
+                    className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-2 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-white/[0.08] border border-white/20 hover:bg-[#25D366]/20 hover:border-[#25D366] text-white hover:text-[#5eea8f] active:scale-95 transition cursor-pointer"
+                  >
+                    <MessageSquareShare className="w-4 h-4 text-[#5eea8f]" />
+                    <span>Remarcar</span>
+                  </button>
+                )}
               </div>
             </div>
           );

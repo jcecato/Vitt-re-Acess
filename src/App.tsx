@@ -19,6 +19,7 @@ import { ConsultationsTab } from './modules/consultations/ConsultationsTab';
 import { ExamsTab } from './modules/exams/ExamsTab';
 import { PhysicalAssessmentTab } from './modules/physical-assessment/PhysicalAssessmentTab';
 import { MealGuideTab } from './modules/meal-guide/MealGuideTab';
+import { MetabolicProfileTab } from './modules/metabolic-profile/MetabolicProfileTab';
 import { ProtocolTab } from './modules/protocol/ProtocolTab';
 import { MarketplaceTab } from './modules/marketplace/MarketplaceTab';
 import { DocumentsTab } from './modules/documents/DocumentsTab';
@@ -163,6 +164,12 @@ function PatientAppContent() {
             <MealGuideTab
               patient={currentPatient}
               onOpenPdf={handleOpenPdf}
+            />
+          )}
+
+          {activeTab === 'perfil-metabolico' && (
+            <MetabolicProfileTab
+              patient={currentPatient}
             />
           )}
 

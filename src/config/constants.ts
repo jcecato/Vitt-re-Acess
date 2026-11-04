@@ -11,6 +11,7 @@ export const NAVIGATION_TABS: NavigationTab[] = [
   { id: 'exames', label: 'Exames', iconClass: 'ti ti-flask' },
   { id: 'avaliacao', label: 'Avaliação F.', iconClass: 'ti ti-barbell' },
   { id: 'guia', label: 'Guia Alimentar', iconClass: 'ti ti-salad' },
+  { id: 'perfil-metabolico', label: 'Perfil Metabólico', iconClass: 'ti ti-dna' },
   { id: 'protocolo', label: 'Protocolo', iconClass: 'ti ti-pill' },
   { id: 'marketplace', label: 'Marketplace', iconClass: 'ti ti-shopping-bag' },
   { id: 'docs', label: 'Documentos', iconClass: 'ti ti-folder' },

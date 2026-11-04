@@ -186,10 +186,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         {/* Cabeçalho da Seção */}
         <div className="flex items-center justify-between mb-3 px-0.5">
           <div className="flex items-center gap-2">
-            <h2 className="text-[18px] font-bold tracking-tight text-[#e8eef5] border-[#fcfcfc]">
+            <h2 className="text-[20px] font-bold tracking-tight text-[#e8eef5] border-[#fcfcfc]">
               Linha do tempo
             </h2>
-            <span className="text-[16px] font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-[#8b98a6] border border-white/[0.08]">
+            <span className="text-[17px] font-medium px-2 py-0.5 rounded-full bg-white/[0.06] text-[#8b98a6] border border-[#cfd3dc]">
               {patient.activities.length} registros
             </span>
           </div>
@@ -234,7 +234,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         {act.title}
                       </h3>
                       {relativeTime && (
-                        <span className="text-[17px] font-medium text-[#8b98a6] whitespace-nowrap tabular-nums shrink-0 pt-0.5 border-[#e8eef5]">
+                        <span className="text-[17px] font-medium text-[#8b98a6] whitespace-nowrap tabular-nums shrink-0 pt-0.5 border-[#cfd3dc]">
                           {relativeTime}
                         </span>
                       )}
@@ -243,7 +243,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                     {/* Linha de Metadados: Data Exata + Indicador de Abertura */}
                     <div className="flex items-center justify-between mt-1 gap-2">
                       <div className="flex items-center">
-                        <span className="text-[17px] text-[#8b98a6] font-medium h-[27px] px-[6px] pb-[2px] -mt-[8px] -ml-[6px] border-[#e8eef5] flex items-center">
+                        <span className="text-[17px] text-[#8b98a6] font-medium h-[27px] px-[6px] pb-[2px] -mt-[8px] -ml-[6px] border-[#cfd3dc] flex items-center">
                           {exactDate}
                         </span>
                       </div>

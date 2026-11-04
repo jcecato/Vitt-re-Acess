@@ -1,73 +1,81 @@
-# Ajuste de Espaçamento e Respiro no Gráfico Comparativo da Avaliação Física
+# Aba Perfil Metabólico & Mapa de Crononutrição — Vittáre Acess
 
-Ajustar o espaçamento vertical entre os dados clínicos de cabeçalho (nome da métrica, meta clínica e percentual) e o container do gráfico de curva nas avaliações físicas, dobrando o respiro para eliminar a proximidade excessiva com os números superiores (ex.: 82,5) em todos os cards comparativos.
+Implementação da nova aba **"Perfil Metabólico"** no aplicativo Vittáre Acess, apresentando um mapa visual e dinâmico de crononutrição (combinação ideal de alimentos por faixa de horário), curva de energia circadiana, janelas de jejum/glicogênio e simulador interativo de refeições.
 
-## Revisão do Usuário e Decisões Críticas
+## Decisões de Projeto & Confirmações do Usuário
 
-> [!IMPORTANT]
-> As decisões de layout e densidade espacial foram confirmadas diretamente pelo usuário na etapa de alinhamento:
+> [!NOTE]
+> O usuário pulou as perguntas interativas. Adotaremos as recomendações padrão de alta performance e melhor experiência UX (Dark Mode nativo do Vittáre Acess `#0a0d12` / `#121722`).
 
-- **Escopo do Espaçamento Confirmado:** Dobrar o espaçamento entre a linha "Meta clínica" e os números superiores da curva em **todos os 6 cards comparativos** da aba Avaliação Física ("Peso Atual", "Peso Ideal", "IMC", "% de Gordura", "% de Massa Muscular" e "Circunferência Abdominal").
-- **Preservação de Escala do Gráfico:** Manter a altura útil original do gráfico (`h-16`, 64px virtuais), deslocando exclusivamente o bloco do gráfico para baixo através de espaçamento de margem vertical (`margin-top` / `margin-bottom`), garantindo que os elementos internos mantenham sua proporção e legibilidade.
-
----
-
-### 1. Visão Geral e Conceito Central
-
-- **O que faz:** Amplia a distância vertical entre o cabeçalho do card (título, meta clínica e badge) e a área de renderização do gráfico SVG, criando uma separação visual nítida e elegante.
-- **Público-alvo:** Paciente e equipe clínica visualizando a aba móvel de Avaliação Física.
-- **Benefício-chave:** Remove o aperto visual entre o texto descritivo e os rótulos de valores numéricos superiores (ex.: `82,5`, `74,0`), proporcionando leitura imediata e estética refinada sem sobreposições.
+- **Modelo Visual do Mapa**: Relógio Circadiano Interativo dividindo o dia em 4 blocos de crononutrição (Despertar & Ativação Metabólica, Janela de Pico de Desempenho, Janela de Absorção & Recuperação, e Repouso/Jejum Noturno).
+- **Métricas Metabólicas em Destaque**: Janelas recomendadas de refeições, curva estimada de sensibilidade à insulina/energia e estados de armazenamento/queima de gordura.
+- **Interatividade de Alimentos**: Filtros dinâmicos por objetivo (Emagrecimento, Ganho de Massa, Disposição, Foco) com recomendação instantânea de alimentos e horários ideais.
 
 ---
 
-### 2. Experiência do Usuário e Design Visual
+## 1. Visão Geral e Conceito Central
 
-- **Fluxo do Usuário:**
-  1. O usuário acessa a aba **Avaliação F.** e rola até a seção **Evolução das Avaliações Físicas**.
-  2. Cada card comparativo exibe o título (`19px`) e meta/referência (`17px`) à esquerda e a variação percentual à direita.
-  3. Logo abaixo, com respiro vertical dobrado (~24px de folga contra os ~10px anteriores), inicia-se o gráfico de curva.
-  4. O número de valor mais alto fica completamente desimpedido de qualquer elemento de texto textual.
-- **Direção Estética:**
-  - Preservação da paleta escura elegante com acentos verde-esmeralda `#5eea8f`.
-  - Margem superior do bloco de gráfico ampliada de `my-1` para `mt-4 mb-2` (ou cabeçalho com `mb-4`), garantindo proporcionalidade e ritmo vertical.
+- **O que faz**: Oferece ao paciente uma visão clara e científica de como seu metabolismo responde em cada período do dia, indicando os alimentos mais recomendados em cada horário, janelas metabólicas favoráveis e estratégias nutricionais personalizadas.
+- **Público-Alvo**: Pacientes da clínica Vittáre que buscam otimizar energia, composição corporal, saúde metabólica e adesão ao plano alimentar.
+- **Valor Agregado**: Transforma um plano alimentar estático em um guia visual interativo de crononutrição e ritmo circadiano.
 
 ---
 
-### 3. Decisões de Produto e Trade-offs
+## 2. Experiência do Usuário e Design Visual
 
-- **Decisão 1: Margem Externa vs. Alteração de ViewBox Interno do SVG**
-  - *Abordagem Escolhida:* Aumentar a margem entre containers (`margin-bottom` no cabeçalho / `margin-top` no container do gráfico).
-  - *Justificativa:* Preserva rigorosamente as coordenadas matemáticas de Bézier, os feixes pontilhados e o alinhamento das datas inferiores do gráfico sem distorcer o sistema de eixos do SVG.
-  - *Alternativa descartada:* Adicionar padding interno no SVG alterando `viewBox`, o que achataría a amplitude vertical das curvas.
-
-- **Decisão 2: Aplicação Universal nos 6 Cards Comparativos**
-  - *Abordagem Escolhida:* Atualização centralizada no `.map` de renderização dos cards comparativos em `PhysicalAssessmentTab.tsx`.
-  - *Justificativa:* Garante consistência visual simétrica em toda a listagem, evitando que apenas um card fique com ritmo espacial despadronizado.
+- **Estética & Tema**:
+  - *Cores Base*: Fundo escuro nativo do Vittáre (`#0a0d12`), cards em `#121722`, bordas suaves em `rgba(255,255,255,0.07)` e acentos em verde vitalidade (`#2fd575`), âmbar energia (`#e8930c`) e índigo calmo (`#6d7cff`).
+  - *Tipografia*: Hierarquia visual limpa em Inter, numerais tabulares em métricas e rótulos unboxed.
+  - *Ergonomia Mobile*: Toques mínimos de 48px, controles na zona de alcance natural do polegar.
+- **Componentes Principais da Aba**:
+  1. **Cabeçalho & Resumo Circadiano**: Mostrador dinâmico da fase metabólica atual com base no horário real do usuário (ex: "Fase Atual: Janela de Maior Sensibilidade à Insulina").
+  2. **Anel Circadiano / Cronograma Visual**: 4 blocos temporais interativos (06h-10h, 10h-15h, 15h-20h, 20h-06h).
+  3. **Mapa de Alimentos Otimizados**: Lista interativa com ícones modernos mostrando quais alimentos ingerir (e quais evitar) no bloco horário selecionado.
+  4. **Painel de Indicadores Metabólicos**: Cards de Taxa Metabólica Basal, Carga Glicêmica Estimada e Janela de Jejum.
+  5. **Simulador / Sugestor de Lanches**: Seleção rápida de objetivo para recomendação imediata do melhor alimento para aquele exato momento.
 
 ---
 
-### 4. Arquitetura Técnica e Estrutura de Componentes
+## 3. Decisões Técnicas e Arquitetura
+
+- **Arquitetura Modular**: Criação do módulo `src/modules/metabolic-profile/MetabolicProfileTab.tsx` integrado ao gerenciador de navegação por abas existente no aplicativo.
+- **Gerenciamento de Estado**: Estado local sincronizado com o horário do sistema (`new Date()`) para destacar a fase metabólica do momento.
 
 ```
-┌────────────────────────────────────────────────────────┐
-│ Card Comparativo (bg-white/[0.04], rounded-2xl, p-3.5) │
-├────────────────────────────────────────────────────────┤
-│ Header: Nome (19px) + Meta (17px)   [Badge Variação]   │
-└────────────────────────────────────────────────────────┘
-                       │
-                       ▼  <-- Espaçamento DOBRADO (~24px)
-┌────────────────────────────────────────────────────────┐
-│ Container do Gráfico (w-full, h-16, px-1, mt-4 mb-1)   │
-│   ┌────────────────────────────────────────────────┐   │
-│   │ SVG (viewBox="0 0 320 64"):                    │   │
-│   │   • Números superiores (82,5) livres           │   │
-│   │   • Curva Bézier + Gradiente suave             │   │
-│   │   • Datas inferiores                           │   │
-│   └────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Vittáre Acess — App Layout                      │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│               Aba Selecionada: Perfil Metabólico (Nova Aba)           │
+├────────────────────────────────────────────────────────────────────────┤
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ 1. Status Metabólico em Tempo Real (Fase Circadiana Atual)         │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ 2. Selector de Fase Circadiana (06-10h | 10-15h | 15-20h | 20-06h) │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ 3. Mapa Visual de Alimentos & Combinações Otimizadas                │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ 4. Indicadores: Sensibilidade à Insulina | Energia | Jejum Noturno │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ 5. Guia Interativo: O que comer agora? (Filtro por Objetivo)       │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Mapeamento de Modificação:
-- **Arquivo Alvo:** `/src/modules/physical-assessment/PhysicalAssessmentTab.tsx`
-- **Linha do Cabeçalho:** Atualizar o container de cabeçalho de `mb-2` para `mb-4` e o container do gráfico para `mt-2 mb-1` (totalizando dobro da distância original).
-- **Verificação:** Execução do build (`compile_applet`) e checagem de tipos (`lint_applet`).
+---
+
+## 4. Plano de Execução em Passos
+
+1. **Criação do Módulo `MetabolicProfileTab.tsx`**:
+   - Construção dos cards com métricas circadiana, alimentos recomendados e alertas metabólicos.
+   - Design responsivo mobile-first mantendo o alinhamento estético `#121722` e cores `#cfd3dc` / `#2fd575`.
+2. **Integração na Navegação Principal**:
+   - Adicionar o botão/ícone "Perfil Metabólico" no menu inferior de navegação e na lista de abas.
+3. **Validação e Compilação**:
+   - Verificação de tipos TypeScript e execução do `compile_applet`.
