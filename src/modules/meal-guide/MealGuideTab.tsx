@@ -12,8 +12,13 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-3">
-          Seus guias alimentares
+        <div>
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
+            Rotina Alimentar
+          </div>
+          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
+            Guias alimentares e planos nutricionais
+          </div>
         </div>
 
         <div className="space-y-4">

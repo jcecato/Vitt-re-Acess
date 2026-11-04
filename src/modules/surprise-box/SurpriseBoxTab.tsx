@@ -78,7 +78,10 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
       <div className="flex items-center justify-between mb-1">
         <div>
           <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
-            Caixa Surpresa Vittare
+            Meu Bônus
+          </div>
+          <div className="text-[17px] font-semibold text-white mt-0.5">
+            Caixa Surpresa e Recompensas
           </div>
         </div>
 

@@ -67,7 +67,7 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
                 className={`relative snap-center flex flex-col items-center gap-1.5 py-2 px-3.5 rounded-xl shrink-0 whitespace-nowrap transition-all duration-150 cursor-pointer border active:scale-95 ${
                   isActive
                     ? 'bg-[#5eea8f]/10 border-[#5eea8f]/50 text-[#5eea8f] shadow-sm'
-                    : 'bg-white/[0.03] border-white/[0.06] text-[#a5a4b8] hover:text-white hover:bg-white/[0.06]'
+                    : 'bg-white/[0.03] border-white/[0.06] text-[#cfd3dc] hover:text-white hover:bg-white/[0.06]'
                 }`}
               >
                 {/* Indicador de atualização pendente (some automaticamente ao abrir a aba) */}

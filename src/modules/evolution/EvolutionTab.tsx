@@ -495,7 +495,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
       {/* Cabeçalho da Aba */}
       <div>
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
-          Vittáre Check-In
+          Meu Bem Estar
         </div>
         <div className="text-[17px] font-semibold text-white mt-0.5">
           Sistema de Evolução Percebida

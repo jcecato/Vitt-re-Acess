@@ -110,8 +110,13 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Título da Aba Agenda */}
-      <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
-        Sessões de Consulta
+      <div>
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
+          Minha Agenda
+        </div>
+        <div className="text-[17px] font-semibold text-white mt-0.5 mb-2">
+          Sessões de Consulta
+        </div>
       </div>
 
       {/* Lista das 3 Sessões com Status Inteligente do CRM */}

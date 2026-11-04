@@ -22,11 +22,9 @@ import { MealGuideTab } from './modules/meal-guide/MealGuideTab';
 import { MetabolicProfileTab } from './modules/metabolic-profile/MetabolicProfileTab';
 import { ProtocolTab } from './modules/protocol/ProtocolTab';
 import { MarketplaceTab } from './modules/marketplace/MarketplaceTab';
-import { DocumentsTab } from './modules/documents/DocumentsTab';
+import { GuiasTab } from './modules/guias/GuiasTab';
 import { FinancialTab } from './modules/financial/FinancialTab';
 import { TermsTab } from './modules/terms/TermsTab';
-import { HealthTab } from './modules/health/HealthTab';
-import { ReferralsTab } from './modules/referrals/ReferralsTab';
 import { SurpriseBoxTab } from './modules/surprise-box/SurpriseBoxTab';
 
 // Modals
@@ -71,12 +69,21 @@ function PatientAppContent() {
     // Reconhece e baixa a notificação assim que a aba é aberta pelo paciente
     if (tabId !== 'inicio' && currentPatient) {
       crmDataService.acknowledgeTabUpdate(currentPatient.id, tabId);
+      if (tabId === 'guias') {
+        crmDataService.acknowledgeTabUpdate(currentPatient.id, 'docs');
+        crmDataService.acknowledgeTabUpdate(currentPatient.id, 'saude');
+        crmDataService.acknowledgeTabUpdate(currentPatient.id, 'encam');
+      }
     }
   };
 
-  const pendingTabs = currentPatient 
+  const rawPendingTabs = currentPatient 
     ? crmDataService.getPendingUpdates(currentPatient).map(u => u.tab) 
     : [];
+  const pendingTabs = [...rawPendingTabs];
+  if (rawPendingTabs.some(t => ['guias', 'docs', 'saude', 'encam'].includes(t))) {
+    if (!pendingTabs.includes('guias')) pendingTabs.push('guias');
+  }
 
   // Se o paciente não estiver autenticado na sessão individual, exibe tela de login/PIN
   if (!isAuthenticated || !currentPatient) {
@@ -184,15 +191,8 @@ function PatientAppContent() {
             <MarketplaceTab patient={currentPatient} />
           )}
 
-          {activeTab === 'docs' && (
-            <DocumentsTab
-              patient={currentPatient}
-              onOpenPdf={handleOpenPdf}
-            />
-          )}
-
-          {activeTab === 'financeiro' && (
-            <FinancialTab
+          {(activeTab === 'guias' || activeTab === 'docs' || activeTab === 'saude' || activeTab === 'encam') && (
+            <GuiasTab
               patient={currentPatient}
               onOpenPdf={handleOpenPdf}
             />
@@ -205,15 +205,8 @@ function PatientAppContent() {
             />
           )}
 
-          {activeTab === 'saude' && (
-            <HealthTab
-              patient={currentPatient}
-              onOpenPdf={handleOpenPdf}
-            />
-          )}
-
-          {activeTab === 'encam' && (
-            <ReferralsTab
+          {activeTab === 'financeiro' && (
+            <FinancialTab
               patient={currentPatient}
               onOpenPdf={handleOpenPdf}
             />

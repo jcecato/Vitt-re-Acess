@@ -54,8 +54,13 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Seção 1: Exames Solicitados organizados por solicitação individual */}
       <div>
-        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-3">
-          Exames solicitados
+        <div>
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
+            Meus Exames
+          </div>
+          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
+            Exames solicitados e biomarcadores
+          </div>
         </div>
 
         {/* Cada exame solicitado organizado por div único */}

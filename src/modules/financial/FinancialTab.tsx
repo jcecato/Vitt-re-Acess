@@ -21,8 +21,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ patient, onOpenPdf }
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-2">
-          Seus investimentos
+        <div>
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
+            Recibos Fiscais
+          </div>
+          <div className="text-[17px] font-semibold text-white mt-0.5 mb-2">
+            Comprovantes e histórico de investimentos
+          </div>
         </div>
 
         <div className="space-y-4">

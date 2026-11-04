@@ -16,8 +16,13 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
 
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
-      <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f]">
-        Curadoria e Indicações
+      <div>
+        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
+          Acesso Ágil
+        </div>
+        <div className="text-[17px] font-semibold text-white mt-0.5">
+          Curadoria e Indicações
+        </div>
       </div>
 
       {/* Texto de Curadoria com texto justificado e instrução à esquerda */}

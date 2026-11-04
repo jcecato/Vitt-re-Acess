@@ -190,10 +190,10 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
           </div>
           <div>
             <h2 className="text-[20px] font-bold text-white tracking-tight leading-none">
-              Perfil Metabólico
+              Mapa Funcional
             </h2>
             <p className="text-[13px] text-[#8b98a6] mt-0.5">
-              Mapa de Crononutrição & Ritmo Circadiano de <strong className="text-[#e8eef5] font-semibold">{patient.name.split(' ')[0]}</strong>
+              Crononutrição & Ritmo Circadiano de <strong className="text-[#e8eef5] font-semibold">{patient.name.split(' ')[0]}</strong>
             </p>
           </div>
         </div>

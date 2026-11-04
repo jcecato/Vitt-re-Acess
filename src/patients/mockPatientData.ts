@@ -232,23 +232,13 @@ export const MARIA_PAULA_PATIENT: PatientProfile = {
   physicalAssessmentComparisons: [
     {
       id: 'comp-peso-atual',
-      name: 'Peso Atual',
+      name: 'Peso',
       reference: 'Meta clínica: 75,0 kg',
       unit: 'kg',
       higherIsBetter: false,
       points: [
         { date: '27/09/2026', value: 82.5, valueDisplay: '82,5 kg' },
         { date: '28/10/2026', value: 78.8, valueDisplay: '78,8 kg' }
-      ]
-    },
-    {
-      id: 'comp-peso-ideal',
-      name: 'Peso Ideal',
-      reference: 'Faixa estipulada clínica',
-      unit: 'kg',
-      points: [
-        { date: '27/09/2026', value: 74.0, valueDisplay: '74,0 kg' },
-        { date: '28/10/2026', value: 74.0, valueDisplay: '74,0 kg' }
       ]
     },
     {

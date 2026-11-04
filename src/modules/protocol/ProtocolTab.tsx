@@ -62,8 +62,13 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1.5">
-          Suplementação e Receitas
+        <div>
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
+            Minhas Fórmulas
+          </div>
+          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
+            Suplementação e Receitas
+          </div>
         </div>
 
         <div className="space-y-4">

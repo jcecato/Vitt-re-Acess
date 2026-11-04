@@ -22,23 +22,13 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
   const defaultComparisons: AssessmentComparisonMetric[] = [
     {
       id: 'comp-peso-atual',
-      name: 'Peso Atual',
+      name: 'Peso',
       reference: 'Meta clínica: 75,0 kg',
       unit: 'kg',
       higherIsBetter: false,
       points: [
         { date: dateInitial, value: 82.5, valueDisplay: '82,5 kg' },
         { date: dateRecent, value: 78.8, valueDisplay: '78,8 kg' }
-      ]
-    },
-    {
-      id: 'comp-peso-ideal',
-      name: 'Peso Ideal',
-      reference: 'Faixa estipulada clínica',
-      unit: 'kg',
-      points: [
-        { date: dateInitial, value: 74.0, valueDisplay: '74,0 kg' },
-        { date: dateRecent, value: 74.0, valueDisplay: '74,0 kg' }
       ]
     },
     {
@@ -88,17 +78,26 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
   ];
 
   // Se o CRM enviar patient.physicalAssessmentComparisons customizado, consome direto
-  const comparisons: AssessmentComparisonMetric[] =
+  const rawComparisons: AssessmentComparisonMetric[] =
     patient.physicalAssessmentComparisons && patient.physicalAssessmentComparisons.length > 0
       ? patient.physicalAssessmentComparisons
       : defaultComparisons;
+
+  const comparisons: AssessmentComparisonMetric[] = rawComparisons
+    .filter(item => item.id !== 'comp-peso-ideal' && item.name.toLowerCase() !== 'peso ideal')
+    .map(item => (item.id === 'comp-peso-atual' || item.name === 'Peso Atual') ? { ...item, name: 'Peso' } : item);
 
   return (
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Seção 1: Lista de Avaliações Físicas cadastradas */}
       <div>
-        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-3">
-          Resultado da avaliação física
+        <div>
+          <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
+            Avaliação Física
+          </div>
+          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
+            Resultados e comparativos corporais
+          </div>
         </div>
 
         <div className="space-y-4">

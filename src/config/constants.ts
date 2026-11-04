@@ -5,21 +5,19 @@ export interface NavigationTab {
 }
 
 export const NAVIGATION_TABS: NavigationTab[] = [
-  { id: 'inicio', label: 'Início', iconClass: 'ti ti-home' },
-  { id: 'evolucao', label: 'Check-in', iconClass: 'ti ti-chart-line' },
-  { id: 'consultas', label: 'Agenda', iconClass: 'ti ti-calendar' },
-  { id: 'exames', label: 'Exames', iconClass: 'ti ti-flask' },
-  { id: 'avaliacao', label: 'Avaliação F.', iconClass: 'ti ti-barbell' },
-  { id: 'guia', label: 'Guia Alimentar', iconClass: 'ti ti-salad' },
-  { id: 'perfil-metabolico', label: 'Perfil Metabólico', iconClass: 'ti ti-dna' },
-  { id: 'protocolo', label: 'Protocolo', iconClass: 'ti ti-pill' },
-  { id: 'marketplace', label: 'Marketplace', iconClass: 'ti ti-shopping-bag' },
-  { id: 'docs', label: 'Documentos', iconClass: 'ti ti-folder' },
-  { id: 'financeiro', label: 'Financeiro', iconClass: 'ti ti-credit-card' },
+  { id: 'inicio', label: 'Meu Dia', iconClass: 'ti ti-home' },
+  { id: 'evolucao', label: 'Meu Bem Estar', iconClass: 'ti ti-chart-line' },
+  { id: 'consultas', label: 'Minha Agenda', iconClass: 'ti ti-calendar' },
+  { id: 'exames', label: 'Meus Exames', iconClass: 'ti ti-flask' },
+  { id: 'avaliacao', label: 'Avaliação Física', iconClass: 'ti ti-barbell' },
+  { id: 'perfil-metabolico', label: 'Mapa Funcional', iconClass: 'ti ti-dna' },
+  { id: 'guia', label: 'Rotina Alimentar', iconClass: 'ti ti-salad' },
+  { id: 'protocolo', label: 'Minhas Fórmulas', iconClass: 'ti ti-pill' },
+  { id: 'marketplace', label: 'Acesso Ágil', iconClass: 'ti ti-shopping-bag' },
+  { id: 'guias', label: 'Guias', iconClass: 'ti ti-folders' },
   { id: 'termos', label: 'Termos', iconClass: 'ti ti-clipboard-check' },
-  { id: 'saude', label: 'Anamnese', iconClass: 'ti ti-heart-rate-monitor' },
-  { id: 'encam', label: 'Encaminhamentos', iconClass: 'ti ti-send' },
-  { id: 'caixa-surpresa', label: 'Caixa Surpresa', iconClass: 'ti ti-gift' }
+  { id: 'financeiro', label: 'Recibos Fiscais', iconClass: 'ti ti-receipt' },
+  { id: 'caixa-surpresa', label: 'Meu Bônus', iconClass: 'ti ti-gift' }
 ];
 
 export const BRAND_COLORS = {
