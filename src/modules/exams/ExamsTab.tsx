@@ -13,46 +13,16 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
   // Lotes/Solicitações de Exames separados individualmente (pronto para sincronização CRM externa)
   const batches: ExamBatch[] = patient.examBatches && patient.examBatches.length > 0
     ? patient.examBatches
-    : [
-        {
-          id: patient.examsRequested?.id || 'batch-1',
-          title: patient.examsRequested?.title || 'Painel Hormonal & Bioquímico Completo',
-          dateStr: patient.examsRequested?.dateStr?.replace('Solicitado em ', '') || '18/10/2026',
-          status: 'laudo',
-          pdfAvailable: true,
-          results: patient.examResults || []
-        }
-      ];
+    : [];
 
   // Comparativos históricos de biomarcadores (Glicemia, Insulina, etc.)
   const comparisons: BiomarkerComparison[] = patient.biomarkerComparisons && patient.biomarkerComparisons.length > 0
     ? patient.biomarkerComparisons
-    : [
-        {
-          id: 'bio-glicemia',
-          name: 'Glicemia',
-          reference: 'Ref. 70 - 99 mg/dL',
-          points: [
-            { date: '15/05/2026', value: 94, valueDisplay: '94 mg/dL' },
-            { date: '20/08/2026', value: 89, valueDisplay: '89 mg/dL' },
-            { date: '18/10/2026', value: 84, valueDisplay: '84 mg/dL' }
-          ]
-        },
-        {
-          id: 'bio-insulina',
-          name: 'Insulina',
-          reference: 'Ref. 2,6 - 24,9 µUI/mL',
-          points: [
-            { date: '15/05/2026', value: 12.4, valueDisplay: '12,4 µUI/mL' },
-            { date: '20/08/2026', value: 9.8, valueDisplay: '9,8 µUI/mL' },
-            { date: '18/10/2026', value: 7.2, valueDisplay: '7,2 µUI/mL' }
-          ]
-        }
-      ];
+    : [];
 
   return (
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
-      {/* Seção 1: Exames Solicitados organizados por solicitação individual */}
+      {/* Seção 1: Exames Solicitados */}
       <div>
         <div className="mb-3">
           <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
@@ -60,9 +30,21 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
           </div>
         </div>
 
-        {/* Cada exame solicitado organizado por div único */}
-        <div className="space-y-4">
-          {batches.map((batch) => {
+        {batches.length === 0 ? (
+          <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-6 text-center shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-2.5">
+              <i className="ti ti-clipboard-list text-2xl"></i>
+            </div>
+            <div className="text-[18px] font-semibold text-white mb-1">
+              Aguardando Liberação Laboratorial
+            </div>
+            <p className="text-[14px] text-[#a5a4b8] leading-relaxed max-w-[280px] mx-auto">
+              Seus laudos e painéis de exames laboratoriais serão sincronizados aqui assim que emitidos pela equipe médica.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {batches.map((batch) => {
             const isReady = batch.status.toLowerCase() === 'laudo' || batch.status.toLowerCase() === 'disponível';
 
             return (
@@ -133,9 +115,11 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Seção 2: Comparativo no final com tabela e gráfico visual (Glicemia, Insulina, etc.) */}
+      {comparisons.filter((item) => item.points && item.points.length > 1).length > 0 && (
       <div className="pt-1">
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
           Evolução dos Biomarcadores
@@ -329,6 +313,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
             })}
         </div>
       </div>
+      )}
 
       {/* Modal 9:16 do Exame Resultado (com X de fechar no lado superior direito E no lado inferior direito para ajudar idosos) */}
       {selectedBatch && (

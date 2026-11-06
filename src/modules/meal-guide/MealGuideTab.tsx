@@ -18,8 +18,21 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
           </div>
         </div>
 
-        <div className="space-y-4">
-          {patient.mealGuides.map((guide, index) => {
+        {(!patient.mealGuides || patient.mealGuides.length === 0) ? (
+          <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-6 text-center shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-2.5">
+              <i className="ti ti-salad text-2xl"></i>
+            </div>
+            <div className="text-[18px] font-semibold text-white mb-1">
+              Rotina Alimentar em Elaboração
+            </div>
+            <p className="text-[14px] text-[#a5a4b8] leading-relaxed max-w-[280px] mx-auto">
+              Seu plano alimentar e orientações nutricionais serão disponibilizados aqui após sua avaliação clínica.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {patient.mealGuides.map((guide, index) => {
             const displayTitle = `GUIA ${String(index + 1).padStart(2, '0')}`;
             return (
               <div
@@ -78,6 +91,7 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

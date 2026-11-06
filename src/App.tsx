@@ -43,7 +43,7 @@ function PatientAppContent() {
   
   // Navigation State
   const [activeTab, setActiveTab] = useState<string>('inicio');
-  const [showCover, setShowCover] = useState<boolean>(true);
+  const [showCover, setShowCover] = useState<boolean>(false);
 
   // Modal States
   const [pdfModal, setPdfModal] = useState<{ isOpen: boolean; title: string }>({

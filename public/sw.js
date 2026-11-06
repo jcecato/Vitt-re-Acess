@@ -1,25 +1,18 @@
-const CACHE_NAME = 'vittare-pwa-cache-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json'
-];
+const CACHE_NAME = 'vittare-pwa-cache-v5';
 
+// Na instalação, força a ativação imediata substituindo qualquer worker antigo
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
   self.skipWaiting();
 });
 
+// Na ativação, limpa e expurga absolutamente TODOS os caches legados
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
+            console.log('🧹 [Vittáre SW] Purgando cache antigo:', cache);
             return caches.delete(cache);
           }
         })
@@ -29,27 +22,35 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Estratégia Network-First obrigatória: sempre busca versão mais recente na rede
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
+  // Ignora requisições de extensões ou esquemas não-http
+  if (!event.request.url.startsWith('http')) return;
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+        return networkResponse;
+      })
+      .catch(() => {
+        // Fallback offline quando sem rede
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+          return new Response('Offline', { status: 503, statusText: 'Offline' });
         });
-        return response;
-      }).catch(() => {
-        // Fallback para cache offline
-        return caches.match('/index.html');
-      });
-    })
+      })
   );
 });

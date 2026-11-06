@@ -201,9 +201,11 @@ export interface PatientProfile {
   lastSyncTimestamp: string;
   syncedByProgram: string;
 
-  // Ciclo de vida de tratamento e aceite de termos (Segurança e Contrato)
+  // Ciclo de vida de tratamento e aceite de termos (Segurança e Contrato LGPD)
   startDate?: string;
   endDate?: string;
+  termsAccepted?: boolean;
   termsAcceptedAt?: string;
+  termsVersion?: string;
 }
 

@@ -44,10 +44,10 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({ patient, activeTab
               <div 
                 className="text-[20px] text-left font-['Cormorant_Garamond',serif] font-semibold tracking-[0.02em] text-white leading-tight truncate"
               >
-                {patient.name}
+                {patient.name || 'Paciente'}
               </div>
               <div className="text-[14px] text-[#5eea8f] font-medium leading-snug font-['Plus_Jakarta_Sans',sans-serif]">
-                Ciclo atual: <strong className="text-white font-semibold">{patient.daysToComplete} dias restantes</strong>
+                Ciclo atual: <strong className="text-white font-semibold">{patient.daysToComplete && patient.daysToComplete > 0 ? `${patient.daysToComplete} dias restantes` : '-'}</strong>
               </div>
             </div>
           </div>

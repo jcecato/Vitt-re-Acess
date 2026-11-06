@@ -13,6 +13,9 @@ service cloud.firestore {
       // Leitura permitida apenas para o paciente proprietário autenticado (request.auth.uid == userId)
       allow read: if request.auth != null && request.auth.uid == userId;
 
+      // Criação inicial no Primeiro Acesso permitida apenas para o próprio usuário autenticado
+      allow create: if request.auth != null && request.auth.uid == userId;
+
       // Permite atualização (update) apenas de campos de consentimento/sessão do cliente,
       // impedindo que o paciente altere nós clínicos protegidos (exames, evolução, fórmulas, notas).
       allow update: if request.auth != null 

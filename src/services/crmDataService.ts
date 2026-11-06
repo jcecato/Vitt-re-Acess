@@ -3,7 +3,7 @@ import { INITIAL_PATIENTS } from '../patients/defaultPatient';
 import { db, isFirebaseConfigured } from '../config/firebase';
 import { doc, getDoc, setDoc, onSnapshot, type DocumentSnapshot } from 'firebase/firestore';
 
-const STORAGE_KEY = 'vittare_patients_store_v9';
+const STORAGE_KEY = 'vittare_patients_store_v12';
 
 /**
  * Escudo Defensivo de Dados (Sanitização profunda contra 'Tela Branca'):
@@ -11,8 +11,8 @@ const STORAGE_KEY = 'vittare_patients_store_v9';
  * sejam convertidos para estruturas válidas (arrays vazios e objetos default),
  * prevenindo erros do tipo 'TypeError: Cannot read properties of null (reading map)'.
  */
-export function sanitizePatientPayload(raw: any, fallbackId: string = 'p1'): PatientProfile {
-  const fallback = INITIAL_PATIENTS[fallbackId] || INITIAL_PATIENTS['p1'];
+export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-template-01'): PatientProfile {
+  const fallback = INITIAL_PATIENTS[fallbackId] || INITIAL_PATIENTS['paciente-template-01'] || INITIAL_PATIENTS[Object.keys(INITIAL_PATIENTS)[0]];
   if (!raw || typeof raw !== 'object') {
     return fallback;
   }
@@ -83,7 +83,9 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'p1'): Pat
 
     startDate: raw.startDate || fallback.startDate,
     endDate: raw.endDate || fallback.endDate,
+    termsAccepted: typeof raw.termsAccepted === 'boolean' ? raw.termsAccepted : (fallback.termsAccepted ?? false),
     termsAcceptedAt: raw.termsAcceptedAt || fallback.termsAcceptedAt,
+    termsVersion: raw.termsVersion || fallback.termsVersion || '1.0',
   };
 }
 
@@ -215,14 +217,12 @@ class CrmDataService {
     source: string = 'CRM Vittáre Admin'
   ): Promise<PatientProfile> {
     const all = this.getAllLocalPatients();
-    const current = all[patientId] || INITIAL_PATIENTS[patientId];
-    
-    if (!current) {
-      throw new Error(`Paciente com ID ${patientId} não encontrado.`);
-    }
+    const fallbackTemplate = INITIAL_PATIENTS['paciente-template-01'] || Object.values(INITIAL_PATIENTS)[0];
+    const current = all[patientId] || INITIAL_PATIENTS[patientId] || fallbackTemplate;
 
     const updatedRaw: PatientProfile = {
       ...current,
+      id: patientId,
       ...updates,
       lastSyncTimestamp: new Date().toISOString(),
       syncedByProgram: source

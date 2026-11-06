@@ -42,18 +42,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setCurrentPatient(p);
               setIsAuthenticated(true);
             } else {
-              setCurrentPatient(MARIA_PAULA_PATIENT);
-              setIsAuthenticated(true);
+              setCurrentPatient(null);
+              setIsAuthenticated(false);
             }
           });
+        } else {
+          setCurrentPatient(null);
+          setIsAuthenticated(false);
         }
       } else {
-        setCurrentPatient(MARIA_PAULA_PATIENT);
-        setIsAuthenticated(true);
+        setCurrentPatient(null);
+        setIsAuthenticated(false);
       }
     } catch {
-      setCurrentPatient(MARIA_PAULA_PATIENT);
-      setIsAuthenticated(true);
+      setCurrentPatient(null);
+      setIsAuthenticated(false);
     }
   }, []);
 

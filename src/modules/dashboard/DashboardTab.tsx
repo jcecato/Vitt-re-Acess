@@ -88,7 +88,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
     }
   };
 
-  const firstName = patient.name.split(' ')[0] || 'Maria';
+  const firstName = patient.name && patient.name.trim() !== 'Paciente' 
+    ? patient.name.split(' ')[0] 
+    : 'Paciente';
 
   // Sincronização inteligente com a Agenda
   const getNextScheduledConsultation = (): string => {
@@ -98,7 +100,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
     }) || [];
 
     if (sessions.length === 0) {
-      if (patient.nextConsultationDate && patient.nextConsultationDate !== '-') {
+      if (patient.nextConsultationDate && patient.nextConsultationDate !== '-' && patient.nextConsultationDate !== 'Data: -') {
         const parts = patient.nextConsultationDate.split('·').map(p => p.trim());
         const dateMatch = (parts[0] || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})/);
         if (dateMatch) {
@@ -117,7 +119,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
     const now = new Date();
 
     for (const session of sessions) {
-      if (!session.dateStr || session.dateStr.trim() === '' || session.dateStr === '-') continue;
+      if (!session.dateStr || session.dateStr.trim() === '' || session.dateStr === '-' || session.dateStr === 'Data: -' || session.dateStr.includes('-')) continue;
 
       const dateMatch = session.dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
       const timeMatch = session.dateStr.match(/(\d{1,2}):(\d{2})/);
@@ -157,10 +159,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         {hasPendingUpdates && (
           <>
             <div className="text-[18px] font-bold text-[#5eea8f] leading-tight">
-              Mensagem do Dr. João Paulo
+              Mensagem da Equipe Vittáre
             </div>
             <div className="text-[18px] text-white mt-1 leading-snug">
-              Olá! {firstName}! Temos Atualizações!
+              Olá! Temos novas orientações para o seu plano.
             </div>
           </>
         )}
@@ -181,7 +183,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         </div>
       </div>
 
-      {/* Linha do Tempo / Registros de Atividades - Ordenação Decrescente Sem Pulse */}
+      {/* Linha do Tempo / Registros de Atividades */}
       <div className="mt-5">
         {/* Cabeçalho da Seção */}
         <div className="flex items-center justify-between mb-3 px-0.5">
@@ -195,15 +197,29 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           </div>
         </div>
 
-        {/* Container da Linha do Tempo */}
-        <div className="relative pl-0">
-          {/* Conector vertical contínuo conectando todos os nós */}
-          <div
-            className="absolute left-[14px] top-[24px] bottom-[28px] w-[2px] bg-gradient-to-b from-white/15 via-white/10 to-transparent pointer-events-none"
-            aria-hidden="true"
-          />
+        {/* Se não houver atividades, exibe card acolhedor de boas-vindas */}
+        {sortedActivities.length === 0 ? (
+          <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-5 text-center shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-2.5">
+              <i className="ti ti-heart-handshake text-2xl"></i>
+            </div>
+            <div className="text-[18px] font-semibold text-white mb-1">
+              Bem-vindo ao seu Portal Vittáre
+            </div>
+            <p className="text-[14px] text-[#a5a4b8] leading-relaxed max-w-[280px] mx-auto">
+              Suas orientações diárias, laudos e etapas do tratamento aparecerão nesta linha do tempo após sua primeira consulta.
+            </p>
+          </div>
+        ) : (
+          /* Container da Linha do Tempo */
+          <div className="relative pl-0">
+            {/* Conector vertical contínuo conectando todos os nós */}
+            <div
+              className="absolute left-[14px] top-[24px] bottom-[28px] w-[2px] bg-gradient-to-b from-white/15 via-white/10 to-transparent pointer-events-none"
+              aria-hidden="true"
+            />
 
-          <div className="space-y-3">
+            <div className="space-y-3">
             {displayedActivities.map(act => {
               const isOpen = openAccordions[act.id] ?? false;
               const { exactDate, relativeTime } = parseActivityDate(act.dateStr);
@@ -382,6 +398,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

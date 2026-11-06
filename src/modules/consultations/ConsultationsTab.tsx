@@ -34,19 +34,19 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
         {
           id: 'cons-1',
           title: '1° SESSÃO',
-          dateStr: '27/09/2026 · 14:00 hrs',
-          status: 'Concluída'
+          dateStr: 'Data: -',
+          status: 'Agendada'
         },
         {
           id: 'cons-2',
           title: '2° SESSÃO',
-          dateStr: '26/11/2026 · 14:00 hrs',
+          dateStr: 'Data: -',
           status: 'Agendada'
         },
         {
           id: 'cons-3',
           title: '3° SESSÃO',
-          dateStr: '15/01/2027 · 10:00 hrs',
+          dateStr: 'Data: -',
           status: 'Agendada'
         }
       ];
@@ -57,7 +57,7 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
     if (normalized === 'concluída' || normalized === 'concluida' || normalized === 'realizada') {
       return true;
     }
-    if (sessao.dateStr) {
+    if (sessao.dateStr && sessao.dateStr !== 'Data: -' && !sessao.dateStr.includes('-')) {
       const match = sessao.dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
       if (match) {
         const [, day, month, year] = match;
@@ -72,7 +72,15 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
   };
 
   // Helper para renderizar a única opção de status correspondente
-  const renderStatusBadge = (status: string) => {
+  const renderStatusBadge = (status: string, cleanDate: string) => {
+    if (cleanDate === '-' || cleanDate.trim() === '') {
+      return (
+        <span className="text-[14px] font-semibold text-[#a5a4b8] px-2.5 py-0.5 rounded-lg bg-white/10 border border-white/20 shrink-0 uppercase tracking-wider">
+          Aguardando
+        </span>
+      );
+    }
+
     const normalized = status.toLowerCase();
 
     if (normalized === 'concluída' || normalized === 'concluida' || normalized === 'realizada') {
@@ -123,6 +131,7 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
             ? sessao.title.toUpperCase().replace('ª', '°')
             : `${index + 1}° SESSÃO`;
 
+          const cleanDate = sessao.dateStr ? sessao.dateStr.replace(/^Data:\s*/i, '').trim() : '-';
           const isPast = isSessionPast(sessao);
 
           return (
@@ -130,23 +139,37 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
               key={sessao.id || `sessao-${index}`}
               className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm transition hover:border-white/70"
             >
-              {/* Linha 1: Título da Sessão + Único Status (Agendada/Concluída/Remarcada/Cancelada) */}
+              {/* Linha 1: Título da Sessão + Único Status */}
               <div className="flex items-center justify-between gap-2.5">
                 <div className="text-[18px] font-semibold text-white leading-tight uppercase">
                   {displayTitle}
                 </div>
-                {renderStatusBadge(sessao.status)}
+                {renderStatusBadge(sessao.status, cleanDate)}
               </div>
 
               {/* Linha 2: Data e Hora */}
               <div className="text-[18px] text-[#e0e0ed] mt-1.5 leading-snug flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-[#7c6af7] shrink-0" />
-                <span className="text-[18px]">Data: {sessao.dateStr}</span>
+                <span className="text-[18px]">Data: {cleanDate}</span>
               </div>
 
-              {/* Linha 3: Botão Remarcar (cinza e desabilitado se a data for passada/concluída, verde e ativo se for futura) */}
+              {/* Linha 3: Ação de Agendamento/Remarcação */}
               <div className="flex flex-wrap items-center gap-2 mt-3 pt-2.5 border-t border-white/[0.06]">
-                {isPast ? (
+                {cleanDate === '-' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const phoneNumber = '5527997918100';
+                      const message = encodeURIComponent(`Olá, gostaria de agendar minha ${displayTitle}`);
+                      window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank', 'noopener,noreferrer');
+                    }}
+                    title="Solicitar Agendamento"
+                    className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-2 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-white/[0.08] border border-white/20 hover:bg-[#25D366]/20 hover:border-[#25D366] text-white hover:text-[#5eea8f] active:scale-95 transition cursor-pointer"
+                  >
+                    <MessageSquareShare className="w-4 h-4 text-[#5eea8f]" />
+                    <span>Solicitar Agendamento</span>
+                  </button>
+                ) : isPast ? (
                   <button
                     type="button"
                     disabled

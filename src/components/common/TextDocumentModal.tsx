@@ -16,7 +16,7 @@ export const TextDocumentModal: React.FC<TextDocumentModalProps> = ({
   category = 'Orientação Oficial',
   dateStr = '27/09/2026',
   content,
-  patientName = 'Maria Paula Santos',
+  patientName = 'Paciente',
   onClose
 }) => {
   if (!isOpen) return null;

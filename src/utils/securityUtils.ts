@@ -2,26 +2,47 @@ import { PatientProfile } from '../types/patient';
 import { auth } from '../config/firebase';
 
 /**
- * Validação de Senha Estrita (4 caracteres: 1 letra minúscula + 3 números diferentes)
+ * Validação de Senha Estrita e Anti-Padrão Previsível
+ * Regras: 4 caracteres (1 letra minúscula + 3 números distintos e imprevisíveis).
+ * Bloqueia: sequências (123, 567, 987), repetições (111, 666), padrões simples e teclados.
+ * Retorna mensagem neutra e discreta sem informar que a senha é fraca nem expor critérios técnicos.
+ */
+/**
+ * Validação de Senha Estrita e Imprevisível (4 caracteres: 1 letra minúscula + 3 números)
+ * Bloqueia estritamente:
+ * 1. Números repetidos (111, 666, 888, 112, 221, etc.)
+ * 2. Sequências numéricas contíguas óbvias (123, 234, 345, 456, 567, 678, 789, 987, 876, 765, 654, 543, 432, 321, 012, 210)
+ * Permite normalmente combinações variadas como v169, a482, m739, etc.
  */
 export const validateStrictPassword = (pin: string): { isValid: boolean; error?: string } => {
-  if (pin.length !== 4) {
-    return { isValid: false, error: 'A senha deve conter exatamente 4 caracteres (ex: v123).' };
+  const genericError = 'Combinação não permitida. Por favor, escolha outra combinação.';
+
+  if (!pin || pin.length !== 4) {
+    return { isValid: false, error: genericError };
   }
   
   const hasLowercase = /[a-z]/.test(pin);
   if (!hasLowercase) {
-    return { isValid: false, error: 'A senha deve conter pelo menos 1 letra minúscula (a-z).' };
+    return { isValid: false, error: genericError };
   }
 
   const digits = pin.match(/\d/g);
   if (!digits || digits.length !== 3) {
-    return { isValid: false, error: 'A senha deve conter exatamente 3 números.' };
+    return { isValid: false, error: genericError };
   }
 
-  const uniqueDigits = new Set(digits);
-  if (uniqueDigits.size !== 3) {
-    return { isValid: false, error: 'Os 3 números devem ser diferentes entre si (ex: v123, e não v225).' };
+  const [d1, d2, d3] = digits.map(Number);
+
+  // 1. Bloqueio de repetições (todos os 3 números devem ser distintos entre si)
+  if (d1 === d2 || d2 === d3 || d1 === d3) {
+    return { isValid: false, error: genericError };
+  }
+
+  // 2. Bloqueio de sequências contíguas óbvias crescentes e decrescentes (ex: 123, 567, 987, 321)
+  const isAscendingConsecutive = (d2 === d1 + 1 && d3 === d2 + 1);
+  const isDescendingConsecutive = (d2 === d1 - 1 && d3 === d2 - 1);
+  if (isAscendingConsecutive || isDescendingConsecutive) {
+    return { isValid: false, error: genericError };
   }
 
   return { isValid: true };

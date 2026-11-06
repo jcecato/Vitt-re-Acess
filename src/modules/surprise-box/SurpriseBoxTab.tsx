@@ -28,7 +28,9 @@ const GIFT_OPTIONS: GiftOption[] = [
 ];
 
 export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
-  const firstName = patient.name ? patient.name.trim().split(' ')[0] : 'Maria';
+  const firstName = patient.name && patient.name.trim() !== 'Paciente' 
+    ? patient.name.trim().split(' ')[0] 
+    : 'Paciente';
   const daysRemaining = patient.daysToComplete ?? 28;
   const expirationDateStr = '27/11/2026';
 

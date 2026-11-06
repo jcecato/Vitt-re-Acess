@@ -12,7 +12,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
   isOpen,
   title,
   onClose,
-  patientName = 'Maria Paula Santos',
+  patientName = 'Paciente',
   dateStr = '29/10/2026'
 }) => {
   if (!isOpen) return null;

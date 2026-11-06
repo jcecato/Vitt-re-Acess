@@ -78,14 +78,10 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
   ];
 
   // Se o CRM enviar patient.physicalAssessmentComparisons customizado, consome direto
-  const rawComparisons: AssessmentComparisonMetric[] =
+  const comparisons: AssessmentComparisonMetric[] =
     patient.physicalAssessmentComparisons && patient.physicalAssessmentComparisons.length > 0
       ? patient.physicalAssessmentComparisons
-      : defaultComparisons;
-
-  const comparisons: AssessmentComparisonMetric[] = rawComparisons
-    .filter(item => item.id !== 'comp-peso-ideal' && item.name.toLowerCase() !== 'peso ideal')
-    .map(item => (item.id === 'comp-peso-atual' || item.name === 'Peso Atual') ? { ...item, name: 'Peso' } : item);
+      : [];
 
   return (
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
@@ -97,8 +93,21 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
           </div>
         </div>
 
-        <div className="space-y-4">
-          {patient.physicalAssessments.map((item, index) => {
+        {(!patient.physicalAssessments || patient.physicalAssessments.length === 0) ? (
+          <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-6 text-center shadow-sm">
+            <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-2.5">
+              <i className="ti ti-barbell text-2xl"></i>
+            </div>
+            <div className="text-[18px] font-semibold text-white mb-1">
+              Avaliação Corporal em Aguardo
+            </div>
+            <p className="text-[14px] text-[#a5a4b8] leading-relaxed max-w-[280px] mx-auto">
+              Seus relatórios de bioimpedância e medidas corporais aparecerão aqui após sua avaliação presencial.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {patient.physicalAssessments.map((item, index) => {
             const isReady = item.status === 'laudo';
             const displayTitle = item.title 
               ? item.title.toUpperCase() 
@@ -196,9 +205,11 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Seção 2: Comparativo no final com gráfico de curva e datas */}
+      {comparisons.filter((item) => item.points && item.points.length > 1).length > 0 && (
       <div className="pt-2">
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
           Evolução das Avaliações Físicas
@@ -421,6 +432,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
               })}
         </div>
       </div>
+      )}
 
       {/* Modal de visualização na tela da Avaliação Física */}
       {selectedAssessment && (
