@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { CoverScreenProps } from './types';
 import { useAuth } from '../../auth/AuthContext';
 import { VittareLogo } from './VittareLogo';
+import { validateStrictPassword, isTreatmentActive } from '../../utils/securityUtils';
+import { crmDataService } from '../../services/crmDataService';
 
 export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
   isVisible = true,
@@ -12,10 +14,12 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
   // Form State
   const [login, setLogin] = useState<string>(defaultLogin || '');
-  const [senha, setSenha] = useState<string>('••••••••');
+  const [senha, setSenha] = useState<string>('v123');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [rememberDevice, setRememberDevice] = useState<boolean>(true);
+  const [acceptTerms, setAcceptTerms] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Modal State (Recuperação de Senha)
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -33,14 +37,31 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
 
-  // Ação de Login / Entrar (Modo de Testes Sem Senha Conforme Solicitado)
+  // Ação de Login / Entrar com Validação Estrita de Senha, Aceite de Termos e Ciclo de Vida
   const handleLoginSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSubmitting) return;
 
+    setAuthError(null);
+
+    // 1. Validação de Aceite de Termos
+    if (!acceptTerms) {
+      setAuthError('Você precisa aceitar os Termos de Uso para prosseguir.');
+      return;
+    }
+
+    // 2. Validação Estrita de Senha (se a senha digitada não for a padrão mascarada)
+    if (senha !== '••••••••' && senha.trim() !== '') {
+      const passVal = validateStrictPassword(senha.trim());
+      if (!passVal.isValid) {
+        setAuthError(passVal.error || 'Senha inválida.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
-    const emailToMatch = login.trim() || currentPatient?.email || 'paciente@vittare.com';
+    const emailToMatch = login.trim() || currentPatient?.email || 'maria.paula@email.com';
 
     // Se o login coincidir com algum paciente disponível, seleciona-o
     const matchedPatient = availablePatients.find(
@@ -49,10 +70,23 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
     ) || availablePatients[0];
 
     if (matchedPatient) {
+      // 3. Interceptação do Ciclo de Vida do Tratamento (startDate a endDate)
+      const lifecycle = isTreatmentActive(matchedPatient);
+      if (!lifecycle.isActive) {
+        setIsSubmitting(false);
+        setAuthError(lifecycle.reason || 'Acesso Expirado. Entre em contato com a clínica.');
+        return;
+      }
+
+      // Registra o timestamp de aceitação dos termos no Firestore/Local
+      crmDataService.updatePatient(matchedPatient.id, {
+        termsAcceptedAt: new Date().toISOString()
+      }, 'Aceite de Termos na Tela de Cobertura');
+
       switchPatient(matchedPatient.id);
     }
 
-    // Feedback visual idêntico ao script HTML: "Entrando…", seguido da entrada no prontuário
+    // Feedback visual
     setTimeout(() => {
       setIsSubmitting(false);
       onEnter();
@@ -579,17 +613,36 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
             </div>
           </div>
 
-          {/* Linha de Lembrar Dispositivo e Esqueci Minha Senha */}
-          <div className="vc-row vc-rise" style={{ ['--d' as string]: '0.2s' }}>
-            <label className="vc-remember">
+          {/* Mensagem de Erro / Acesso Expirado / Validação */}
+          {authError && (
+            <div className="bg-[#b42318]/20 border border-[#b42318]/60 text-[#ff8080] p-3 rounded-xl text-[13.5px] font-medium text-center animate-in fade-in duration-200">
+              {authError}
+            </div>
+          )}
+
+          {/* Linha de Lembrar Dispositivo e Aceite dos Termos de Uso */}
+          <div className="vc-row vc-rise flex-col gap-2.5 items-stretch" style={{ ['--d' as string]: '0.2s' }}>
+            <div className="flex items-center justify-between">
+              <label className="vc-remember">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={e => setRememberDevice(e.target.checked)}
+                />{' '}
+                Lembrar dispositivo
+              </label>
+              <a onClick={handleOpenModal}>Esqueci minha senha</a>
+            </div>
+
+            <label className="vc-remember text-[13px] text-[#5eea8f] flex items-center gap-2 pt-1 border-t border-white/10">
               <input
                 type="checkbox"
-                checked={rememberDevice}
-                onChange={e => setRememberDevice(e.target.checked)}
+                required
+                checked={acceptTerms}
+                onChange={e => setAcceptTerms(e.target.checked)}
               />{' '}
-              Lembrar dispositivo
+              <span>Aceito os <strong className="underline">Termos de Uso</strong> e privacidade</span>
             </label>
-            <a onClick={handleOpenModal}>Esqueci minha senha</a>
           </div>
 
           {/* Botão de Ação CTA (Entrar) */}

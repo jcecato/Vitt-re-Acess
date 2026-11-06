@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PatientProfile } from '../../types/patient';
 import { TermsTab } from '../terms/TermsTab';
 import { FinancialTab } from '../financial/FinancialTab';
+import { sanitizeDeviceOnLogout } from '../../utils/securityUtils';
 
 interface MeuPerfilTabProps {
   patient: PatientProfile;
@@ -111,6 +112,21 @@ export const MeuPerfilTab: React.FC<MeuPerfilTabProps> = ({
         {activeSubTab === 'recibos' && (
           <FinancialTab patient={patient} onOpenPdf={onOpenPdf} />
         )}
+      </div>
+
+      {/* Botão de Encerrar Sessão com Sanitização de Dispositivo */}
+      <div className="pt-6 pb-2 border-t border-white/10">
+        <button
+          type="button"
+          onClick={async () => {
+            await sanitizeDeviceOnLogout();
+            window.location.reload();
+          }}
+          className="w-full py-3.5 px-4 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-400 hover:bg-red-500/25 font-bold text-[16px] flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
+        >
+          <i className="ti ti-logout text-[20px]"></i>
+          <span>Encerrar Sessão e Limpar Dispositivo</span>
+        </button>
       </div>
     </div>
   );

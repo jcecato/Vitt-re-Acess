@@ -6,7 +6,15 @@ interface PhoneShellProps {
 
 export const PhoneShell: React.FC<PhoneShellProps> = ({ children }) => {
   return (
-    <div className="relative w-full h-[100dvh] max-h-[100dvh] sm:h-[844px] sm:max-h-[calc(100dvh-2rem)] sm:w-[390px] sm:max-w-[430px] mx-auto bg-[#0d0d16] rounded-none sm:rounded-[44px] border-0 sm:border-[2px] sm:border-[#2c2c40] overflow-hidden shadow-2xl flex flex-col justify-between select-none">
+    <div 
+      className="relative w-full h-[100dvh] max-h-[100dvh] sm:h-[844px] sm:max-h-[calc(100dvh-2rem)] sm:w-[390px] sm:max-w-[430px] mx-auto bg-[#0d0d16] rounded-none sm:rounded-[44px] border-0 sm:border-[2px] sm:border-[#2c2c40] overflow-hidden shadow-2xl sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8),0_0_45px_rgba(15,122,58,0.15)] flex flex-col justify-between select-none"
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
+      }}
+    >
       {/* Dynamic Status bar header (visível na moldura desktop, padrão iPhone 14) */}
       <div className="hidden sm:flex justify-between items-center px-7 pt-3 pb-1 text-[12px] text-[#e0e0ed] font-medium tracking-tight shrink-0 select-none">
         <span>09:41</span>

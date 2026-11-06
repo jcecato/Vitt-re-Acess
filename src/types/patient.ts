@@ -200,4 +200,10 @@ export interface PatientProfile {
 
   lastSyncTimestamp: string;
   syncedByProgram: string;
+
+  // Ciclo de vida de tratamento e aceite de termos (Segurança e Contrato)
+  startDate?: string;
+  endDate?: string;
+  termsAcceptedAt?: string;
 }
+

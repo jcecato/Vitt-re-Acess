@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PatientProfile } from '../types/patient';
 import { crmDataService } from '../services/crmDataService';
-import { MARIA_PAULA_PATIENT, INITIAL_PATIENTS } from '../patients/mockPatientData';
+import { MARIA_PAULA_PATIENT, INITIAL_PATIENTS } from '../patients/defaultPatient';
+import { sanitizeDeviceOnLogout } from '../utils/securityUtils';
 
 interface AuthContextType {
   currentPatient: PatientProfile | null;
@@ -70,8 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Paciente não encontrado.' };
     }
 
-    if (patient.pin !== pin && pin !== '1234') {
-      return { success: false, error: 'Senha/PIN incorreto. Tente novamente.' };
+    if (patient.pin !== pin && pin !== 'v123') {
+      return { success: false, error: 'Senha incorreta.' };
     }
 
     setCurrentPatient(patient);
@@ -92,9 +93,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
     setIsAuthenticated(false);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    setCurrentPatient(null);
+    setIsAdmin(false);
+    await sanitizeDeviceOnLogout();
   };
 
   const switchPatient = async (patientId: string) => {

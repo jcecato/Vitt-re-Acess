@@ -14,7 +14,7 @@
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
-import { getAuth, type Auth } from 'firebase/auth';
+import { getAuth, setPersistence, indexedDBLocalPersistence, type Auth } from 'firebase/auth';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 /**
@@ -50,6 +50,14 @@ if (isFirebaseConfigured()) {
     db = getFirestore(app);
     auth = getAuth(app);
     storage = getStorage(app);
+
+    // Configuração de Persistência Permanente de Sessão (indexedDBLocalPersistence)
+    if (auth) {
+      setPersistence(auth, indexedDBLocalPersistence).catch(err => {
+        console.warn("⚠️ [Vittáre Auth] Fallback de persistência:", err);
+      });
+    }
+
     console.info("🔥 [Vittáre Firebase] Conexão com 'vittareacess' inicializada com sucesso!");
   } catch (error) {
     console.warn("⚠️ [Vittáre Firebase] Falha ao inicializar credenciais:", error);
@@ -61,4 +69,5 @@ if (isFirebaseConfigured()) {
 }
 
 export { app, db, auth, storage };
+
 
