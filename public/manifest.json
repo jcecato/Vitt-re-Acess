@@ -1,0 +1,23 @@
+{
+  "short_name": "Vittáre Acess",
+  "name": "Vittáre Acess™ — Prontuário do Paciente",
+  "description": "Aplicativo individual por paciente integrado ao ecossistema CRM Vittáre.",
+  "icons": [
+    {
+      "src": "/assets/aistudio/image_60833a3c.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/assets/aistudio/image_60833a3c.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#07070d",
+  "theme_color": "#07070d",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/"
+}

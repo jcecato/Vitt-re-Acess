@@ -225,7 +225,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                   <div
                     onClick={() => handleActivityClick(act.id)}
                     className={`grow min-w-0 bg-[#121722]/85 hover:bg-[#161c2a] border transition-all duration-200 rounded-2xl pl-[14px] pr-3.5 py-2.5 -ml-[5px] mr-[9px] cursor-pointer shadow-sm ${
-                      isOpen ? 'border-white/20 bg-[#151b27]' : 'border-white/[0.07] hover:border-white/[0.14]'
+                      isOpen ? 'border-[1px] border-white/70 bg-[#151b27]' : 'border-[1px] border-white/50 hover:border-white/70'
                     }`}
                   >
                     {/* Linha Superior: Título + Tempo Relativo */}
@@ -356,7 +356,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAll(true)}
-                className="w-full py-2.5 px-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] border border-white/[0.08] hover:border-white/[0.15] text-[16px] font-semibold text-[#5eea8f] hover:text-[#2fd575] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                className="w-full py-2.5 px-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.98] border-[1px] border-white/50 hover:border-white/70 text-[16px] font-semibold text-[#5eea8f] hover:text-[#2fd575] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
                 <span>Ver tudo para carregar</span>
                 <svg className="w-4 h-4 text-[#5eea8f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

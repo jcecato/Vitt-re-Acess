@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PatientProfile } from '../../types/patient';
-import { X, CheckCircle2, TrendingUp, Sparkles, Calendar, Activity, HelpCircle, ChevronDown } from 'lucide-react';
+import { X, CheckCircle2, Calendar, Activity, ChevronDown, Sparkles } from 'lucide-react';
 
 interface EvolutionTabProps {
   patient: PatientProfile;
@@ -493,12 +493,9 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full pb-4">
       
       {/* Cabeçalho da Aba */}
-      <div>
+      <div className="mb-3">
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
           Meu Bem Estar
-        </div>
-        <div className="text-[17px] font-semibold text-white mt-0.5">
-          Sistema de Evolução Percebida
         </div>
       </div>
 
@@ -548,7 +545,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
             <div 
               key={item.id} 
               id={`checkin-card-${item.id}`}
-              className="bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden shadow-sm transition"
+              className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl overflow-hidden shadow-sm transition"
             >
               {/* Cabeçalho do Acordeon com Ícone, N° CHECK-IN, DATA e Seta Baixo */}
               <button
@@ -661,7 +658,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
       {/* ============================================================== */}
       {/* CURVA DE VITALIDADE E FUNCIONALIDADES PERCEBIDAS (Fiel à Imagem 3) */}
       {/* ============================================================== */}
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4 shadow-sm">
+      <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-4 shadow-sm">
         
         {/* Cabeçalho do Gráfico */}
         <div className="flex items-center gap-2.5">
@@ -780,7 +777,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
       {/* ============================================================== */}
       {/* COMENTÁRIO AUTOMÁTICO DA IA (Seção 6 e 7)                       */}
       {/* ============================================================== */}
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4 shadow-sm space-y-2">
+      <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-4 shadow-sm space-y-2">
         <div className="flex items-center gap-2.5 mb-1">
           <Sparkles className="w-5 h-5 text-[#e5a93c] shrink-0" />
           <div className="text-[20px] font-bold text-white">
@@ -841,7 +838,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
             >
               
               {/* Orientação ao Paciente */}
-              <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 text-[17px] sm:text-[18px] text-justify text-[#cfd3dc] leading-relaxed">
+              <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-xl p-3 text-[17px] sm:text-[18px] text-justify text-[#cfd3dc] leading-relaxed">
                 Considere os <strong>últimos 14 dias</strong>. Responda pensando no período como um todo, e não apenas em como você está se sentindo neste momento.
               </div>
 
@@ -867,7 +864,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
                       return (
                         <div 
                           key={q.id}
-                          className="bg-[#13192c] border border-white/[0.08] rounded-2xl px-2 py-3 sm:p-3 shadow-sm space-y-3"
+                          className="bg-[#13192c] border-[1px] border-white/50 rounded-2xl px-2 py-3 sm:p-3 shadow-sm space-y-3"
                         >
                           {/* Enunciado da Pergunta com numeração normal (1., 2., 3...), tipografia 19px, hifenação silábica */}
                           <div 
@@ -902,7 +899,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
                                   className={`py-2 px-1 sm:px-2 rounded-2xl border transition-all cursor-pointer select-none flex flex-col items-center justify-center text-center min-h-[114px] ${
                                     isSelected
                                       ? 'bg-[#4c66e8] border-[#4c66e8] text-white shadow-lg shadow-[#4c66e8]/30 scale-[1.02]'
-                                      : 'bg-white/[0.04] hover:bg-white/[0.08] border-white/10 text-white'
+                                      : 'bg-white/[0.04] hover:bg-white/[0.08] border-[1px] border-white/50 text-white'
                                   }`}
                                 >
                                   <div className="text-[26px] font-extrabold leading-none mb-1 text-white">

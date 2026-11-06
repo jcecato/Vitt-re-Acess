@@ -6,17 +6,12 @@ export interface NavigationTab {
 
 export const NAVIGATION_TABS: NavigationTab[] = [
   { id: 'inicio', label: 'Meu Dia', iconClass: 'ti ti-home' },
-  { id: 'evolucao', label: 'Meu Bem Estar', iconClass: 'ti ti-chart-line' },
   { id: 'consultas', label: 'Minha Agenda', iconClass: 'ti ti-calendar' },
-  { id: 'exames', label: 'Meus Exames', iconClass: 'ti ti-flask' },
-  { id: 'avaliacao', label: 'Avaliação Física', iconClass: 'ti ti-barbell' },
-  { id: 'perfil-metabolico', label: 'Mapa Funcional', iconClass: 'ti ti-dna' },
+  { id: 'evolucao', label: 'Meu Bem-Estar', iconClass: 'ti ti-chart-line' },
   { id: 'guia', label: 'Rotina Alimentar', iconClass: 'ti ti-salad' },
-  { id: 'protocolo', label: 'Minhas Fórmulas', iconClass: 'ti ti-pill' },
-  { id: 'marketplace', label: 'Acesso Ágil', iconClass: 'ti ti-shopping-bag' },
-  { id: 'guias', label: 'Guias', iconClass: 'ti ti-folders' },
-  { id: 'termos', label: 'Termos', iconClass: 'ti ti-clipboard-check' },
-  { id: 'financeiro', label: 'Recibos Fiscais', iconClass: 'ti ti-receipt' },
+  { id: 'formulas-suprimentos', label: 'Fórmulas & Suprimentos', iconClass: 'ti ti-pill' },
+  { id: 'exames-guias', label: 'Meus Exames & Guias', iconClass: 'ti ti-flask' },
+  { id: 'meu-perfil', label: 'Meu Perfil', iconClass: 'ti ti-user-check' },
   { id: 'caixa-surpresa', label: 'Meu Bônus', iconClass: 'ti ti-gift' }
 ];
 

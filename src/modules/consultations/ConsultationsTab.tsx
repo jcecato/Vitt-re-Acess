@@ -110,12 +110,9 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Título da Aba Agenda */}
-      <div>
+      <div className="mb-3">
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
           Minha Agenda
-        </div>
-        <div className="text-[17px] font-semibold text-white mt-0.5 mb-2">
-          Sessões de Consulta
         </div>
       </div>
 
@@ -131,7 +128,7 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
           return (
             <div
               key={sessao.id || `sessao-${index}`}
-              className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm transition hover:border-white/15"
+              className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm transition hover:border-white/70"
             >
               {/* Linha 1: Título da Sessão + Único Status (Agendada/Concluída/Remarcada/Cancelada) */}
               <div className="flex items-center justify-between gap-2.5">
@@ -183,7 +180,7 @@ export const ConsultationsTab: React.FC<ConsultationsTabProps> = ({
           onClick={() => setIsModalOpen(false)}
         >
           <div 
-            className="w-full max-w-full sm:max-w-[440px] bg-[#14142a] border-t sm:border border-white/20 rounded-t-[28px] sm:rounded-[28px] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
+            className="w-full max-w-full sm:max-w-[440px] bg-[#14142a] border-[1px] border-white/50 rounded-t-[28px] sm:rounded-[28px] p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Topo com Título e Botão X de Fechar */}

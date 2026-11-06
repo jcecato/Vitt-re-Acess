@@ -62,12 +62,9 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div>
+        <div className="mb-3">
           <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
             Minhas Fórmulas
-          </div>
-          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
-            Suplementação e Receitas
           </div>
         </div>
 
@@ -80,7 +77,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
             return (
               <div
                 key={prot.id}
-                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm"
+                className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm"
               >
                 {/* Linha superior: Ícone de Jarra de Laboratório + Título + Status */}
                 <div className="flex items-center gap-3">
@@ -145,7 +142,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
           onClick={() => setSelectedRecipe(null)}
         >
           <div 
-            className="w-full max-w-full sm:max-w-[440px] bg-[#14142a] border-t sm:border border-white/20 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
+            className="w-full max-w-full sm:max-w-[440px] bg-[#14142a] border-[1px] border-white/50 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center pb-3 border-b border-white/10 mb-3">
@@ -172,7 +169,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
                 'Suplementação manipulada de acordo com exames periódicos',
                 'Ingerir conforme as instruções prescritas pela equipe clínica'
               ]).map((it, idx) => (
-                <div key={idx} className="bg-white/[0.04] p-3 rounded-xl border border-white/10 text-white flex items-start gap-2.5">
+                <div key={idx} className="bg-white/[0.04] p-3 rounded-xl border-[1px] border-white/50 text-white flex items-start gap-2.5">
                   <span className="w-2 h-2 rounded-full bg-[#5eea8f] mt-1.5 shrink-0"></span>
                   <span className="leading-snug">{it}</span>
                 </div>

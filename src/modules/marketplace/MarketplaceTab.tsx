@@ -16,17 +16,14 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
 
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
-      <div>
+      <div className="mb-3">
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
           Acesso Ágil
-        </div>
-        <div className="text-[17px] font-semibold text-white mt-0.5">
-          Curadoria e Indicações
         </div>
       </div>
 
       {/* Texto de Curadoria com texto justificado e instrução à esquerda */}
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm">
+      <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm">
         <p className="text-[18px] text-white leading-relaxed text-justify">
           Nossa Curadoria pensa nos mínimos detalhes, e você ganha tempo nas pesquisas e segurança na compra verificada.
         </p>
@@ -37,7 +34,7 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
 
       <div className="space-y-2.5 pt-1">
         {patient.marketplace.map((item) => (
-          <div key={item.id} className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-3 flex items-center gap-3">
+          <div key={item.id} className="bg-white/[0.03] border-[1px] border-white/50 rounded-2xl p-3 flex items-center gap-3">
             <div
               style={{ background: item.gradient }}
               className="w-14 h-14 rounded-2xl flex items-center justify-center text-[26px] text-white shadow shrink-0"

@@ -15,52 +15,50 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getAuth, type Auth } from 'firebase/auth';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 /**
- * ----------------------------------------------------------------------------
- * MARCADOR DE CONFIGURAÇÃO (FIREBASE_CONFIG_PLACEHOLDER)
- * Preencha com as credenciais do seu projeto Firebase:
- * ----------------------------------------------------------------------------
+ * Configuração Oficial Produção — Projeto vittareacess
  */
 export const FIREBASE_CONFIG = {
-  apiKey: "FIREBASE_API_KEY_PLACEHOLDER",
-  authDomain: "vittare-crm-patient.firebaseapp.com",
-  projectId: "vittare-crm-patient",
-  storageBucket: "vittare-crm-patient.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:0000000000000000000000",
-  measurementId: "G-PLACEHOLDER"
+  apiKey: "AIzaSyAzRXX2LNY7Y2smzml4KJwCfd4nXlgEuSU",
+  authDomain: "vittareacess.firebaseapp.com",
+  projectId: "vittareacess",
+  storageBucket: "vittareacess.firebasestorage.app",
+  messagingSenderId: "660384777581",
+  appId: "1:660384777581:web:5222f72c0b97ae925a0664"
 };
 
 /**
- * Verifica se a configuração atual é o marcador (placeholder) ou se já possui credenciais reais
+ * Verifica se a configuração atual é válida
  */
 export const isFirebaseConfigured = (): boolean => {
   return (
     FIREBASE_CONFIG.apiKey !== "FIREBASE_API_KEY_PLACEHOLDER" &&
-    !FIREBASE_CONFIG.apiKey.includes("PLACEHOLDER") &&
-    FIREBASE_CONFIG.projectId !== "vittare-crm-patient"
+    !FIREBASE_CONFIG.apiKey.includes("PLACEHOLDER")
   );
 };
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 let auth: Auth | null = null;
+let storage: FirebaseStorage | null = null;
 
 if (isFirebaseConfigured()) {
   try {
     app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
     db = getFirestore(app);
     auth = getAuth(app);
-    console.info("🔥 [Vittáre Firebase] Conexão inicializada com sucesso!");
+    storage = getStorage(app);
+    console.info("🔥 [Vittáre Firebase] Conexão com 'vittareacess' inicializada com sucesso!");
   } catch (error) {
-    console.warn("⚠️ [Vittáre Firebase] Falha ao inicializar com credenciais:", error);
+    console.warn("⚠️ [Vittáre Firebase] Falha ao inicializar credenciais:", error);
   }
 } else {
   console.info(
-    "ℹ️ [Vittáre Firebase] Operando em modo de arquitetura desacoplada (Cache/Simulação). " +
-    "Preencha 'FIREBASE_CONFIG' em 'src/config/firebase.ts' quando as chaves de produção estiverem prontas."
+    "ℹ️ [Vittáre Firebase] Operando em modo desacoplado (Cache Local)."
   );
 }
 
-export { app, db, auth };
+export { app, db, auth, storage };
+

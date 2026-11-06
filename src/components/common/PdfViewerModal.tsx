@@ -62,7 +62,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 font-['Plus_Jakarta_Sans',sans-serif]">
       <div 
-        className="w-full max-w-full sm:max-w-[420px] bg-[#14142a] border-t sm:border border-white/20 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
+        className="w-full max-w-full sm:max-w-[420px] bg-[#14142a] border-[1px] border-white/50 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3">
@@ -124,7 +124,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
         {/* Ação Única e Destacada: Baixar PDF (Imprimir removido) */}
         <div className="flex flex-col items-center gap-2 mt-3.5">
           {isLimitReached ? (
-            <div className="w-full text-center p-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-[14px] text-[#a5a4b8]">
+            <div className="w-full text-center p-2.5 rounded-xl bg-white/[0.04] border-[1px] border-white/50 text-[14px] text-[#a5a4b8]">
               Você atingiu o limite de 3 downloads mensais para este documento. Entre em contato com a equipe Vittáre para liberação adicional.
             </div>
           ) : (

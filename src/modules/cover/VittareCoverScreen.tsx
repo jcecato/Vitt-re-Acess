@@ -91,7 +91,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
       <style>{`
         .vittare-cover-wrapper {
           --bg: #07090d;
-          --stroke: rgba(255, 255, 255, 0.09);
+          --stroke: rgba(255, 255, 255, 0.5);
           --text: #eef4f8;
           --muted: #8b9aa7;
           --green: #2fd575;
@@ -218,7 +218,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           border: 1px solid var(--stroke);
           border-radius: 14px;
           outline: none;
-          background: rgba(255, 255, 255, 0.05);
+          background: transparent;
           color: var(--text);
           font-family: 'Inter', sans-serif;
           font-weight: 500;
@@ -234,7 +234,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         .vc-field input:focus {
           border-color: rgba(47, 213, 117, 0.65);
           box-shadow: 0 0 0 4px var(--ring);
-          background: rgba(255, 255, 255, 0.07);
+          background: rgba(255, 255, 255, 0.03);
         }
 
         .vc-field:focus-within .vc-ic {
@@ -318,11 +318,11 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           display: flex;
           justify-content: center;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
           color: #052e1b;
           font-family: 'Inter', sans-serif;
           font-weight: 700;
-          font-size: 15.5px;
+          font-size: 20px;
           background: linear-gradient(135deg, #5eeaa0, var(--green-2));
           box-shadow: 0 14px 34px rgba(18, 183, 106, 0.35);
           transition: 0.2s;
@@ -338,6 +338,8 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         }
 
         .vc-cta .vc-arr {
+          font-size: 1.25em;
+          line-height: 1;
           transition: transform 0.2s;
           display: inline-block;
         }
@@ -509,7 +511,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
               <input
                 id="login"
                 type="text"
-                placeholder="seu email"
+                placeholder="seu email @"
                 autoComplete="username"
                 value={login}
                 onChange={e => setLogin(e.target.value)}
@@ -600,9 +602,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
             {isSubmitting ? (
               <span>Entrando…</span>
             ) : (
-              <>
-                Entrar <span className="vc-arr">→</span>
-              </>
+              <span>Entrar</span>
             )}
           </button>
         </form>

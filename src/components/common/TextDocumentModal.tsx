@@ -27,7 +27,7 @@ export const TextDocumentModal: React.FC<TextDocumentModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-full sm:max-w-[480px] h-[90dvh] sm:h-[620px] max-h-[95dvh] bg-[#121222] border-t sm:border border-white/20 rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-bottom-6 duration-200 overflow-hidden"
+        className="w-full max-w-full sm:max-w-[480px] h-[90dvh] sm:h-[620px] max-h-[95dvh] bg-[#121222] border-[1px] border-white/50 rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-6 shadow-2xl flex flex-col justify-between animate-in slide-in-from-bottom-6 duration-200 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -58,11 +58,11 @@ export const TextDocumentModal: React.FC<TextDocumentModalProps> = ({
         {/* Content body with pleasant readable typography */}
         <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar py-4 space-y-3.5 text-[#e8e8f0] text-[16px] leading-relaxed">
           {content ? (
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 text-[#d8d8e6] whitespace-pre-line leading-relaxed">
+            <div className="bg-white/[0.03] border-[1px] border-white/50 rounded-2xl p-4 text-[#d8d8e6] whitespace-pre-line leading-relaxed">
               {content}
             </div>
           ) : (
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 text-[#d8d8e6] space-y-3">
+            <div className="bg-white/[0.03] border-[1px] border-white/50 rounded-2xl p-4 text-[#d8d8e6] space-y-3">
               <p>
                 Este documento foi emitido e homologado pela equipe clínica do CRM Vittáre, contendo diretrizes padronizadas e termos de acompanhamento individual.
               </p>

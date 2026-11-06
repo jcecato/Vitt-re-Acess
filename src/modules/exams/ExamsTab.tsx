@@ -54,12 +54,9 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Seção 1: Exames Solicitados organizados por solicitação individual */}
       <div>
-        <div>
+        <div className="mb-3">
           <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
-            Meus Exames
-          </div>
-          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
-            Exames solicitados e biomarcadores
+            Exames Laboratoriais | Hemo Labor™
           </div>
         </div>
 
@@ -71,7 +68,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
             return (
               <div
                 key={batch.id}
-                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm transition hover:border-white/15"
+                className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm transition hover:border-white/70"
               >
                 {/* Linha Superior: Ícone + Título (Largura Expandida) */}
                 <div className="flex items-start gap-3">
@@ -195,7 +192,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
               return (
                 <div
                   key={item.id}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm"
+                  className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm"
                 >
                   {/* Linha superior: Nome em 19px/218px, Ref em 17px abaixo e Badge calculada em 18px */}
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -340,7 +337,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
           onClick={() => setSelectedBatch(null)}
         >
           <div
-            className="w-full max-w-full sm:max-w-[420px] max-h-[92vh] bg-[#14142a] border border-white/20 rounded-[28px] p-4 sm:p-5 shadow-2xl flex flex-col justify-between animate-in zoom-in-95 duration-200"
+            className="w-full max-w-full sm:max-w-[420px] max-h-[92vh] bg-[#14142a] border-[1px] border-white/50 rounded-[28px] p-4 sm:p-5 shadow-2xl flex flex-col justify-between animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Cabeçalho do Modal com Título, Data e Botão "X" no lado SUPERIOR DIREITO */}
@@ -378,7 +375,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                 return (
                   <div
                     key={ex.id}
-                    className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 flex flex-col gap-2"
+                    className="bg-white/[0.04] border-[1px] border-white/50 rounded-xl p-3 flex flex-col gap-2"
                   >
                     {/* Linha 1: Nome do Exame em Destaque Full Width (21px) */}
                     <div className="text-[21px] font-bold text-white leading-tight break-words">

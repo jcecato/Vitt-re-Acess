@@ -39,7 +39,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 font-['Plus_Jakarta_Sans',sans-serif]">
       <div 
-        className="w-full max-w-full sm:max-w-[420px] bg-[#14142a] border-t sm:border border-white/20 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
+        className="w-full max-w-full sm:max-w-[420px] bg-[#14142a] border-[1px] border-white/50 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3">
@@ -68,7 +68,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
                 className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
                   selectedDate === d.day
                     ? 'border-[#5eea8f] bg-[#5eea8f]/15 text-[#5eea8f]'
-                    : 'border-white/15 bg-white/[0.04] text-white hover:bg-white/10'
+                    : 'border-[1px] border-white/50 bg-white/[0.04] text-white hover:bg-white/10'
                 }`}
               >
                 <div className="text-[16px] font-bold">{d.day}</div>
@@ -90,7 +90,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
                 className={`px-3 py-1.5 rounded-xl border text-[16px] font-semibold transition cursor-pointer ${
                   selectedTime === t
                     ? 'border-[#5eea8f] bg-[#5eea8f]/15 text-[#5eea8f]'
-                    : 'border-white/15 bg-white/[0.04] text-white hover:bg-white/10'
+                    : 'border-[1px] border-white/50 bg-white/[0.04] text-white hover:bg-white/10'
                 }`}
               >
                 {t}

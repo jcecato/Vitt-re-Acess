@@ -10,22 +10,26 @@ import { PhoneShell } from './components/layout/PhoneShell';
 import { CoverScreen } from './components/layout/CoverScreen';
 import { PatientHeader } from './components/layout/PatientHeader';
 import { NavigationRail } from './components/layout/NavigationRail';
-import { DotsIndicator } from './components/layout/DotsIndicator';
 
 // Modular Clinical Tabs
 import { DashboardTab } from './modules/dashboard/DashboardTab';
 import { EvolutionTab } from './modules/evolution/EvolutionTab';
 import { ConsultationsTab } from './modules/consultations/ConsultationsTab';
+import { MealGuideTab } from './modules/meal-guide/MealGuideTab';
+import { SurpriseBoxTab } from './modules/surprise-box/SurpriseBoxTab';
+import { FormulasSuprimentosTab } from './modules/protocol/FormulasSuprimentosTab';
+import { ExamesGuiasTab } from './modules/exams/ExamesGuiasTab';
+import { MeuPerfilTab } from './modules/profile/MeuPerfilTab';
+
+// Individual Tabs (Preservadas para retrocompatibilidade e navegação interna direta)
 import { ExamsTab } from './modules/exams/ExamsTab';
 import { PhysicalAssessmentTab } from './modules/physical-assessment/PhysicalAssessmentTab';
-import { MealGuideTab } from './modules/meal-guide/MealGuideTab';
 import { MetabolicProfileTab } from './modules/metabolic-profile/MetabolicProfileTab';
 import { ProtocolTab } from './modules/protocol/ProtocolTab';
 import { MarketplaceTab } from './modules/marketplace/MarketplaceTab';
 import { GuiasTab } from './modules/guias/GuiasTab';
-import { FinancialTab } from './modules/financial/FinancialTab';
 import { TermsTab } from './modules/terms/TermsTab';
-import { SurpriseBoxTab } from './modules/surprise-box/SurpriseBoxTab';
+import { FinancialTab } from './modules/financial/FinancialTab';
 
 // Modals
 import { PdfViewerModal } from './components/common/PdfViewerModal';
@@ -134,6 +138,7 @@ function PatientAppContent() {
             id="scr" 
             className="flex-1 min-h-0 overflow-y-auto no-scrollbar scroll-smooth w-full px-3 sm:px-4 pt-1.5 pb-2"
           >
+          {/* 1. Meu Dia */}
           {activeTab === 'inicio' && (
             <DashboardTab
               patient={currentPatient}
@@ -142,10 +147,7 @@ function PatientAppContent() {
             />
           )}
 
-          {activeTab === 'evolucao' && (
-            <EvolutionTab patient={currentPatient} />
-          )}
-
+          {/* 2. Minha Agenda */}
           {activeTab === 'consultas' && (
             <ConsultationsTab
               patient={currentPatient}
@@ -153,20 +155,12 @@ function PatientAppContent() {
             />
           )}
 
-          {activeTab === 'exames' && (
-            <ExamsTab
-              patient={currentPatient}
-              onOpenPdf={handleOpenPdf}
-            />
+          {/* 3. Meu Bem-Estar */}
+          {activeTab === 'evolucao' && (
+            <EvolutionTab patient={currentPatient} />
           )}
 
-          {activeTab === 'avaliacao' && (
-            <PhysicalAssessmentTab
-              patient={currentPatient}
-              onOpenPdf={handleOpenPdf}
-            />
-          )}
-
+          {/* 4. Rotina Alimentar */}
           {activeTab === 'guia' && (
             <MealGuideTab
               patient={currentPatient}
@@ -174,59 +168,48 @@ function PatientAppContent() {
             />
           )}
 
-          {activeTab === 'perfil-metabolico' && (
-            <MetabolicProfileTab
-              patient={currentPatient}
-            />
-          )}
-
-          {activeTab === 'protocolo' && (
-            <ProtocolTab
+          {/* 5. Fórmulas & Suprimentos (Minhas Fórmulas + Acesso Ágil) */}
+          {(activeTab === 'formulas-suprimentos' || activeTab === 'protocolo' || activeTab === 'marketplace') && (
+            <FormulasSuprimentosTab
               patient={currentPatient}
               onOpenPdf={handleOpenPdf}
+              defaultSubTab={activeTab === 'marketplace' ? 'acesso' : 'formulas'}
             />
           )}
 
-          {activeTab === 'marketplace' && (
-            <MarketplaceTab patient={currentPatient} />
-          )}
-
-          {(activeTab === 'guias' || activeTab === 'docs' || activeTab === 'saude' || activeTab === 'encam') && (
-            <GuiasTab
+          {/* 6. Meus Exames & Guias (Exames + Avaliação Corporal + Mapa Funcional + Integrativa + Encaminhamentos) */}
+          {(activeTab === 'exames-guias' || activeTab === 'exames' || activeTab === 'avaliacao' || activeTab === 'perfil-metabolico') && (
+            <ExamesGuiasTab
               patient={currentPatient}
               onOpenPdf={handleOpenPdf}
+              defaultSubTab={
+                activeTab === 'avaliacao' ? 'corporal' :
+                activeTab === 'perfil-metabolico' ? 'mapa' :
+                'exames'
+              }
             />
           )}
 
-          {activeTab === 'termos' && (
-            <TermsTab
+          {/* 7. Meu Perfil (Documentos Encaminhados + Termos + Recibos Fiscais) */}
+          {(activeTab === 'meu-perfil' || activeTab === 'guias' || activeTab === 'docs' || activeTab === 'saude' || activeTab === 'encam' || activeTab === 'termos' || activeTab === 'financeiro') && (
+            <MeuPerfilTab
               patient={currentPatient}
               onOpenPdf={handleOpenPdf}
+              defaultSubTab={
+                activeTab === 'termos' ? 'termos' :
+                activeTab === 'financeiro' ? 'recibos' :
+                'documentos'
+              }
             />
           )}
 
-          {activeTab === 'financeiro' && (
-            <FinancialTab
-              patient={currentPatient}
-              onOpenPdf={handleOpenPdf}
-            />
-          )}
-
+          {/* 8. Meu Bônus */}
           {activeTab === 'caixa-surpresa' && (
             <SurpriseBoxTab
               patient={currentPatient}
             />
           )}
         </div>
-
-        {/* Indicador de Bolinhas e Botão Voltar Início */}
-        <div className="shrink-0">
-          <DotsIndicator
-            activeTab={activeTab}
-            onGoToInicio={() => handleSelectTab('inicio')}
-          />
-        </div>
-
       </div>
       </PhoneShell>
 

@@ -39,7 +39,7 @@ export const GuiasTab: React.FC<GuiasTabProps> = ({ patient, onOpenPdf }) => {
         </div>
 
         {/* Anotações Gerais */}
-        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm">
+        <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm">
           <div className="text-[20px] font-['Cormorant_Garamond',serif] font-bold text-[#5eea8f] leading-tight">
             Anotações Gerais
           </div>
@@ -49,7 +49,7 @@ export const GuiasTab: React.FC<GuiasTabProps> = ({ patient, onOpenPdf }) => {
         </div>
 
         {/* Card Anamnese com Ícone, Nome, Data e botão Visualizar */}
-        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 shadow-sm flex items-center justify-between gap-3">
+        <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3 shadow-sm flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-[#5eea8f]/15 text-[#5eea8f] flex items-center justify-center text-[20px] shrink-0">
               <i className="ti ti-file-text"></i>
@@ -100,7 +100,7 @@ export const GuiasTab: React.FC<GuiasTabProps> = ({ patient, onOpenPdf }) => {
             return (
               <div
                 key={doc.id}
-                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl px-3 py-2.5 flex items-center justify-between gap-3 shadow-sm"
+                className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl px-3 py-2.5 flex items-center justify-between gap-3 shadow-sm"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-[#5eea8f]/15 text-[#5eea8f] flex items-center justify-center text-[20px] shrink-0">
@@ -153,7 +153,7 @@ export const GuiasTab: React.FC<GuiasTabProps> = ({ patient, onOpenPdf }) => {
             return (
               <div
                 key={ref.id}
-                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 shadow-sm"
+                className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3 shadow-sm"
               >
                 <div className="flex items-center gap-3">
                   <div

@@ -23,11 +23,7 @@ const GIFT_OPTIONS: GiftOption[] = [
   },
   {
     id: 3,
-    title: 'Crédito de Continuidade de R$ 30,00 para utilizar na contratação de um próximo ciclo, sem prazo para retomada.',
-  },
-  {
-    id: 4,
-    title: 'Crédito de Continuidade Exclusivo de R$ 60,00 para utilizar na contratação de um próximo ciclo, com formalização em até 15 dias após o encerramento do ciclo atual.',
+    title: 'Crédito Continuidade de R$ 30,00, para utilizar na contratação de um novo ciclo se iniciado em até 30 dias, após o término deste.',
   },
 ];
 
@@ -79,9 +75,6 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
         <div>
           <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
             Meu Bônus
-          </div>
-          <div className="text-[17px] font-semibold text-white mt-0.5">
-            Caixa Surpresa e Recompensas
           </div>
         </div>
 
@@ -161,28 +154,28 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
               </div>
 
               <div className="grid grid-cols-4 gap-2 max-w-xs mx-auto">
-                <div className="bg-black/40 border border-white/10 rounded-xl py-2 px-1 text-center">
+                <div className="bg-black/40 border-[1px] border-white/50 rounded-xl py-2 px-1 text-center">
                   <div className="text-[20px] font-bold text-white tabular-nums leading-none">
                     {String(timeLeft.days).padStart(2, '0')}
                   </div>
                   <div className="text-[11px] text-[#e0e0ed] font-medium uppercase mt-1">Dias</div>
                 </div>
 
-                <div className="bg-black/40 border border-white/10 rounded-xl py-2 px-1 text-center">
+                <div className="bg-black/40 border-[1px] border-white/50 rounded-xl py-2 px-1 text-center">
                   <div className="text-[20px] font-bold text-white tabular-nums leading-none">
                     {String(timeLeft.hours).padStart(2, '0')}
                   </div>
                   <div className="text-[11px] text-[#e0e0ed] font-medium uppercase mt-1">Horas</div>
                 </div>
 
-                <div className="bg-black/40 border border-white/10 rounded-xl py-2 px-1 text-center">
+                <div className="bg-black/40 border-[1px] border-white/50 rounded-xl py-2 px-1 text-center">
                   <div className="text-[20px] font-bold text-white tabular-nums leading-none">
                     {String(timeLeft.minutes).padStart(2, '0')}
                   </div>
                   <div className="text-[11px] text-[#e0e0ed] font-medium uppercase mt-1">Min</div>
                 </div>
 
-                <div className="bg-black/40 border border-white/10 rounded-xl py-2 px-1 text-center">
+                <div className="bg-black/40 border-[1px] border-white/50 rounded-xl py-2 px-1 text-center">
                   <div className="text-[20px] font-bold text-[#5eea8f] tabular-nums leading-none">
                     {String(timeLeft.seconds).padStart(2, '0')}
                   </div>
@@ -246,7 +239,7 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
                     className={`rounded-2xl p-4 relative overflow-hidden cursor-pointer transition-all active:scale-[0.99] border ${
                       isSelected
                         ? 'bg-gradient-to-r from-white/[0.08] to-white/[0.04] border-[#5eea8f] shadow-[0_0_15px_rgba(94,234,143,0.15)]'
-                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
+                        : 'bg-white/[0.03] border-[1px] border-white/50 hover:border-white/60'
                     }`}
                   >
                     <div className="flex items-center gap-3.5">
@@ -257,7 +250,10 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
 
                       {/* Nome do produto ou serviço alinhado diretamente */}
                       <div className="grow min-w-0 pr-1">
-                        <div className="w-[220px] text-justify text-[18px] font-bold text-white leading-snug">
+                        <div 
+                          style={{ width: '230px', fontSize: '19px' }}
+                          className="w-[230px] text-justify text-[19px] font-bold text-white leading-snug"
+                        >
                           {gift.title}
                         </div>
                       </div>
@@ -291,11 +287,6 @@ export const SurpriseBoxTab: React.FC<SurpriseBoxTabProps> = ({ patient }) => {
             <MessageCircle className="w-5 h-5 text-white shrink-0" />
             <span>GARANTIR MEU BRINDE</span>
           </button>
-
-          {/* Rodapé: 20px cinza */}
-          <div className="text-center text-[20px] text-[#e0e0ed] pt-1 leading-snug">
-            Válido exclusivamente para continuidade do acompanhamento com a equipe Vittare.
-          </div>
 
         </div>
       )}

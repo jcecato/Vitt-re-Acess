@@ -91,12 +91,9 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       {/* Seção 1: Lista de Avaliações Físicas cadastradas */}
       <div>
-        <div>
+        <div className="mb-3">
           <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
-            Avaliação Física
-          </div>
-          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
-            Resultados e comparativos corporais
+            Avaliação Corporal | OnBody™
           </div>
         </div>
 
@@ -113,7 +110,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
             return (
               <div
                 key={item.id}
-                className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 shadow-sm"
+                className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3 shadow-sm"
               >
                 <div className="flex items-center gap-3">
                   <div
@@ -260,7 +257,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
               return (
                 <div
                   key={item.id}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3.5 shadow-sm"
+                  className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm"
                 >
                   {/* Linha superior: Nome em 19px/218px, Ref em 17px abaixo e Badge calculada em 18px */}
                   <div className="flex items-start justify-between gap-2 mb-3.5">
@@ -432,7 +429,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
           onClick={() => setSelectedAssessment(null)}
         >
           <div 
-            className="w-full max-w-full sm:max-w-[440px] bg-[#14142a] border-t sm:border border-white/20 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
+            className="w-full max-w-full sm:max-w-[440px] bg-[#14142a] border-[1px] border-white/50 rounded-t-[28px] sm:rounded-[28px] p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center pb-3 border-b border-white/10 mb-3">

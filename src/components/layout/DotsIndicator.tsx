@@ -31,7 +31,7 @@ export const DotsIndicator: React.FC<DotsIndicatorProps> = ({ activeTab, onGoToI
       <div className="flex justify-center pt-2">
         <button
           onClick={onGoToInicio}
-          className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium text-white/90 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl py-0 px-4 transition cursor-pointer active:scale-95"
+          className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium text-white/90 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border-[1px] border-white/50 rounded-xl py-0 px-4 transition cursor-pointer active:scale-95"
         >
           <i className="ti ti-home text-[17px] text-[#5eea8f]"></i>
           <span>Voltar Início</span>

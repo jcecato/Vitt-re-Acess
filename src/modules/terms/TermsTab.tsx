@@ -13,12 +13,9 @@ export const TermsTab: React.FC<TermsTabProps> = ({ patient }) => {
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
       <div>
-        <div>
+        <div className="mb-3">
           <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
             Termos
-          </div>
-          <div className="text-[17px] font-semibold text-white mt-0.5 mb-3">
-            Orientações e consentimentos informados
           </div>
         </div>
 
@@ -26,7 +23,7 @@ export const TermsTab: React.FC<TermsTabProps> = ({ patient }) => {
           {patient.terms.map((term) => (
             <div
               key={term.id}
-              className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 shadow-sm flex items-center justify-between gap-3"
+              className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3 shadow-sm flex items-center justify-between gap-3"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-[#5eea8f]/15 text-[#5eea8f] flex items-center justify-center text-[20px] shrink-0">
