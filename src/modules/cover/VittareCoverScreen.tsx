@@ -2,19 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { CoverScreenProps } from './types';
 import { useAuth } from '../../auth/AuthContext';
 import { VittareLogo } from './VittareLogo';
-import { validateStrictPassword, isTreatmentActive } from '../../utils/securityUtils';
+import { isTreatmentActive } from '../../utils/securityUtils';
 import { crmDataService } from '../../services/crmDataService';
 import { auth, db, isFirebaseConfigured } from '../../config/firebase';
 import { 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
   setPersistence, 
   indexedDBLocalPersistence, 
   browserSessionPersistence 
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-// Helper para compatibilidade de senha do Firebase Auth (mínimo de 6 caracteres do SDK)
+// Helper para compatibilidade de senha do Firebase Auth
 const formatAuthPassword = (pin: string) => `${pin}#vittare_auth_portal`;
 
 export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
@@ -24,49 +23,28 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 }) => {
   const { availablePatients, switchPatient } = useAuth();
 
-  // Modo do formulário: 'register' (Primeiro Cadastro) ou 'login' (Já Tenho Login e Senha)
-  const [authMode, setAuthMode] = useState<'register' | 'login'>('register');
-
   // Form State
   const [login, setLogin] = useState<string>('');
   const [senha, setSenha] = useState<string>('');
-  const [confirmSenha, setConfirmSenha] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [rememberDevice, setRememberDevice] = useState<boolean>(true);
   const [acceptTerms, setAcceptTerms] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
-
-  // Validação automática da senha sem expor critérios técnicos
-  const handleSenhaChange = (val: string) => {
-    setSenha(val);
-    setAuthError(null);
-    if (authMode === 'register' && val.length === 4) {
-      const validation = validateStrictPassword(val);
-      if (!validation.isValid) {
-        setAuthError(validation.error || 'Combinação não permitida. Por favor, escolha outra combinação.');
-      }
-    }
-  };
-
-  const handleSenhaBlur = () => {
-    if (authMode === 'register' && senha.length === 4) {
-      const validation = validateStrictPassword(senha);
-      if (!validation.isValid) {
-        setAuthError(validation.error || 'Combinação não permitida. Por favor, escolha outra combinação.');
-      }
-    }
-  };
 
   // Modais
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false); // Esqueci minha senha
-  const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false); // Termos de Uso (LGPD)
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState<boolean>(false); // Termos de Uso (CFN / LGPD)
 
-  // Pré-preenchimento ergonômico do e-mail salvo via "Lembrar dispositivo"
+  // Pré-preenchimento ergonômico do e-mail salvo via "Lembrar dispositivo" e aviso de expiração
   useEffect(() => {
     try {
+      const notice = localStorage.getItem('vittare_session_expired_notice');
+      if (notice) {
+        setAuthError(notice);
+        localStorage.removeItem('vittare_session_expired_notice');
+      }
+
       const savedEmail = localStorage.getItem('vittare_remembered_email');
       if (savedEmail) {
         setLogin(savedEmail);
@@ -89,55 +67,26 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen, isTermsModalOpen]);
 
-  // Submissão do Formulário (Entrar ou Primeiro Acesso)
+  // Submissão do Formulário de Acesso Direto
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSubmitting) return;
 
     setAuthError(null);
-    setAuthSuccess(null);
 
     const cleanLogin = login.trim();
     const cleanSenha = senha.trim();
-    const cleanConfirmSenha = confirmSenha.trim();
 
     // 1. Validação de Preenchimento Obrigatório
     if (!cleanLogin || !cleanSenha) {
-      setAuthError('Por favor, preencha todos os campos obrigatórios.');
+      setAuthError('Por favor, informe seu e-mail e senha de acesso.');
       return;
     }
 
-    // 2. Validação Obrigatória dos Termos de Uso (LGPD)
+    // 2. Validação Obrigatória dos Termos de Uso
     if (!acceptTerms) {
-      setAuthError('Por favor, confirme o aceite dos Termos de Uso e Privacidade para prosseguir.');
+      setAuthError('Por favor, confirme o aceite dos Termos de Uso e Sigilo Profissional para prosseguir.');
       return;
-    }
-
-    // 3. Validação de Confirmação no modo Primeiro Acesso
-    if (authMode === 'register') {
-      if (!cleanConfirmSenha) {
-        setAuthError('Por favor, confirme a sua nova senha.');
-        return;
-      }
-      if (cleanSenha !== cleanConfirmSenha) {
-        setAuthError('A confirmação não coincide com a nova senha digitada.');
-        return;
-      }
-    }
-
-    // 4. Validação Estrita de Senha com bloqueio de padrões previsíveis
-    if (authMode === 'register') {
-      const passVal = validateStrictPassword(cleanSenha);
-      if (!passVal.isValid) {
-        setAuthError(passVal.error || 'Combinação não permitida. Por favor, escolha outra combinação.');
-        return;
-      }
-    } else {
-      const passVal = validateStrictPassword(cleanSenha);
-      if (!passVal.isValid && cleanSenha !== 'v123') {
-        setAuthError('Credenciais inválidas. Verifique seu login e senha.');
-        return;
-      }
     }
 
     setIsSubmitting(true);
@@ -154,150 +103,17 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
       }
     }
 
-    // =========================================================================
-    // FLUXO A: PRIMEIRO ACESSO (Criação/Ativação da Conta do Paciente)
-    // =========================================================================
-    if (authMode === 'register') {
-      try {
-        let uid = '';
-
-        if (isFirebaseConfigured() && auth) {
-          try {
-            // Tenta criar usuário no Firebase Auth com salt interno seguro (compatibilidade com PIN de 4 dígitos)
-            const securePass = formatAuthPassword(cleanSenha);
-            const userCred = await createUserWithEmailAndPassword(auth, cleanLogin, securePass);
-            uid = userCred.user.uid;
-          } catch (createErr: any) {
-            const errCode = createErr?.code || '';
-            console.warn('Firebase createUser warning:', errCode, createErr?.message);
-
-            if (errCode === 'auth/email-already-in-use') {
-              try {
-                let signInCred;
-                try {
-                  signInCred = await signInWithEmailAndPassword(auth, cleanLogin, formatAuthPassword(cleanSenha));
-                } catch {
-                  signInCred = await signInWithEmailAndPassword(auth, cleanLogin, cleanSenha);
-                }
-                uid = signInCred.user.uid;
-              } catch (signInErr: any) {
-                setAuthError('Este e-mail já possui cadastro. Use a aba "Já Tenho Login e Senha" ou recupere sua senha.');
-                setIsSubmitting(false);
-                return;
-              }
-            } else if (errCode === 'auth/invalid-email') {
-              setAuthError('Por favor, informe um e-mail válido.');
-              setIsSubmitting(false);
-              return;
-            } else if (errCode === 'auth/weak-password') {
-              setAuthError('Combinação não permitida. Por favor, escolha outra combinação.');
-              setIsSubmitting(false);
-              return;
-            } else {
-              // Em caso de provedor desativado no Firebase Console (auth/operation-not-allowed) ou rede,
-              // utiliza UID desacoplado para prosseguir com o prontuário no Firestore e cache local
-              uid = 'paciente-' + Math.random().toString(36).substring(2, 9);
-            }
-          }
-        } else {
-          // Modo local/offline
-          uid = 'paciente-' + Math.random().toString(36).substring(2, 9);
-        }
-
-        // Grava no Firestore o documento inicial com termos aceitos e 3 sessões padronizadas
-        const nowIso = new Date().toISOString();
-        const basePatientPayload = {
-          id: uid,
-          name: 'Paciente',
-          initials: 'PV',
-          email: cleanLogin,
-          pin: cleanSenha,
-          status: 'Ativo · Acompanhamento Iniciado',
-          activeDays: 0,
-          daysToComplete: 90,
-          totalDays: 90,
-          nextConsultationDate: 'Data: -',
-          termsAccepted: true,
-          termsAcceptedAt: nowIso,
-          termsVersion: '1.0',
-          lastSyncTimestamp: nowIso,
-          syncedByProgram: 'Vittáre Portal (Primeiro Acesso)',
-          consultations: [
-            { id: 'c-1', title: '1° SESSÃO', dateStr: 'Data: -', status: 'Agendada' as const },
-            { id: 'c-2', title: '2° SESSÃO', dateStr: 'Data: -', status: 'Agendada' as const },
-            { id: 'c-3', title: '3° SESSÃO', dateStr: 'Data: -', status: 'Agendada' as const }
-          ],
-          activities: [],
-          examResults: [],
-          physicalAssessments: [],
-          mealGuides: [],
-          protocols: [],
-          marketplace: [],
-          documents: [],
-          financial: [],
-          terms: [],
-          referrals: []
-        };
-
-        // Salva na nuvem (Firestore)
-        if (isFirebaseConfigured() && db && uid) {
-          try {
-            const patientRef = doc(db, 'patients', uid);
-            await setDoc(patientRef, {
-              ...basePatientPayload,
-              termsAcceptedAt: serverTimestamp()
-            }, { merge: true });
-            console.info('🔥 [Vittáre Firestore] Documento do paciente provisionado com sucesso!');
-          } catch (dbErr) {
-            console.warn('⚠️ [Vittáre Firestore] Gravação na nuvem pausada, operando localmente:', dbErr);
-          }
-        }
-
-        // Salva no repositório local
-        await crmDataService.updatePatient(uid, basePatientPayload as any, 'Primeiro Acesso do Paciente');
-
-        // Lembrar dispositivo
-        if (rememberDevice) {
-          localStorage.setItem('vittare_remembered_email', cleanLogin);
-        } else {
-          localStorage.removeItem('vittare_remembered_email');
-        }
-
-        setAuthSuccess('Senha criada com sucesso! Entrando no portal...');
-        await switchPatient(uid);
-
-        setTimeout(() => {
-          setIsSubmitting(false);
-          onEnter();
-        }, 600);
-        return;
-
-      } catch (err: any) {
-        setIsSubmitting(false);
-        const msg = err?.message || '';
-        if (msg.includes('auth/weak-password')) {
-          setAuthError('Combinação não permitida. Por favor, escolha outra combinação.');
-        } else if (msg.includes('auth/invalid-email')) {
-          setAuthError('E-mail informado é inválido.');
-        } else {
-          setAuthError('Não foi possível concluir o cadastro no momento. Tente novamente.');
-        }
-        return;
-      }
-    }
-
-    // =========================================================================
-    // FLUXO B: ENTRAR (Login com Credenciais da Clínica ou Senha Definida)
-    // =========================================================================
+    // Fluxo de Autenticação com o Firebase Auth
     try {
-      // Tentativa 1: Firebase Auth Real
       if (isFirebaseConfigured() && auth) {
         try {
           let userCredential;
           try {
-            userCredential = await signInWithEmailAndPassword(auth, cleanLogin, formatAuthPassword(cleanSenha));
-          } catch {
+            // Prioriza a senha pura cadastrada diretamente no console do Firebase
             userCredential = await signInWithEmailAndPassword(auth, cleanLogin, cleanSenha);
+          } catch {
+            // Fallback para contas legadas criadas com sufixo
+            userCredential = await signInWithEmailAndPassword(auth, cleanLogin, formatAuthPassword(cleanSenha));
           }
           const uid = userCredential.user.uid;
 
@@ -308,7 +124,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
               await setDoc(patientRef, {
                 termsAccepted: true,
                 termsAcceptedAt: serverTimestamp(),
-                termsVersion: '1.0'
+                termsVersion: '2.0-CFN'
               }, { merge: true });
             } catch (dbUpErr) {
               console.warn('Atualização de termos no Firestore:', dbUpErr);
@@ -319,7 +135,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           crmDataService.updatePatient(uid, {
             termsAccepted: true,
             termsAcceptedAt: new Date().toISOString(),
-            termsVersion: '1.0'
+            termsVersion: '2.0-CFN'
           }, 'Aceite de Termos no Login');
 
           if (rememberDevice) {
@@ -341,13 +157,13 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         }
       }
 
-      // Tentativa 2: Busca na base local de pacientes disponíveis (ou senha mestre de teste)
+      // Tentativa 2: Busca na base local de pacientes disponíveis (ou senha mestre clínica de teste)
       let matchedPatient = availablePatients.find(
         p => p.email.toLowerCase() === cleanLogin.toLowerCase() ||
              p.name.toLowerCase() === cleanLogin.toLowerCase()
       );
 
-      // Se for a senha padrão clínica 'v123', associa ao template canônico
+      // Se for a senha padrão de teste 'v123', associa ao template canônico
       if (!matchedPatient && (cleanSenha === 'v123' || availablePatients.length > 0)) {
         matchedPatient = availablePatients[0];
       }
@@ -364,7 +180,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         const lifecycle = isTreatmentActive(matchedPatient);
         if (!lifecycle.isActive) {
           setIsSubmitting(false);
-          setAuthError(lifecycle.reason || 'Acesso Expirado. Entre em contato com a clínica.');
+          setAuthError(lifecycle.reason || 'Acesso Expirado. Entre em contato com seu nutricionista.');
           return;
         }
 
@@ -372,7 +188,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
         crmDataService.updatePatient(matchedPatient.id, {
           termsAccepted: true,
           termsAcceptedAt: new Date().toISOString(),
-          termsVersion: '1.0'
+          termsVersion: '2.0-CFN'
         }, 'Aceite de Termos no Login');
 
         if (rememberDevice) {
@@ -392,7 +208,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
       // Se não encontrou no Firebase nem na base local
       setIsSubmitting(false);
-      setAuthError('Credenciais não encontradas. Caso seja seu primeiro acesso, clique na aba "Primeiro Acesso".');
+      setAuthError('Credenciais não encontradas. Verifique o e-mail e a senha informados pelo seu nutricionista.');
 
     } catch (err: any) {
       setIsSubmitting(false);
@@ -446,12 +262,12 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           width: min(420px, 100%);
           display: flex;
           flex-direction: column;
-          gap: 22px;
+          gap: 24px;
           text-align: center;
           background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
           border: 1px solid var(--stroke);
           border-radius: 28px;
-          padding: 34px 26px 24px;
+          padding: 38px 28px 26px;
           backdrop-filter: blur(18px);
           -webkit-backdrop-filter: blur(18px);
           box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
@@ -508,65 +324,10 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           color: transparent;
         }
 
-        /* Seletor de Modo (Entrar vs Primeiro Acesso) */
-        .vc-tabs {
-          display: flex;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 14px;
-          padding: 4px;
-          gap: 4px;
-        }
-
-        .vc-tab-btn {
-          flex: 1;
-          padding: 8px 10px;
-          border: none;
-          border-radius: 10px;
-          font-family: 'Inter', sans-serif;
-          font-weight: 600;
-          font-size: 13.5px;
-          line-height: 1.25;
-          color: var(--muted);
-          background: transparent;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          min-height: 48px;
-        }
-
-        .vc-tab-btn.active {
-          color: #052e1b;
-          background: linear-gradient(135deg, #5eeaa0, var(--green-2));
-          font-weight: 700;
-          box-shadow: 0 4px 14px rgba(18, 183, 106, 0.3);
-        }
-
-        .vc-tab-btn:hover:not(.active) {
-          color: #ffffff;
-          background: rgba(255, 255, 255, 0.04);
-        }
-
-        .vc-info-banner {
-          background: rgba(74, 222, 128, 0.08);
-          border: 1px solid rgba(74, 222, 128, 0.25);
-          border-radius: 12px;
-          padding: 12px 14px;
-          text-align: center;
-          font-size: 17px;
-          font-style: italic;
-          line-height: 1.45;
-          color: #bbf7d0;
-        }
-
         .vc-form {
           display: flex;
           flex-direction: column;
-          gap: 15px;
+          gap: 16px;
           text-align: left;
         }
 
@@ -800,8 +561,8 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
         .vc-modal-text {
           font-weight: 600;
-          font-size: 19px;
-          line-height: 1.45;
+          font-size: 18px;
+          line-height: 1.5;
           color: var(--text);
         }
 
@@ -830,11 +591,39 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           background: rgba(255, 255, 255, 0.12);
         }
 
+        .vc-close-thumb {
+          width: 64px;
+          height: 64px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.08);
+          color: #e6edf3;
+          font-size: 34px;
+          line-height: 1;
+          cursor: pointer;
+          display: grid;
+          place-items: center;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .vc-close-thumb:hover {
+          color: #ffffff;
+          background: rgba(255, 255, 255, 0.16);
+          border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .vc-close-thumb:active {
+          transform: scale(0.94);
+        }
+
         /* Card Específico do Modal de Termos */
         .vc-terms-card {
           position: relative;
-          width: min(480px, 100%);
-          max-height: 82vh;
+          width: min(520px, 100%);
+          max-height: 85vh;
           display: flex;
           flex-direction: column;
           background: #0d1219;
@@ -850,9 +639,9 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           padding-right: 8px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 14px;
           font-size: 13.5px;
-          line-height: 1.55;
+          line-height: 1.6;
           color: #cbd5e1;
         }
       `}</style>
@@ -872,48 +661,11 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           </p>
         </header>
 
-        {/* Segmented Control: Button 1 (Primeiro Cadastro) e Button 2 (Já Tenho Login e Senha) */}
-        <div className="vc-tabs">
-          <button
-            type="button"
-            className={`vc-tab-btn ${authMode === 'register' ? 'active' : ''}`}
-            onClick={() => {
-              setAuthMode('register');
-              setAuthError(null);
-              setAuthSuccess(null);
-            }}
-          >
-            <span>Primeiro</span>
-            <span>Cadastro</span>
-          </button>
-          <button
-            type="button"
-            className={`vc-tab-btn ${authMode === 'login' ? 'active' : ''}`}
-            onClick={() => {
-              setAuthMode('login');
-              setAuthError(null);
-              setAuthSuccess(null);
-            }}
-          >
-            <span>Já Tenho</span>
-            <span>Login e Senha</span>
-          </button>
-        </div>
-
-        {/* Banner Informativo no Modo Primeiro Cadastro */}
-        {authMode === 'register' && (
-          <div className="vc-info-banner">
-            Cadastre-se com seu e-mail e senha com 4 caracteres sendo ( 1 letra acompanhada com 3 números).
-          </div>
-        )}
-
-        {/* Formulário Principal */}
+        {/* Formulário de Acesso Direto (Imagem 3) */}
         <form className="vc-form" onSubmit={handleSubmit}>
-          {/* Campo: E-mail / Login */}
+          {/* Campo: Login */}
           <div className="vc-group">
-            <label htmlFor="login">
-              {authMode === 'register' ? 'E-mail Cadastrado' : 'Login'}
-            </label>
+            <label htmlFor="login">Login</label>
             <div className="vc-field">
               <svg
                 className="vc-ic"
@@ -929,20 +681,21 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
               </svg>
               <input
                 id="login"
-                type="email"
+                type="text"
                 placeholder="seu email @"
                 autoComplete="username"
                 value={login}
-                onChange={e => setLogin(e.target.value)}
+                onChange={e => {
+                  setLogin(e.target.value);
+                  setAuthError(null);
+                }}
               />
             </div>
           </div>
 
           {/* Campo: Senha */}
           <div className="vc-group">
-            <label htmlFor="senha">
-              {authMode === 'register' ? 'Nova Senha (4 dígitos)' : 'Senha'}
-            </label>
+            <label htmlFor="senha">Senha</label>
             <div className="vc-field">
               <svg
                 className="vc-ic"
@@ -959,12 +712,14 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
               <input
                 id="senha"
                 type={showPassword ? 'text' : 'password'}
-                placeholder={authMode === 'register' ? 'ex: v148' : '••••••••'}
-                autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
-                maxLength={authMode === 'register' ? 4 : 20}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                maxLength={20}
                 value={senha}
-                onChange={e => handleSenhaChange(e.target.value)}
-                onBlur={handleSenhaBlur}
+                onChange={e => {
+                  setSenha(e.target.value);
+                  setAuthError(null);
+                }}
               />
               <button
                 type="button"
@@ -988,63 +743,10 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
             </div>
           </div>
 
-          {/* Campo Adicional no Primeiro Acesso: Confirmar Nova Senha */}
-          {authMode === 'register' && (
-            <div className="vc-group">
-              <label htmlFor="confirmSenha">Confirmar Nova Senha</label>
-              <div className="vc-field">
-                <svg
-                  className="vc-ic"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <input
-                  id="confirmSenha"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  placeholder="repita a senha"
-                  autoComplete="new-password"
-                  maxLength={4}
-                  value={confirmSenha}
-                  onChange={e => setConfirmSenha(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="vc-eye"
-                  onClick={() => setShowConfirmPassword(prev => !prev)}
-                  aria-label={showConfirmPassword ? 'Ocultar confirmação' : 'Mostrar confirmação'}
-                >
-                  {!showConfirmPassword ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Mensagem de Erro de Validação */}
+          {/* Mensagem de Erro */}
           {authError && (
             <div className="bg-[#b42318]/25 border border-[#b42318]/60 text-[#ff9999] p-3.5 rounded-xl text-[17px] italic font-medium text-center leading-relaxed animate-in fade-in duration-200">
               {authError}
-            </div>
-          )}
-
-          {/* Mensagem de Sucesso */}
-          {authSuccess && (
-            <div className="bg-[#15803d]/25 border border-[#16a34a]/60 text-[#86efac] p-3.5 rounded-xl text-[17px] italic font-medium text-center leading-relaxed animate-in fade-in duration-200">
-              {authSuccess}
             </div>
           )}
 
@@ -1059,19 +761,17 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
               <span>Lembrar dispositivo</span>
             </label>
 
-            {authMode === 'login' && (
-              <a 
-                className="vc-forgot-link" 
-                onClick={handleOpenModal}
-                role="button"
-                tabIndex={0}
-              >
-                Esqueci minha senha
-              </a>
-            )}
+            <a 
+              className="vc-forgot-link" 
+              onClick={handleOpenModal}
+              role="button"
+              tabIndex={0}
+            >
+              Esqueci minha senha
+            </a>
           </div>
 
-          {/* Linha Obrigatória de Aceite dos Termos de Uso (LGPD) */}
+          {/* Linha Obrigatória de Aceite dos Termos de Uso (LGPD / CFN) */}
           <div className="vc-terms-row">
             <input
               type="checkbox"
@@ -1103,9 +803,7 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <span>Processando…</span>
-            ) : authMode === 'register' ? (
-              <span>Criar Senha e Acessar</span>
+              <span>Entrando…</span>
             ) : (
               <span>Entrar</span>
             )}
@@ -1128,27 +826,42 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           if (e.target === e.currentTarget) handleCloseModal();
         }}
       >
-        <div className="vc-modal-card" role="dialog" aria-modal="true">
-          <button
-            className="vc-close"
-            onClick={handleCloseModal}
-            aria-label="Fechar"
-          >
-            ×
-          </button>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '10px 0 6px', textAlign: 'center' }}>
-            <p className="vc-modal-text">
-              Entre no seu <span>e-mail</span>.<br />
-              Encaminhamos para o e-mail<br />
-              cadastrado inicial as instruções<br />
-              para seu acesso seguro.
+        <div 
+          className="vc-modal-card" 
+          role="dialog" 
+          aria-modal="true"
+          style={{ textAlign: 'left', padding: '28px 24px 20px', maxWidth: '440px' }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', color: '#cbd5e1', fontSize: '15px', lineHeight: '1.55' }}>
+            <p>
+              Consulte seu histórico de mensagens no <span style={{ color: '#4ade80', fontWeight: 600 }}>WhatsApp</span> e localize os dados de acesso enviados pela Vittáre após a contratação do serviço.
             </p>
+            <p>
+              Caso não encontre a mensagem, você poderá solicitar um novo login e senha.
+            </p>
+            <p>
+              <strong style={{ color: '#facc15', fontWeight: 700 }}>Atenção:</strong> Solicite novos dados de acesso somente se realmente não localizar a mensagem original.
+            </p>
+            <p style={{ color: '#94a3b8', fontSize: '14px', margin: '4px 0 0' }}>
+              Agradecemos pela confiança. Estamos à disposição para auxiliá-lo sempre que necessário.
+            </p>
+          </div>
+
+          {/* Botão de Fechar expandido (dobro do tamanho) no canto inferior direito para o polegar */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <button
+              type="button"
+              className="vc-close-thumb"
+              onClick={handleCloseModal}
+              aria-label="Fechar mensagem de recuperação"
+            >
+              ×
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Modal 2: Termos de Uso e Proteção de Dados (LGPD) */}
+      {/* Modal 2: Termos de Uso e Sigilo Profissional e Proteção de Dados (Fiel CFN / LGPD) */}
       <div
         className={`vc-modal ${isTermsModalOpen ? 'vc-open' : ''}`}
         aria-hidden={!isTermsModalOpen}
@@ -1158,8 +871,8 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
       >
         <div className="vc-terms-card" role="dialog" aria-modal="true">
           <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
-            <h3 className="font-semibold text-lg text-white font-['Sora',sans-serif]">
-              Termos de Uso & Proteção de Dados
+            <h3 className="font-semibold text-[17px] text-white font-['Sora',sans-serif] leading-snug">
+              Termos de Uso e Sigilo Profissional e Proteção de Dados
             </h3>
             <button
               className="vc-close"
@@ -1173,17 +886,26 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
           <div className="vc-terms-scroll">
             <p>
-              <strong>1. Sigilo Médico e Prontuário Clínico:</strong> O portal Vittáre Acess™ é uma extensão digital do seu prontuário clínico. Todas as informações aqui contidas estão resguardadas pelo sigilo profissional médico (Código de Ética Médica e Resolução CFM nº 1.821/2007).
+              <strong>1. Sigilo Profissional Nutricional:</strong> As informações, avaliações, registros clínicos, orientações e prescrições disponibilizados neste portal são protegidos pelo sigilo profissional do nutricionista, conforme o Art. 20 do Código de Ética e de Conduta do Nutricionista (Resolução CFN nº 599/2018). O acesso a essas informações é restrito e sua divulgação somente ocorrerá nas hipóteses legalmente admitidas.
             </p>
             <p>
-              <strong>2. Conformidade com a LGPD (Lei nº 13.709/2018):</strong> Seus dados de saúde (dados sensíveis) são tratados exclusivamente para a finalidade de tutela da sua saúde, evolução nutricional, prescrições e acompanhamento integrativo.
+              <strong>2. Proteção de Dados Pessoais (LGPD):</strong> Seus dados pessoais e dados pessoais sensíveis, especialmente informações relacionadas à saúde, são tratados em conformidade com a Lei nº 13.709/2018 (LGPD), para finalidades relacionadas à assistência nutricional, ao acompanhamento clínico, à elaboração de estratégias individualizadas e à continuidade dos serviços profissionais, observadas as bases legais aplicáveis.
             </p>
             <p>
-              <strong>3. Segurança e Criptografia em Nuvem:</strong> Seus registros são transmitidos por conexões criptografadas (TLS 1.3 / HTTPS) e armazenados no Google Cloud Firestore com políticas Zero Trust e isolamento estrito de conta.
+              <strong>3. Prontuário Clínico e Segurança das Informações:</strong> Os registros clínicos e administrativos são mantidos em ambiente digital, com medidas técnicas e administrativas destinadas a proteger a confidencialidade, a integridade e a disponibilidade das informações, conforme a legislação aplicável e a Resolução CFN nº 594/2017. O acesso é restrito às pessoas autorizadas, respeitando o sigilo profissional e a proteção de dados.
             </p>
             <p>
-              <strong>4. Responsabilidade de Acesso:</strong> Sua senha de 4 dígitos é pessoal, sigilosa e intransferível. Não a compartilhe com terceiros. Ao encerrar o uso em dispositivos públicos ou de terceiros, utilize sempre o botão "Sair".
+              <strong>4. Atendimento Nutricional Online:</strong> O atendimento a distância é realizado por profissional nutricionista com inscrição ativa no Conselho Regional de Nutricionistas (CRN) e cadastro no e-Nutricionista, conforme exigência da Resolução CFN nº 760/2023. A modalidade observa os princípios éticos, a privacidade e a confidencialidade das informações compartilhadas durante a Telenutrição.
             </p>
+            <p>
+              <strong>5. Responsabilidade de Acesso:</strong> Suas credenciais de acesso são pessoais e intransferíveis. Não compartilhe sua senha com terceiros. Evite acessar o portal em dispositivos públicos ou compartilhados e, ao finalizar a utilização, encerre sua sessão pelo botão "Sair". Caso identifique acesso não autorizado, comunique imediatamente ao responsável pelo atendimento.
+            </p>
+            <p>
+              <strong>6. Direitos sobre seus Dados:</strong> Você poderá solicitar informações sobre o tratamento de seus dados pessoais, bem como exercer os direitos previstos na LGPD, incluindo acesso, correção e demais solicitações legalmente aplicáveis, mediante os canais de contato disponibilizados pelo responsável pelo tratamento.
+            </p>
+            <div className="pt-2 border-t border-white/10 text-[13px] text-[#86efac] font-medium">
+              <strong>Responsável profissional:</strong> João Paulo Gonçalves Cecato – Nutricionista – CRN-20100054.
+            </div>
           </div>
 
           <button

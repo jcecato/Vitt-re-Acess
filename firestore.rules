@@ -10,23 +10,36 @@ service cloud.firestore {
 
     // Regra de Isolamento Determinístico do Documento do Paciente
     match /patients/{userId} {
-      // Leitura permitida apenas para o paciente proprietário autenticado (request.auth.uid == userId)
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // Leitura permitida para o paciente proprietário autenticado (por UID ou por E-mail correspondente)
+      allow read: if request.auth != null && (
+        request.auth.uid == userId ||
+        (request.auth.token.email != null && (
+          request.auth.token.email.lower() == userId.lower() ||
+          (resource != null && resource.data.email != null && request.auth.token.email.lower() == resource.data.email.lower())
+        ))
+      );
 
-      // Criação inicial no Primeiro Acesso permitida apenas para o próprio usuário autenticado
-      allow create: if request.auth != null && request.auth.uid == userId;
+      // Criação inicial permitida para o próprio usuário autenticado
+      allow create: if request.auth != null && (
+        request.auth.uid == userId ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
+      );
 
       // Permite atualização (update) apenas de campos de consentimento/sessão do cliente,
       // impedindo que o paciente altere nós clínicos protegidos (exames, evolução, fórmulas, notas).
-      allow update: if request.auth != null 
-                    && request.auth.uid == userId
-                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-                      'examsRequested', 'examResults', 'protocols', 'mealGuides', 'professionalNotes', 'crmGeneralNotes', 'progress'
-                    ]);
+      allow update: if request.auth != null && (
+        request.auth.uid == userId ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
+      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'examsRequested', 'examResults', 'protocols', 'mealGuides', 'professionalNotes', 'crmGeneralNotes', 'progress'
+      ]);
 
       // Subcoleções filhas do prontuário com leitura isolada
       match /{allChildren=**} {
-        allow read: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && (
+          request.auth.uid == userId ||
+          (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
+        );
         allow write: if false;
       }
     }

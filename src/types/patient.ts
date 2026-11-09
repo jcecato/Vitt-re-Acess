@@ -201,6 +201,10 @@ export interface PatientProfile {
   lastSyncTimestamp: string;
   syncedByProgram: string;
 
+  // Dados clínicos integrativos e circadianos (BioSync™ e Cronobiologia)
+  metabolicAxes?: any[];
+  chrononutrition?: any[];
+
   // Ciclo de vida de tratamento e aceite de termos (Segurança e Contrato LGPD)
   startDate?: string;
   endDate?: string;

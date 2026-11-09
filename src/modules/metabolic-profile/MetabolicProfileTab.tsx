@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Target } from 'lucide-react';
+import { Target, Clock } from 'lucide-react';
 import { PatientProfile } from '../../types/patient';
 
 interface MetabolicProfileTabProps {
@@ -174,15 +174,19 @@ const describeArc = (cx: number, cy: number, r: number, a0: number, a1: number):
   return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArcFlag} 0 ${ex} ${ey}`;
 };
 
-export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patient: _patient }) => {
-  const eixos: EixoMetabolico[] = DEFAULT_EIXOS;
+export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patient }) => {
+  const eixos: EixoMetabolico[] = (patient as any)?.metabolicAxes && Array.isArray((patient as any).metabolicAxes) && (patient as any).metabolicAxes.length > 0
+    ? (patient as any).metabolicAxes
+    : [];
   const [modalAxis, setModalAxis] = useState<EixoMetabolico | null>(null);
 
   // Referência para rolagem suave automática no relógio
   const clockContainerRef = useRef<HTMLDivElement>(null);
 
   // Estado da Cronobiologia
-  const cats: CategoriaCronobiologica[] = DEFAULT_CATS;
+  const cats: CategoriaCronobiologica[] = (patient as any)?.chrononutrition && Array.isArray((patient as any).chrononutrition) && (patient as any).chrononutrition.length > 0
+    ? (patient as any).chrononutrition
+    : [];
   const [selectedCatIndex, setSelectedCatIndex] = useState<number>(0);
 
   // Função para selecionar categoria e rolar suavemente para o relógio
@@ -195,7 +199,7 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
   };
 
   // Categoria cronobiológica ativa
-  const activeCat = cats[selectedCatIndex] || cats[0];
+  const activeCat = cats.length > 0 ? (cats[selectedCatIndex] || cats[0]) : null;
 
   // Geometria da Teia de Aranha (raio 170px para visibilidade sênior)
   const radarCx = 210;
@@ -203,9 +207,11 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
   const radarRadius = 170;
 
   // Coordenadas do polígono de dados do Radar
-  const radarPolygonPoints = eixos
-    .map((e, i) => polarToCartesian(radarCx, radarCy, (radarRadius * e.v) / 10, i * 45).join(','))
-    .join(' ');
+  const radarPolygonPoints = eixos.length > 0
+    ? eixos
+        .map((e, i) => polarToCartesian(radarCx, radarCy, (radarRadius * e.v) / 10, i * 45).join(','))
+        .join(' ')
+    : '';
 
   // Geometria Ampliada do Relógio Analógico de 12 Horas (+10% ampliação, viewBox: 0 0 410 480)
   const cronoCx = 205;
@@ -232,6 +238,19 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
       {/* =========================================================================
           DIV 1: PERFIL METABÓLICO (TEIA DE ARANHA AMPLIADA E INTERATIVA)
           ========================================================================= */}
+      {eixos.length === 0 ? (
+        <section className="bg-white/[0.04] border border-white/20 rounded-[24px] p-6 text-center shadow-xl">
+          <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-3">
+            <Target className="w-6 h-6 text-[#5eea8f]" />
+          </div>
+          <div className="text-[20px] font-semibold text-white mb-1.5 font-['Cormorant_Garamond',serif]">
+            Mapa Funcional em Preparação
+          </div>
+          <p className="text-[15px] text-[#a5a4b8] leading-relaxed max-w-[320px] mx-auto">
+            Seus eixos metabólicos e funcionais serão mapeados pelo seu nutricionista após a conclusão da sua avaliação individualizada.
+          </p>
+        </section>
+      ) : (
       <section className="bg-[#121722] border-[1px] border-white/50 rounded-[24px] p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
         {/* Instrução clara e amigável para o idoso (fonte 18px) */}
         <div className="bg-[#2fd575]/10 border border-[#2fd575]/25 rounded-xl px-4 py-3 flex items-center gap-3 text-[#5eeaa0]">
@@ -390,6 +409,7 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
           </p>
         </div>
       </section>
+      )}
 
 
       {/* =========================================================================
@@ -401,6 +421,19 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
       {/* =========================================================================
           DIV 2: CRONOBIOLOGIA (MOSTRADOR ANALÓGICO DE 12 HORAS EXPANDIDO)
           ========================================================================= */}
+      {cats.length === 0 ? (
+        <section className="bg-white/[0.04] border border-white/20 rounded-[24px] p-6 text-center shadow-xl">
+          <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-3">
+            <Clock className="w-6 h-6 text-[#5eea8f]" />
+          </div>
+          <div className="text-[20px] font-semibold text-white mb-1.5 font-['Cormorant_Garamond',serif]">
+            Rotina Biológica em Definição
+          </div>
+          <p className="text-[15px] text-[#a5a4b8] leading-relaxed max-w-[320px] mx-auto">
+            Seus horários ideais de refeição, descanso e atividade serão sincronizados pelo seu nutricionista com base no seu ritmo circadiano.
+          </p>
+        </section>
+      ) : (
       <section className="bg-[#121722] border-[1px] border-white/50 rounded-[24px] p-5 sm:p-6 flex flex-col gap-4 shadow-xl">
         {/* Cabeçalho da DIV 2 (Título consolidado sem separador residual) */}
         <div className="flex items-center gap-2.5 flex-wrap">
@@ -531,25 +564,27 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
             })}
 
             {/* Arcos ativos da categoria selecionada mapeados no ciclo de 12 horas */}
-            <g key={`arcs-12-${selectedCatIndex}`}>
-              {activeCat.w12.map((windowRange, wIdx) => {
-                const a0 = ((windowRange[0] % 12) * 30) + 2;
-                const a1 = ((windowRange[1] % 12) * 30) - 2;
-                const pathD = describeArc(cronoCx, cronoCy, cronoTrackR, a0, a1);
+            {activeCat && (
+              <g key={`arcs-12-${selectedCatIndex}`}>
+                {activeCat.w12.map((windowRange, wIdx) => {
+                  const a0 = ((windowRange[0] % 12) * 30) + 2;
+                  const a1 = ((windowRange[1] % 12) * 30) - 2;
+                  const pathD = describeArc(cronoCx, cronoCy, cronoTrackR, a0, a1);
 
-                return (
-                  <path
-                    key={`arc-12-${wIdx}`}
-                    d={pathD}
-                    fill="none"
-                    stroke={activeCat.c}
-                    strokeWidth="16"
-                    strokeLinecap="round"
-                    style={{ filter: `drop-shadow(0 0 10px ${activeCat.c})` }}
-                  />
-                );
-              })}
-            </g>
+                  return (
+                    <path
+                      key={`arc-12-${wIdx}`}
+                      d={pathD}
+                      fill="none"
+                      stroke={activeCat.c}
+                      strokeWidth="16"
+                      strokeLinecap="round"
+                      style={{ filter: `drop-shadow(0 0 10px ${activeCat.c})` }}
+                    />
+                  );
+                })}
+              </g>
+            )}
 
             {/* Ponteiro e Indicador do Momento Atual (14:30 = 2h30 = 75 graus) */}
             <line
@@ -682,6 +717,7 @@ export const MetabolicProfileTab: React.FC<MetabolicProfileTabProps> = ({ patien
           })}
         </div>
       </section>
+      )}
 
       {/* Espaçador final para rolagem suave */}
       <div className="h-6" aria-hidden="true" />

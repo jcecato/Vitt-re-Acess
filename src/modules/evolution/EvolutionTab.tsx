@@ -128,112 +128,25 @@ export interface CheckInRecord {
   answers?: { [questionId: string]: AnswerValue };
 }
 
-// Histórico inicial baseado fielmente nos dados das imagens 2, 3 e 4
-const SEED_CHECKINS: CheckInRecord[] = [
-  {
-    id: 'chk_1',
-    dateStr: '18/08/2026',
-    periodLabel: '04/08 a 18/08/2026',
-    dayLabel: 'D1',
-    ivp: 65,
-    axisScores: {
-      cognitiva: 68,
-      emocional: 65,
-      digestivo: 70,
-      forca: 60,
-      sono: 65,
-      apetite: 70,
-      hidratacao: 62,
-      dor: 60
-    }
-  },
-  {
-    id: 'chk_2',
-    dateStr: '02/09/2026',
-    periodLabel: '19/08 a 02/09/2026',
-    dayLabel: 'D15',
-    ivp: 68,
-    deltaPoints: 3,
-    axisScores: {
-      cognitiva: 72,
-      emocional: 68,
-      digestivo: 75,
-      forca: 64,
-      sono: 70,
-      apetite: 74,
-      hidratacao: 65,
-      dor: 66
-    }
-  },
-  {
-    id: 'chk_3',
-    dateStr: '17/09/2026',
-    periodLabel: '03/09 a 17/09/2026',
-    dayLabel: 'D30',
-    ivp: 70,
-    deltaPoints: 2,
-    axisScores: {
-      cognitiva: 75,
-      emocional: 70,
-      digestivo: 80,
-      forca: 65,
-      sono: 75,
-      apetite: 80,
-      hidratacao: 68,
-      dor: 70
-    }
-  },
-  {
-    id: 'chk_4',
-    dateStr: '02/10/2026',
-    periodLabel: '18/09 a 02/10/2026',
-    dayLabel: 'D45',
-    ivp: 73,
-    deltaPoints: 3,
-    axisScores: {
-      cognitiva: 78,
-      emocional: 72,
-      digestivo: 85,
-      forca: 66,
-      sono: 80,
-      apetite: 85,
-      hidratacao: 70,
-      dor: 74
-    }
-  },
-  {
-    id: 'chk_5',
-    dateStr: '17/10/2026',
-    periodLabel: '03/10 a 17/10/2026',
-    dayLabel: 'D60',
-    ivp: 75,
-    deltaPoints: 4,
-    axisScores: {
-      cognitiva: 82,
-      emocional: 75,
-      digestivo: 91,
-      forca: 68,
-      sono: 85,
-      apetite: 90,
-      hidratacao: 72,
-      dor: 78
-    }
-  }
-];
+// Histórico de avaliações: inicia limpo em produção
+const SEED_CHECKINS: CheckInRecord[] = [];
 
 export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
-  const storageKey = `vittare_checkins_v2_${patient.id}`;
+  const storageKey = `vittare_checkins_v3_${patient.id}`;
 
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
       }
     } catch {
       // fallback
     }
-    return SEED_CHECKINS;
+    return [];
   });
 
   // Modal 9:16 do Questionário
@@ -349,11 +262,13 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
   }, [checkIns, storageKey]);
 
   // Último check-in realizado
-  const latestCheckIn = checkIns[checkIns.length - 1] ?? SEED_CHECKINS[SEED_CHECKINS.length - 1];
+  const latestCheckIn = checkIns.length > 0 ? checkIns[checkIns.length - 1] : null;
 
   // Cálculo de variação em relação ao registro anterior
   const previousCheckIn = checkIns.length > 1 ? checkIns[checkIns.length - 2] : null;
-  const currentDelta = previousCheckIn ? latestCheckIn.ivp - previousCheckIn.ivp : (latestCheckIn.deltaPoints ?? 4);
+  const currentDelta = latestCheckIn && previousCheckIn 
+    ? latestCheckIn.ivp - previousCheckIn.ivp 
+    : (latestCheckIn?.deltaPoints ?? 0);
 
   // Manipulador de resposta de pergunta
   const handleSelectAnswer = (qId: string, val: AnswerValue) => {
@@ -454,7 +369,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
       axisScoresResult[r.axisId] = r.score ?? 0;
     });
 
-    const delta = ivp - latestCheckIn.ivp;
+    const delta = latestCheckIn ? (ivp - latestCheckIn.ivp) : 0;
 
     const newRecord: CheckInRecord = {
       id: `chk_${Date.now()}`,
@@ -473,7 +388,10 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
 
   // Gerador de Comentário da IA conforme as regras da Seção 6
   const getAiFeedback = () => {
-    if (checkIns.length <= 1) {
+    if (checkIns.length === 0) {
+      return 'Inicie seu acompanhamento realizando sua primeira avaliação periódica de bem-estar no cartão acima.';
+    }
+    if (checkIns.length === 1) {
       return 'Este é o seu primeiro registro. Ele marca o ponto de partida do nosso acompanhamento. Vamos observar suas percepções ao longo das próximas semanas, respeitando seu ritmo.';
     }
     if (currentDelta > 0) {
@@ -535,8 +453,21 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
       {/* ============================================================== */}
       {/* AVALIAÇÕES EM ACORDEON EXCLUSIVO (Iniciam todas fechadas)     */}
       {/* ============================================================== */}
-      <div className="space-y-4">
-        {checkIns.slice().reverse().map((item) => {
+      {checkIns.length === 0 ? (
+        <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-6 text-center shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-2.5">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div className="text-[18px] font-semibold text-white mb-1">
+            Nenhum check-in anterior realizado
+          </div>
+          <p className="text-[14px] text-[#a5a4b8] leading-relaxed max-w-[280px] mx-auto">
+            Toque em "Iniciar" no card acima para realizar a sua primeira avaliação periódica de bem-estar.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {checkIns.slice().reverse().map((item) => {
           const isOpen = openCheckInId === item.id;
           const checkInIndex = checkIns.findIndex(c => c.id === item.id);
           const checkInNumber = checkInIndex >= 0 ? checkInIndex + 1 : 1;
@@ -653,11 +584,13 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* CURVA DE VITALIDADE E FUNCIONALIDADES PERCEBIDAS (Fiel à Imagem 3) */}
       {/* ============================================================== */}
+      {checkIns.length > 0 && (
       <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-4 shadow-sm">
         
         {/* Cabeçalho do Gráfico */}
@@ -771,8 +704,8 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
             );
           })()}
         </div>
-
       </div>
+      )}
 
       {/* ============================================================== */}
       {/* COMENTÁRIO AUTOMÁTICO DA IA (Seção 6 e 7)                       */}

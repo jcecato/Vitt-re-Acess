@@ -1,7 +1,18 @@
 import { PatientProfile } from '../types/patient';
 import { INITIAL_PATIENTS } from '../patients/defaultPatient';
-import { db, isFirebaseConfigured } from '../config/firebase';
-import { doc, getDoc, setDoc, onSnapshot, type DocumentSnapshot } from 'firebase/firestore';
+import { db, auth, isFirebaseConfigured } from '../config/firebase';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  onSnapshot, 
+  collection, 
+  query, 
+  where, 
+  limit, 
+  getDocs, 
+  type DocumentSnapshot 
+} from 'firebase/firestore';
 
 const STORAGE_KEY = 'vittare_patients_store_v12';
 
@@ -17,18 +28,51 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
     return fallback;
   }
 
+  // Nome inteligente: se o payload não trouxe nome ou veio 'Paciente', tenta displayName do Auth ou formata a partir do e-mail
+  const derivedName = (() => {
+    if (typeof raw.name === 'string' && raw.name.trim() && raw.name !== 'Paciente') {
+      return raw.name.trim();
+    }
+    if (auth?.currentUser?.displayName && auth.currentUser.displayName.trim()) {
+      return auth.currentUser.displayName.trim();
+    }
+    const emailToUse = (typeof raw.email === 'string' && raw.email) || auth?.currentUser?.email;
+    if (emailToUse && emailToUse.includes('@')) {
+      const username = emailToUse.split('@')[0].replace(/[._-]/g, ' ');
+      return username
+        .split(' ')
+        .filter(Boolean)
+        .map((part: string) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return fallback.name || 'Paciente';
+  })();
+
+  const derivedInitials = (() => {
+    if (typeof raw.initials === 'string' && raw.initials.trim()) {
+      return raw.initials.trim().toUpperCase();
+    }
+    if (derivedName && derivedName !== 'Paciente') {
+      const parts = derivedName.split(' ').filter(Boolean);
+      return parts.slice(0, 2).map((p: string) => p[0].toUpperCase()).join('');
+    }
+    return fallback.initials || 'PV';
+  })();
+
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : fallback.id,
-    name: typeof raw.name === 'string' && raw.name ? raw.name : fallback.name,
-    initials: typeof raw.initials === 'string' && raw.initials ? raw.initials : fallback.initials,
+    name: derivedName,
+    initials: derivedInitials,
     avatarUrl: raw.avatarUrl || fallback.avatarUrl || '',
     lastAccess: raw.lastAccess || fallback.lastAccess,
-    email: typeof raw.email === 'string' ? raw.email : fallback.email,
+    email: typeof raw.email === 'string' ? raw.email : (auth?.currentUser?.email || fallback.email),
     pin: typeof raw.pin === 'string' ? raw.pin : fallback.pin,
     status: raw.status || fallback.status,
     activeDays: typeof raw.activeDays === 'number' ? raw.activeDays : fallback.activeDays,
-    daysToComplete: typeof raw.daysToComplete === 'number' ? raw.daysToComplete : fallback.daysToComplete,
-    totalDays: typeof raw.totalDays === 'number' ? raw.totalDays : fallback.totalDays,
+    daysToComplete: typeof raw.daysToComplete === 'number' && raw.daysToComplete > 0 
+      ? raw.daysToComplete 
+      : (raw.endDate ? Math.max(0, Math.ceil((new Date(raw.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : (fallback.daysToComplete || 120)),
+    totalDays: typeof raw.totalDays === 'number' && raw.totalDays > 0 ? raw.totalDays : (fallback.totalDays || 120),
     nextConsultationDate: raw.nextConsultationDate || fallback.nextConsultationDate,
     
     progress: {
@@ -61,12 +105,46 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
     },
 
     activities: Array.isArray(raw.activities) ? raw.activities : (fallback.activities || []),
-    consultations: Array.isArray(raw.consultations) ? raw.consultations : (fallback.consultations || []),
+    consultations: Array.isArray(raw.consultations)
+      ? raw.consultations.map((c: any, idx: number) => ({
+          id: c.id || `cons-${idx + 1}`,
+          title: c.title || c.sessionTitle || `${idx + 1}° SESSÃO`,
+          dateStr: c.dateStr || (c.date && c.time ? `${c.date.includes('-') ? c.date.split('-').reverse().join('/') : c.date} às ${c.time}` : (c.date || 'Data: -')),
+          duration: c.duration,
+          status: c.status || 'Agendada',
+          pdfAvailable: Boolean(c.pdfAvailable),
+          audioAvailable: Boolean(c.audioAvailable),
+          videoAvailable: Boolean(c.videoAvailable || c.meetingUrl),
+          audioNotes: c.audioNotes || c.summary
+        }))
+      : (fallback.consultations || []),
     examsRequested: raw.examsRequested && typeof raw.examsRequested === 'object' && !Array.isArray(raw.examsRequested) 
       ? raw.examsRequested 
       : (fallback.examsRequested || { id: 'req-1', title: 'Painel Integrativo', dateStr: 'Aguardando' }),
     examResults: Array.isArray(raw.examResults) ? raw.examResults : (fallback.examResults || []),
-    examBatches: Array.isArray(raw.examBatches) ? raw.examBatches : (fallback.examBatches || []),
+    examBatches: (() => {
+      if (Array.isArray(raw.examBatches)) {
+        return raw.examBatches.map((b: any, bIdx: number) => ({
+          id: b.id || `batch-${bIdx + 1}`,
+          title: b.title || `Painel Laboratorial ${bIdx + 1}`,
+          dateStr: b.dateStr || b.batchDate || new Date().toLocaleDateString('pt-BR'),
+          status: b.status || 'Disponível',
+          pdfAvailable: Boolean(b.pdfAvailable || b.laudoPdfUrl),
+          results: Array.isArray(b.results)
+            ? b.results
+            : (Array.isArray(b.exams)
+                ? b.exams.map((e: any, eIdx: number) => ({
+                    id: e.id || `exam-${eIdx + 1}`,
+                    name: e.name || e.analyte || 'Biomarcador',
+                    value: String(e.value ?? ''),
+                    reference: e.reference || '',
+                    status: (e.status?.toLowerCase() === 'normal' || e.status?.toLowerCase() === 'ok') ? 'ok' : 'atenção'
+                  }))
+                : [])
+        }));
+      }
+      return fallback.examBatches || [];
+    })(),
     biomarkerComparisons: Array.isArray(raw.biomarkerComparisons) ? raw.biomarkerComparisons : (fallback.biomarkerComparisons || []),
     physicalAssessments: Array.isArray(raw.physicalAssessments) ? raw.physicalAssessments : (fallback.physicalAssessments || []),
     physicalAssessmentComparisons: Array.isArray(raw.physicalAssessmentComparisons) ? raw.physicalAssessmentComparisons : (fallback.physicalAssessmentComparisons || []),
@@ -75,8 +153,57 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
     marketplace: Array.isArray(raw.marketplace) ? raw.marketplace : (fallback.marketplace || []),
     documents: Array.isArray(raw.documents) ? raw.documents : (fallback.documents || []),
     financial: Array.isArray(raw.financial) ? raw.financial : (fallback.financial || []),
-    terms: Array.isArray(raw.terms) ? raw.terms : (fallback.terms || []),
+    terms: (() => {
+      const rawTerms = raw.terms || raw.agreementTerms || raw.termoAcordo || raw.termos;
+      if (Array.isArray(rawTerms) && rawTerms.length > 0) {
+        return rawTerms.map((t: any, idx: number) => ({
+          id: t.id || `term-${idx + 1}`,
+          name: t.name || t.title || t.documentName || 'Termo de Compromisso Clínico',
+          dateStr: t.dateStr || t.date || new Date().toLocaleDateString('pt-BR'),
+          hasPdf: Boolean(t.hasPdf || t.pdfUrl),
+          content: t.content || t.text || ''
+        }));
+      }
+      return fallback.terms || [];
+    })(),
     referrals: Array.isArray(raw.referrals) ? raw.referrals : (fallback.referrals || []),
+
+    metabolicAxes: Array.isArray(raw.metabolicAxes)
+      ? raw.metabolicAxes
+      : (Array.isArray(raw.functionalAxes) ? raw.functionalAxes : []),
+
+    chrononutrition: (() => {
+      const rawCrono = raw.chrononutrition || raw.chrononutritionSchedule || raw.cronobiologySchedule;
+      if (Array.isArray(rawCrono) && rawCrono.length > 0) {
+        if (rawCrono[0]?.periodo || rawCrono[0]?.horario) {
+          const colors = ['#2fd575', '#e8930c', '#22d3ee', '#38bdf8', '#a78bfa'];
+          return rawCrono.map((item: any, i: number) => {
+            let w12: [number, number][] = [[8, 9.5]];
+            if (typeof item.horario === 'string' && item.horario.includes('-')) {
+              const parts = item.horario.split('-').map((p: string) => p.trim());
+              const parseH = (s: string) => {
+                const [h, m] = s.split(':').map(Number);
+                return (h || 0) + ((m || 0) / 60);
+              };
+              if (parts.length === 2) {
+                const h0 = parseH(parts[0]);
+                const h1 = parseH(parts[1]);
+                w12 = [[(h0 % 12) || 12, (h1 % 12) || 12]];
+              }
+            }
+            return {
+              n: item.periodo || `Período ${i + 1}`,
+              c: colors[i % colors.length],
+              horarios: [item.horario || ''],
+              w12,
+              comentario: item.foco || ''
+            };
+          });
+        }
+        return rawCrono;
+      }
+      return [];
+    })(),
 
     lastSyncTimestamp: raw.lastSyncTimestamp || fallback.lastSyncTimestamp || new Date().toISOString(),
     syncedByProgram: raw.syncedByProgram || fallback.syncedByProgram || 'CRM Vittáre',
@@ -193,8 +320,35 @@ class CrmDataService {
 
     if (isFirebaseConfigured() && db) {
       try {
-        const ref = doc(db, 'patients', patientId);
-        const snapshot = await getDoc(ref);
+        // 1. Busca Primária: Documento nomeado pelo UID do Firebase Auth (/patients/{uid})
+        let ref = doc(db, 'patients', patientId);
+        let snapshot = await getDoc(ref);
+
+        // 2. Busca Secundária (Fallback): Caso o CRM tenha gravado o documento com o E-mail como ID (/patients/{email})
+        const currentUserEmail = auth?.currentUser?.email?.toLowerCase().trim();
+        if (!snapshot.exists() && currentUserEmail) {
+          const emailDocRef = doc(db, 'patients', currentUserEmail);
+          const emailDocSnap = await getDoc(emailDocRef);
+          if (emailDocSnap.exists()) {
+            snapshot = emailDocSnap;
+          } else {
+            // 3. Busca Terciária: Query onde o campo 'email' é igual ao e-mail autenticado
+            try {
+              const q = query(
+                collection(db, 'patients'), 
+                where('email', '==', currentUserEmail), 
+                limit(1)
+              );
+              const querySnap = await getDocs(q);
+              if (!querySnap.empty) {
+                snapshot = querySnap.docs[0];
+              }
+            } catch (qErr) {
+              console.warn("Query secundária por e-mail no Firestore:", qErr);
+            }
+          }
+        }
+
         if (snapshot.exists()) {
           const rawRemote = snapshot.data();
           const remoteData = sanitizePatientPayload(rawRemote, patientId);
@@ -260,18 +414,43 @@ class CrmDataService {
     });
 
     let unsubscribeFirestore: (() => void) | null = null;
-    if (isFirebaseConfigured() && db) {
+    let unsubscribeEmailFirestore: (() => void) | null = null;
+
+    if (isFirebaseConfigured() && db && auth?.currentUser) {
+      const firestoreDb = db;
       try {
-        const ref = doc(db, 'patients', patientId);
-        unsubscribeFirestore = onSnapshot(ref, (snapshot: DocumentSnapshot) => {
-          if (snapshot.exists()) {
-            const raw = snapshot.data();
-            const remotePatient = sanitizePatientPayload(raw, patientId);
-            callback(remotePatient);
+        const ref = doc(firestoreDb, 'patients', patientId);
+        unsubscribeFirestore = onSnapshot(
+          ref,
+          (snapshot: DocumentSnapshot) => {
+            if (snapshot.exists()) {
+              const raw = snapshot.data();
+              const remotePatient = sanitizePatientPayload(raw, patientId);
+              callback(remotePatient);
+            } else if (auth?.currentUser?.email && !unsubscribeEmailFirestore) {
+              // Se o documento pelo UID não existir, tenta escutar o documento pelo email
+              const emailDocRef = doc(firestoreDb, 'patients', auth.currentUser.email.toLowerCase().trim());
+              unsubscribeEmailFirestore = onSnapshot(
+                emailDocRef,
+                (emailSnap: DocumentSnapshot) => {
+                  if (emailSnap.exists()) {
+                    const rawEmailData = emailSnap.data();
+                    const remoteEmailPatient = sanitizePatientPayload(rawEmailData, patientId);
+                    callback(remoteEmailPatient);
+                  }
+                },
+                (emailErr) => {
+                  console.info("🔒 [Vittáre Data] Listener por e-mail em modo seguro:", emailErr.code);
+                }
+              );
+            }
+          },
+          (err) => {
+            console.info("🔒 [Vittáre Data] Listener Firestore em modo seguro:", err.code);
           }
-        });
+        );
       } catch (err) {
-        console.warn("Falha no listener do Firestore:", err);
+        console.warn("Falha ao registrar listener do Firestore:", err);
       }
     }
 
@@ -279,6 +458,9 @@ class CrmDataService {
       this.listeners.get(patientId)?.delete(callback);
       if (unsubscribeFirestore) {
         unsubscribeFirestore();
+      }
+      if (unsubscribeEmailFirestore) {
+        unsubscribeEmailFirestore();
       }
     };
   }

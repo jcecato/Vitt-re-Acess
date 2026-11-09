@@ -83,10 +83,43 @@ export const isTreatmentActive = (patient: PatientProfile): { isActive: boolean;
     return { isActive: false, reason: 'Seu plano de tratamento ainda não iniciou.' };
   }
   if (now > end) {
-    return { isActive: false, reason: 'Seu plano de acompanhamento expirou. Entre em contato com a equipe clínica.' };
+    return { isActive: false, reason: 'Seu ciclo de acompanhamento de 4 meses foi concluído com sucesso. Entre em contato com seu nutricionista para renovar o plano.' };
   }
 
   return { isActive: true };
+};
+
+/**
+ * Sentinela de Inatividade do PWA (Trava de 15 dias sem acesso)
+ */
+export const INACTIVITY_STORAGE_KEY = 'vittare_last_active_at';
+export const MAX_INACTIVITY_DAYS = 15;
+export const MAX_INACTIVITY_MS = MAX_INACTIVITY_DAYS * 24 * 60 * 60 * 1000;
+
+export const recordUserActivity = (): void => {
+  try {
+    localStorage.setItem(INACTIVITY_STORAGE_KEY, Date.now().toString());
+  } catch {
+    // Ignore storage restrictions
+  }
+};
+
+export const checkInactivityExpiry = (): { isExpired: boolean; daysInactive: number } => {
+  try {
+    const lastActiveStr = localStorage.getItem(INACTIVITY_STORAGE_KEY);
+    if (!lastActiveStr) return { isExpired: false, daysInactive: 0 };
+    const lastActive = parseInt(lastActiveStr, 10);
+    if (isNaN(lastActive) || lastActive <= 0) return { isExpired: false, daysInactive: 0 };
+    
+    const diffMs = Date.now() - lastActive;
+    const daysInactive = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return {
+      isExpired: diffMs > MAX_INACTIVITY_MS,
+      daysInactive
+    };
+  } catch {
+    return { isExpired: false, daysInactive: 0 };
+  }
 };
 
 /**
@@ -102,8 +135,19 @@ export const sanitizeDeviceOnLogout = async (): Promise<void> => {
   }
 
   try {
+    // Preserva preferências não-sensíveis do paciente (e-mail lembrado e avisos)
+    const rememberedEmail = localStorage.getItem('vittare_remembered_email');
+    const notice = localStorage.getItem('vittare_session_expired_notice');
+    
     localStorage.clear();
     sessionStorage.clear();
+
+    if (rememberedEmail) {
+      localStorage.setItem('vittare_remembered_email', rememberedEmail);
+    }
+    if (notice) {
+      localStorage.setItem('vittare_session_expired_notice', notice);
+    }
   } catch (err) {
     console.warn("⚠️ [Vittáre Security] Erro ao limpar armazenamentos da sessão:", err);
   }

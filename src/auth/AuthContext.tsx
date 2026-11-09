@@ -2,7 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PatientProfile } from '../types/patient';
 import { crmDataService } from '../services/crmDataService';
 import { MARIA_PAULA_PATIENT, INITIAL_PATIENTS } from '../patients/defaultPatient';
-import { sanitizeDeviceOnLogout } from '../utils/securityUtils';
+import { sanitizeDeviceOnLogout, recordUserActivity, checkInactivityExpiry } from '../utils/securityUtils';
+import { auth, isFirebaseConfigured } from '../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 interface AuthContextType {
   currentPatient: PatientProfile | null;
@@ -29,6 +31,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     setAvailablePatients(Object.values(INITIAL_PATIENTS));
 
+    // 1. Verificação do Sentinela de Inatividade (Trava de 15 dias sem acesso ao PWA)
+    const inactivity = checkInactivityExpiry();
+    if (inactivity.isExpired) {
+      console.info('🔒 [Vittáre Security] Sessão expirada por inatividade de 15 dias.');
+      localStorage.setItem('vittare_session_expired_notice', 'Sua sessão expirou por medida de segurança após 15 dias sem acesso. Por favor, faça login novamente.');
+      logout();
+      return;
+    }
+
     try {
       const saved = localStorage.getItem(AUTH_STORAGE_KEY);
       if (saved) {
@@ -41,6 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (p) {
               setCurrentPatient(p);
               setIsAuthenticated(true);
+              recordUserActivity();
             } else {
               setCurrentPatient(null);
               setIsAuthenticated(false);
@@ -58,6 +70,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentPatient(null);
       setIsAuthenticated(false);
     }
+  }, []);
+
+  // 2. Kill-Switch em Tempo Real (Firebase Authentication)
+  // Ao deletar o usuário no Firebase Console, o token é invalidado e o app volta ao login imediatamente
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !auth) return;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        if (isAuthenticated && !isAdmin) {
+          console.info('🔒 [Vittáre Kill-Switch] Usuário revogado ou desconectado no Firebase.');
+          logout();
+        }
+      } else {
+        try {
+          await firebaseUser.getIdToken(false);
+          recordUserActivity();
+        } catch (err: any) {
+          if (err?.code === 'auth/user-not-found' || err?.code === 'auth/user-disabled') {
+            console.warn('⚠️ [Vittáre Kill-Switch] Usuário deletado no Firebase Console detectado. Executando logout...');
+            logout();
+          }
+        }
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, [isAuthenticated, isAdmin]);
+
+  // 3. Sentinela de Retomada do PWA (Foco/Visibilidade da Janela)
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        // Checagem de 15 dias de inatividade
+        const inactivity = checkInactivityExpiry();
+        if (inactivity.isExpired) {
+          console.info('🔒 [Vittáre Security] Sessão expirada por inatividade de 15 dias.');
+          localStorage.setItem('vittare_session_expired_notice', 'Sua sessão expirou por medida de segurança após 15 dias sem acesso. Por favor, faça login novamente.');
+          logout();
+          return;
+        }
+
+        recordUserActivity();
+
+        // Checagem ativa do Kill-Switch no Firebase Auth
+        if (isFirebaseConfigured() && auth && auth.currentUser) {
+          try {
+            await auth.currentUser.reload();
+          } catch (reloadErr: any) {
+            if (reloadErr?.code === 'auth/user-not-found' || reloadErr?.code === 'auth/user-disabled') {
+              console.warn('⚠️ [Vittáre Kill-Switch] Conta deletada no Firebase Console. Deslogando ao retomar PWA...');
+              logout();
+            }
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   useEffect(() => {
