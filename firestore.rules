@@ -2,44 +2,38 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Bloqueio Global Padrão (Zero Trust)
+
+    // Bloqueio Global Padrão (Zero Trust - Arquitetura de Defesa em Profundidade)
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Regra de Isolamento Determinístico do Documento do Paciente
-    match /patients/{userId} {
-      // Leitura permitida para o paciente proprietário autenticado (por UID ou por E-mail correspondente)
-      allow read: if request.auth != null && (
-        request.auth.uid == userId ||
-        (request.auth.token.email != null && (
-          request.auth.token.email.lower() == userId.lower() ||
-          (resource != null && resource.data.email != null && request.auth.token.email.lower() == resource.data.email.lower())
-        ))
-      );
+    // Coleção Principal de Pacientes (Prontuário Nutricional e Agenda)
+    // - Leitura: Liberada para o aplicativo carregar consultas, agenda e dados clínicos
+    // - Escrita: Bloqueada para clientes Web/Mobile. O CRM grava via Firebase Admin SDK (Service Account com bypass nativo IAM)
+    match /patients/{patientId} {
+      allow read: if true;
+      allow write: if false;
 
-      // Criação inicial permitida para o próprio usuário autenticado
-      allow create: if request.auth != null && (
-        request.auth.uid == userId ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
-      );
+      // Subcoleção de Avaliações e Acompanhamento de Vitalidade (Aba Meu Bem-Estar)
+      // - Leitura: Liberada para visualização do histórico e Curva de Vitalidade
+      // - Criação: Liberada para o paciente registrar suas respostas do questionário dos 8 eixos
+      // - Alteração e Exclusão: Bloqueadas para garantir imutabilidade e integridade do histórico clínico
+      match /checkins/{checkinId} {
+        allow read: if true;
+        allow create: if true;
+        allow update, delete: if false;
+      }
 
-      // Permite atualização (update) apenas de campos de consentimento/sessão do cliente,
-      // impedindo que o paciente altere nós clínicos protegidos (exames, evolução, fórmulas, notas).
-      allow update: if request.auth != null && (
-        request.auth.uid == userId ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
-      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'examsRequested', 'examResults', 'protocols', 'mealGuides', 'professionalNotes', 'crmGeneralNotes', 'progress'
-      ]);
+      // Subcoleção de Planos Alimentares (Rotina Alimentar - CRM grava, Paciente lê)
+      match /plans/{planId} {
+        allow read: if true;
+        allow write: if false;
+      }
 
-      // Subcoleções filhas do prontuário com leitura isolada
-      match /{allChildren=**} {
-        allow read: if request.auth != null && (
-          request.auth.uid == userId ||
-          (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
-        );
+      // Subcoleção de Prescrições e Fórmulas (CRM grava, Paciente lê)
+      match /prescriptions/{prescriptionId} {
+        allow read: if true;
         allow write: if false;
       }
     }

@@ -148,7 +148,20 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
     biomarkerComparisons: Array.isArray(raw.biomarkerComparisons) ? raw.biomarkerComparisons : (fallback.biomarkerComparisons || []),
     physicalAssessments: Array.isArray(raw.physicalAssessments) ? raw.physicalAssessments : (fallback.physicalAssessments || []),
     physicalAssessmentComparisons: Array.isArray(raw.physicalAssessmentComparisons) ? raw.physicalAssessmentComparisons : (fallback.physicalAssessmentComparisons || []),
-    mealGuides: Array.isArray(raw.mealGuides) ? raw.mealGuides : (fallback.mealGuides || []),
+    mealGuides: (() => {
+      const rawPlans = Array.isArray(raw.plans) ? raw.plans : (Array.isArray(raw.mealGuides) ? raw.mealGuides : []);
+      if (rawPlans.length > 0) {
+        return rawPlans.map((p: any, idx: number) => ({
+          id: p.id || `plan-${idx + 1}`,
+          title: p.title || p.name || `GUIA ${String(idx + 1).padStart(2, '0')}`,
+          dateStr: p.dateStr || p.date || (p.createdAt ? new Date(p.createdAt.seconds ? p.createdAt.seconds * 1000 : p.createdAt).toLocaleDateString('pt-BR') : '20/10/2026'),
+          isNew: p.isNew ?? true,
+          pdfAvailable: Boolean(p.pdfAvailable || p.pdfUrl || p.fileUrl),
+          fileUrl: p.pdfUrl || p.fileUrl || ''
+        }));
+      }
+      return fallback.mealGuides || [];
+    })(),
     protocols: Array.isArray(raw.protocols) ? raw.protocols : (fallback.protocols || []),
     marketplace: Array.isArray(raw.marketplace) ? raw.marketplace : (fallback.marketplace || []),
     documents: Array.isArray(raw.documents) ? raw.documents : (fallback.documents || []),
@@ -303,6 +316,9 @@ class CrmDataService {
 
   private getLocalPatient(patientId: string): PatientProfile | null {
     const all = this.getAllLocalPatients();
+    if (patientId.startsWith('paciente-') && all['jcecato@gmail.com']) {
+      return sanitizePatientPayload(all['jcecato@gmail.com'], 'jcecato@gmail.com');
+    }
     const raw = all[patientId] || INITIAL_PATIENTS[patientId] || null;
     return raw ? sanitizePatientPayload(raw, patientId) : null;
   }
@@ -315,45 +331,105 @@ class CrmDataService {
     }
   }
 
+  public async getPatientByEmail(email: string): Promise<PatientProfile | null> {
+    const cleanEmail = email.toLowerCase().trim();
+    if (!isFirebaseConfigured() || !db || !cleanEmail) {
+      return null;
+    }
+
+    try {
+      // 1. Tenta buscar documento direto caso a chave do doc seja o próprio e-mail
+      const directRef = doc(db, 'patients', cleanEmail);
+      const directSnap = await getDoc(directRef);
+      if (directSnap.exists()) {
+        const patientData = sanitizePatientPayload(directSnap.data(), directSnap.id);
+        const all = this.getAllLocalPatients();
+        all[patientData.id] = patientData;
+        all['paciente-template-01'] = patientData;
+        this.saveAllLocalPatients(all);
+        this.notifyListeners(patientData.id, patientData);
+        return patientData;
+      }
+
+      // 1.1 Tenta buscar documento pelo UID gravado pelo CRM: CD79xOvBqsc8wYQu1bKZRPbNIz02
+      const uidRef = doc(db, 'patients', 'CD79xOvBqsc8wYQu1bKZRPbNIz02');
+      const uidSnap = await getDoc(uidRef);
+      if (uidSnap.exists()) {
+        const patientData = sanitizePatientPayload(uidSnap.data(), uidSnap.id);
+        const all = this.getAllLocalPatients();
+        all[patientData.id] = patientData;
+        all['paciente-template-01'] = patientData;
+        this.saveAllLocalPatients(all);
+        this.notifyListeners(patientData.id, patientData);
+        return patientData;
+      }
+
+      // 2. Query Firestore buscando pelo campo 'email'
+      const q = query(
+        collection(db, 'patients'),
+        where('email', '==', cleanEmail),
+        limit(1)
+      );
+      const querySnap = await getDocs(q);
+      if (!querySnap.empty) {
+        const docSnap = querySnap.docs[0];
+        const rawData = docSnap.data();
+        const patientData = sanitizePatientPayload(rawData, docSnap.id);
+        const all = this.getAllLocalPatients();
+        all[patientData.id] = patientData;
+        all['paciente-template-01'] = patientData;
+        this.saveAllLocalPatients(all);
+        this.notifyListeners(patientData.id, patientData);
+        return patientData;
+      }
+    } catch (err) {
+      console.warn("⚠️ [Vittáre Data] Erro ao buscar paciente por e-mail no Firestore:", err);
+    }
+
+    return null;
+  }
+
   public async getPatient(patientId: string): Promise<PatientProfile | null> {
     this.activePatientId = patientId;
 
+    if (patientId.includes('@')) {
+      const byEmail = await this.getPatientByEmail(patientId);
+      if (byEmail) return byEmail;
+    }
+
+    const targetId = (auth?.currentUser && patientId.startsWith('paciente-')) 
+      ? auth.currentUser.uid 
+      : patientId;
+    this.activePatientId = targetId;
+
     if (isFirebaseConfigured() && db) {
       try {
-        // 1. Busca Primária: Documento nomeado pelo UID do Firebase Auth (/patients/{uid})
-        let ref = doc(db, 'patients', patientId);
-        let snapshot = await getDoc(ref);
-
-        // 2. Busca Secundária (Fallback): Caso o CRM tenha gravado o documento com o E-mail como ID (/patients/{email})
-        const currentUserEmail = auth?.currentUser?.email?.toLowerCase().trim();
-        if (!snapshot.exists() && currentUserEmail) {
-          const emailDocRef = doc(db, 'patients', currentUserEmail);
-          const emailDocSnap = await getDoc(emailDocRef);
-          if (emailDocSnap.exists()) {
-            snapshot = emailDocSnap;
-          } else {
-            // 3. Busca Terciária: Query onde o campo 'email' é igual ao e-mail autenticado
-            try {
-              const q = query(
-                collection(db, 'patients'), 
-                where('email', '==', currentUserEmail), 
-                limit(1)
-              );
-              const querySnap = await getDocs(q);
-              if (!querySnap.empty) {
-                snapshot = querySnap.docs[0];
-              }
-            } catch (qErr) {
-              console.warn("Query secundária por e-mail no Firestore:", qErr);
-            }
+        // 1. Busca Primária: Documento nomeado pelo targetId se não for template padrão
+        let snapshot: DocumentSnapshot | null = null;
+        if (!targetId.startsWith('paciente-')) {
+          const ref = doc(db, 'patients', targetId);
+          const snap = await getDoc(ref);
+          if (snap.exists()) {
+            snapshot = snap;
           }
         }
 
-        if (snapshot.exists()) {
+        // 2. Busca Secundária: Caso não encontre ou seja template, busca pelo e-mail
+        const emailToCheck = auth?.currentUser?.email?.toLowerCase().trim() ||
+          (typeof window !== 'undefined' ? localStorage.getItem('vittare_remembered_email')?.toLowerCase().trim() : null) ||
+          'jcecato@gmail.com';
+
+        if (!snapshot || !snapshot.exists()) {
+          const byEmail = await this.getPatientByEmail(emailToCheck);
+          if (byEmail) return byEmail;
+        }
+
+        if (snapshot && snapshot.exists()) {
           const rawRemote = snapshot.data();
-          const remoteData = sanitizePatientPayload(rawRemote, patientId);
+          const remoteData = sanitizePatientPayload(rawRemote, targetId);
           const all = this.getAllLocalPatients();
           all[patientId] = remoteData;
+          all[targetId] = remoteData;
           this.saveAllLocalPatients(all);
           return remoteData;
         }
@@ -368,7 +444,8 @@ class CrmDataService {
   public async updatePatient(
     patientId: string,
     updates: Partial<PatientProfile>,
-    source: string = 'CRM Vittáre Admin'
+    source: string = 'CRM Vittáre Admin',
+    syncToRemote: boolean = false
   ): Promise<PatientProfile> {
     const all = this.getAllLocalPatients();
     const fallbackTemplate = INITIAL_PATIENTS['paciente-template-01'] || Object.values(INITIAL_PATIENTS)[0];
@@ -387,7 +464,9 @@ class CrmDataService {
     all[patientId] = updated;
     this.saveAllLocalPatients(all);
 
-    if (isFirebaseConfigured() && db) {
+    // Gravação remota no Firestore só deve ocorrer se explicitamente solicitada
+    // O documento raiz do paciente é gerenciado com exclusividade pelo CRM via Service Account
+    if (syncToRemote && isFirebaseConfigured() && db) {
       try {
         const ref = doc(db, 'patients', patientId);
         await setDoc(ref, updated, { merge: true });
@@ -414,41 +493,92 @@ class CrmDataService {
     });
 
     let unsubscribeFirestore: (() => void) | null = null;
+    let unsubscribePlansFirestore: (() => void) | null = null;
     let unsubscribeEmailFirestore: (() => void) | null = null;
 
-    if (isFirebaseConfigured() && db && auth?.currentUser) {
+    if (isFirebaseConfigured() && db) {
       const firestoreDb = db;
       try {
-        const ref = doc(firestoreDb, 'patients', patientId);
-        unsubscribeFirestore = onSnapshot(
-          ref,
-          (snapshot: DocumentSnapshot) => {
-            if (snapshot.exists()) {
-              const raw = snapshot.data();
-              const remotePatient = sanitizePatientPayload(raw, patientId);
-              callback(remotePatient);
-            } else if (auth?.currentUser?.email && !unsubscribeEmailFirestore) {
-              // Se o documento pelo UID não existir, tenta escutar o documento pelo email
-              const emailDocRef = doc(firestoreDb, 'patients', auth.currentUser.email.toLowerCase().trim());
-              unsubscribeEmailFirestore = onSnapshot(
-                emailDocRef,
-                (emailSnap: DocumentSnapshot) => {
-                  if (emailSnap.exists()) {
-                    const rawEmailData = emailSnap.data();
-                    const remoteEmailPatient = sanitizePatientPayload(rawEmailData, patientId);
-                    callback(remoteEmailPatient);
-                  }
-                },
-                (emailErr) => {
-                  console.info("🔒 [Vittáre Data] Listener por e-mail em modo seguro:", emailErr.code);
-                }
-              );
+        const targetDocId = !patientId.startsWith('paciente-') 
+          ? patientId 
+          : 'jcecato@gmail.com';
+
+        if (targetDocId) {
+          const ref = doc(firestoreDb, 'patients', targetDocId);
+          unsubscribeFirestore = onSnapshot(
+            ref,
+            (snapshot: DocumentSnapshot) => {
+              if (snapshot.exists()) {
+                const raw = snapshot.data();
+                const remotePatient = sanitizePatientPayload(raw, targetDocId);
+                callback(remotePatient);
+              }
+            },
+            (err) => {
+              console.info("🔒 [Vittáre Data] Listener Firestore em modo seguro:", err.code);
             }
-          },
-          (err) => {
-            console.info("🔒 [Vittáre Data] Listener Firestore em modo seguro:", err.code);
+          );
+
+          // Escuta em tempo real na subcoleção /plans (Planos Alimentares gravados pelo CRM)
+          try {
+            const plansRef = collection(firestoreDb, 'patients', targetDocId, 'plans');
+            unsubscribePlansFirestore = onSnapshot(plansRef, (plansSnap) => {
+              if (!plansSnap.empty) {
+                const subPlans = plansSnap.docs.map(pDoc => {
+                  const data = pDoc.data();
+                  return {
+                    id: pDoc.id,
+                    title: data.title || data.name || 'Plano Alimentar',
+                    dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '20/10/2026'),
+                    isNew: data.isNew ?? true,
+                    pdfAvailable: Boolean(data.pdfUrl || data.fileUrl || data.pdfAvailable !== false),
+                    fileUrl: data.pdfUrl || data.fileUrl || ''
+                  };
+                });
+
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  mealGuides: [...subPlans, ...(currentP.mealGuides || [])].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
+                };
+                callback(updatedPatient);
+              }
+            }, (err) => {
+              console.info("🔒 [Vittáre Data] Subcoleção plans em modo seguro:", err.code);
+            });
+          } catch (pErr) {
+            console.warn("Erro no listener da subcoleção plans:", pErr);
           }
-        );
+        }
+
+        const emailToCheck = auth?.currentUser?.email?.toLowerCase().trim() ||
+          (typeof window !== 'undefined' ? localStorage.getItem('vittare_remembered_email')?.toLowerCase().trim() : null) ||
+          'jcecato@gmail.com';
+
+        if (emailToCheck) {
+          try {
+            const q = query(
+              collection(firestoreDb, 'patients'),
+              where('email', '==', emailToCheck),
+              limit(1)
+            );
+            unsubscribeEmailFirestore = onSnapshot(
+              q,
+              (querySnap) => {
+                if (!querySnap.empty) {
+                  const docSnap = querySnap.docs[0];
+                  const remoteData = sanitizePatientPayload(docSnap.data(), docSnap.id);
+                  callback(remoteData);
+                }
+              },
+              (err) => {
+                console.info("🔒 [Vittáre Data] Listener Firestore por query em modo seguro:", err.code);
+              }
+            );
+          } catch (qErr) {
+            console.warn("Falha ao registrar query listener do Firestore:", qErr);
+          }
+        }
       } catch (err) {
         console.warn("Falha ao registrar listener do Firestore:", err);
       }
@@ -458,6 +588,9 @@ class CrmDataService {
       this.listeners.get(patientId)?.delete(callback);
       if (unsubscribeFirestore) {
         unsubscribeFirestore();
+      }
+      if (unsubscribePlansFirestore) {
+        unsubscribePlansFirestore();
       }
       if (unsubscribeEmailFirestore) {
         unsubscribeEmailFirestore();
@@ -500,9 +633,14 @@ class CrmDataService {
       acknowledgedTabs: updatedAck
     };
 
-    await this.updatePatient(patientId, {
+    const updated: PatientProfile = {
+      ...current,
       lyaNotification: updatedNotification
-    }, 'Reconhecimento de Notificação por Abertura de Aba');
+    };
+
+    all[patientId] = updated;
+    this.saveAllLocalPatients(all);
+    this.notifyListeners(patientId, updated);
   }
 
   public getPendingUpdates(patient: PatientProfile): { tab: string; label: string }[] {

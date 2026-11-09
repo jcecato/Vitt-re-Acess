@@ -77,7 +77,36 @@ export const TEMPLATE_PATIENT: PatientProfile = {
   examResults: [],
   physicalAssessments: [],
   mealGuides: [],
-  protocols: [],
+  protocols: [
+    {
+      id: 'rec-01',
+      title: 'RECEITA 01',
+      formulaName: 'Articulares 1',
+      expirationStr: 'Validade: 08/12/2026',
+      emissionDate: '03/11/2026',
+      expirationDate: '08/12/2026',
+      badge: 'novo',
+      posology: 'Tomar 1 dose, 2 vezes ao dia com água após as refeições.',
+      observations: 'Pode interagir com anticoagulantes. Manter em local fresco e seco.',
+      actives: [
+        { name: 'Glucosamina', concentration: '500 mg' },
+        { name: 'Condroitina', concentration: '400 mg' },
+        { name: 'MSM', concentration: '300 mg' }
+      ],
+      formulas: [
+        {
+          name: 'Articulares 1',
+          posology: 'Tomar 1 dose, 2 vezes ao dia com água após as refeições.',
+          observations: 'Pode interagir com anticoagulantes. Manter em local fresco e seco.',
+          actives: [
+            { name: 'Glucosamina', concentration: '500 mg' },
+            { name: 'Condroitina', concentration: '400 mg' },
+            { name: 'MSM', concentration: '300 mg' }
+          ]
+        }
+      ]
+    }
+  ],
   marketplace: [],
   documents: [],
   financial: [],

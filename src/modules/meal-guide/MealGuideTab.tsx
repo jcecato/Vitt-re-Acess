@@ -45,7 +45,7 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
                   </div>
                   <div className="grow min-w-0">
                     <div className="text-[18px] font-semibold text-white leading-tight uppercase">
-                      {displayTitle}
+                      {guide.title || displayTitle}
                     </div>
                     <div className="text-[18px] text-[#e0e0ed] mt-1 leading-snug">
                       Data: {guide.dateStr || '20/10/2026'}
@@ -79,7 +79,13 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
                     </div>
                   ) : (
                     <button
-                      onClick={() => onOpenPdf(displayTitle)}
+                      onClick={() => {
+                        if (guide.fileUrl) {
+                          window.open(guide.fileUrl, '_blank');
+                        } else {
+                          onOpenPdf(guide.title || displayTitle);
+                        }
+                      }}
                       className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
                     >
                       <i className="ti ti-file-type-pdf text-[17px]"></i>

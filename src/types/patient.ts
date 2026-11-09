@@ -72,6 +72,20 @@ export interface MealGuideItem {
   dateStr: string;
   isNew?: boolean;
   pdfAvailable: boolean;
+  fileUrl?: string;
+}
+
+export interface ActiveIngredient {
+  name: string;
+  concentration: string;
+}
+
+export interface ProtocolFormula {
+  id?: string;
+  name: string;
+  posology: string;
+  observations?: string;
+  actives: ActiveIngredient[];
 }
 
 export interface ProtocolItem {
@@ -82,6 +96,13 @@ export interface ProtocolItem {
   audioAvailable?: boolean;
   audioTitle?: string;
   items?: string[];
+  formulaName?: string;
+  emissionDate?: string;
+  expirationDate?: string;
+  posology?: string;
+  observations?: string;
+  actives?: ActiveIngredient[];
+  formulas?: ProtocolFormula[];
 }
 
 export interface MarketplaceProduct {

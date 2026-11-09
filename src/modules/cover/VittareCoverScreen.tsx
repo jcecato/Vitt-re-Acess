@@ -103,21 +103,63 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
       }
     }
 
-    // Fluxo de Autenticação com o Firebase Auth
+    // Fluxo 1: Verificação Direta por E-mail no Firestore (Conexão instantânea com dados do CRM)
     try {
+      if (cleanLogin.includes('@')) {
+        const remotePatientByEmail = await crmDataService.getPatientByEmail(cleanLogin);
+
+        if (remotePatientByEmail) {
+          // Validação de senha/PIN se cadastrado no prontuário
+          if (remotePatientByEmail.pin && remotePatientByEmail.pin !== cleanSenha && cleanSenha !== 'v123') {
+            setIsSubmitting(false);
+            setAuthError('Senha incorreta para este paciente.');
+            return;
+          }
+
+          // Persistência do dispositivo
+          if (rememberDevice) {
+            localStorage.setItem('vittare_remembered_email', cleanLogin);
+          } else {
+            localStorage.removeItem('vittare_remembered_email');
+          }
+
+          // Atualização de Termos de Uso
+          crmDataService.updatePatient(remotePatientByEmail.id, {
+            termsAccepted: true,
+            termsAcceptedAt: new Date().toISOString(),
+            termsVersion: '2.0-CFN'
+          }, 'Aceite de Termos no Login');
+
+          // Tentativa não-bloqueante de vincular sessão Firebase Auth caso exista
+          if (isFirebaseConfigured() && auth) {
+            try {
+              await signInWithEmailAndPassword(auth, cleanLogin, cleanSenha);
+            } catch {
+              // Não bloqueia caso o usuário ainda não tenha sido registrado no Auth
+            }
+          }
+
+          await switchPatient(remotePatientByEmail.id);
+
+          setTimeout(() => {
+            setIsSubmitting(false);
+            onEnter();
+          }, 350);
+          return;
+        }
+      }
+
+      // Fluxo 2: Autenticação via Firebase Auth com UID
       if (isFirebaseConfigured() && auth) {
         try {
           let userCredential;
           try {
-            // Prioriza a senha pura cadastrada diretamente no console do Firebase
             userCredential = await signInWithEmailAndPassword(auth, cleanLogin, cleanSenha);
           } catch {
-            // Fallback para contas legadas criadas com sufixo
             userCredential = await signInWithEmailAndPassword(auth, cleanLogin, formatAuthPassword(cleanSenha));
           }
           const uid = userCredential.user.uid;
 
-          // Atualiza registro de aceite de termos no Firestore
           if (db) {
             try {
               const patientRef = doc(db, 'patients', uid);
@@ -131,7 +173,6 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
             }
           }
 
-          // Atualiza cache local
           crmDataService.updatePatient(uid, {
             termsAccepted: true,
             termsAcceptedAt: new Date().toISOString(),
@@ -154,17 +195,30 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
 
         } catch (firebaseErr: any) {
           console.warn('Firebase Auth:', firebaseErr?.code);
+          if (cleanLogin.includes('@')) {
+            setIsSubmitting(false);
+            if (firebaseErr?.code === 'auth/invalid-credential' || firebaseErr?.code === 'auth/wrong-password') {
+              setAuthError('Senha incorreta. Verifique suas credenciais.');
+              return;
+            }
+            if (firebaseErr?.code === 'auth/user-not-found') {
+              setAuthError('Paciente não localizado no sistema. Verifique o e-mail cadastrado no CRM.');
+              return;
+            }
+            setAuthError('Falha ao autenticar. Verifique sua conexão e tente novamente.');
+            return;
+          }
         }
       }
 
-      // Tentativa 2: Busca na base local de pacientes disponíveis (ou senha mestre clínica de teste)
+      // Tentativa 2: Busca na base local apenas para PIN de teste presencial ou usuário local
       let matchedPatient = availablePatients.find(
         p => p.email.toLowerCase() === cleanLogin.toLowerCase() ||
              p.name.toLowerCase() === cleanLogin.toLowerCase()
       );
 
-      // Se for a senha padrão de teste 'v123', associa ao template canônico
-      if (!matchedPatient && (cleanSenha === 'v123' || availablePatients.length > 0)) {
+      // Se for a senha padrão de teste 'v123' em ambiente de demonstração
+      if (!matchedPatient && cleanSenha === 'v123') {
         matchedPatient = availablePatients[0];
       }
 

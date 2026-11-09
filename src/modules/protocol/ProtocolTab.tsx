@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PatientProfile, ProtocolItem } from '../../types/patient';
+import { PrescriptionPdfModal } from '../../components/common/PrescriptionPdfModal';
 
 interface ProtocolTabProps {
   patient: PatientProfile;
@@ -11,6 +12,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
   onOpenPdf
 }) => {
   const [selectedRecipe, setSelectedRecipe] = useState<ProtocolItem | null>(null);
+  const [prescriptionModalItem, setPrescriptionModalItem] = useState<ProtocolItem | null>(null);
 
   // Ordenação de cima para baixo: NOVO -> ATUALIZADO -> DESCONTINUADO
   const orderRank: Record<string, number> = {
@@ -126,7 +128,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
                     </div>
                   ) : (
                     <button
-                      onClick={() => onOpenPdf(displayTitle)}
+                      onClick={() => setPrescriptionModalItem({ ...prot, title: displayTitle })}
                       className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
                     >
                       <i className="ti ti-file-type-pdf text-[17px]"></i>
@@ -201,6 +203,14 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal A4 Oficial da Prescrição com Rubrica e Certificação Gov.br */}
+      <PrescriptionPdfModal
+        isOpen={!!prescriptionModalItem}
+        onClose={() => setPrescriptionModalItem(null)}
+        protocol={prescriptionModalItem}
+        patientName={patient.name || 'João Cecato'}
+      />
     </div>
   );
 };

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PatientProfile } from '../../types/patient';
-import { X, CheckCircle2, Calendar, Activity, ChevronDown, Sparkles } from 'lucide-react';
+import { X, CheckCircle2, Calendar, Activity, ChevronDown, Sparkles, CloudCheck, Cloud } from 'lucide-react';
+import { db, isFirebaseConfigured } from '../../config/firebase';
+import { collection, doc, setDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 interface EvolutionTabProps {
   patient: PatientProfile;
@@ -119,12 +121,16 @@ export const SCALE_OPTIONS = [
 
 export interface CheckInRecord {
   id: string;
+  patientEmail?: string;
+  patientName?: string;
+  createdAt?: string;
   dateStr: string;
   periodLabel: string;
   dayLabel: string;
   ivp: number;
   deltaPoints?: number;
   axisScores: { [axisId: string]: number };
+  clinicalFeedback?: string;
   answers?: { [questionId: string]: AnswerValue };
 }
 
@@ -132,7 +138,12 @@ export interface CheckInRecord {
 const SEED_CHECKINS: CheckInRecord[] = [];
 
 export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
-  const storageKey = `vittare_checkins_v3_${patient.id}`;
+  const targetPatientEmail = (patient.email && patient.email.includes('@'))
+    ? patient.email.trim().toLowerCase()
+    : (patient.id && patient.id.includes('@') ? patient.id.trim().toLowerCase() : 'jcecato@gmail.com');
+
+  const storageKey = `vittare_checkins_v3_${targetPatientEmail}`;
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
 
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>(() => {
     try {
@@ -148,6 +159,66 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
     }
     return [];
   });
+
+  // Sincronização em tempo real com o Cloud Firestore na subcoleção /patients/{email}/checkins
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !db) return;
+    const firestore = db;
+
+    try {
+      const colRef = collection(firestore, 'patients', targetPatientEmail, 'checkins');
+      const q = query(colRef, orderBy('createdAt', 'asc'));
+
+      const unsubscribe = onSnapshot(q, async (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteRecords: CheckInRecord[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as CheckInRecord;
+            remoteRecords.push({
+              ...data,
+              id: docSnap.id
+            });
+          });
+          setCheckIns(remoteRecords);
+          setIsCloudSynced(true);
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(remoteRecords));
+          } catch {
+            // ignore
+          }
+        } else {
+          // Migração automática de check-ins locais existentes (ex: teste com IVP 55) para a nuvem
+          const savedLocal = localStorage.getItem(storageKey);
+          if (savedLocal) {
+            try {
+              const parsed = JSON.parse(savedLocal);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                for (const item of parsed) {
+                  const recordToUpload: CheckInRecord = {
+                    ...item,
+                    patientEmail: targetPatientEmail,
+                    patientName: patient.name || 'João Cecato',
+                    createdAt: item.createdAt || new Date().toISOString()
+                  };
+                  const docRef = doc(firestore, 'patients', targetPatientEmail, 'checkins', item.id);
+                  await setDoc(docRef, recordToUpload);
+                }
+                setIsCloudSynced(true);
+              }
+            } catch (migErr) {
+              console.warn('Erro ao migrar check-ins locais para Firestore:', migErr);
+            }
+          }
+        }
+      }, (err) => {
+        console.warn('Listener da subcoleção checkins do Firestore:', err);
+      });
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn('Falha ao inicializar listener de checkins:', e);
+    }
+  }, [targetPatientEmail, storageKey, patient.name]);
 
   // Modal 9:16 do Questionário
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -348,7 +419,7 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
   const currentScores = calculateCheckInScores();
 
   // Envio e Cálculo do Novo Check-in
-  const handleSubmitCheckIn = () => {
+  const handleSubmitCheckIn = async () => {
     const { axisResults, invalidAxes, canCalculateIvp, ivp } = calculateCheckInScores();
 
     if (!canCalculateIvp || ivp === null) {
@@ -370,20 +441,38 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
     });
 
     const delta = latestCheckIn ? (ivp - latestCheckIn.ivp) : 0;
+    const feedbackStr = getAiFeedback();
 
     const newRecord: CheckInRecord = {
       id: `chk_${Date.now()}`,
+      patientEmail: targetPatientEmail,
+      patientName: patient.name || 'João Cecato',
+      createdAt: new Date().toISOString(),
       dateStr: periodInfo.endDateStr,
       periodLabel: periodInfo.periodLabel,
       dayLabel: `D${60 + (checkIns.length - 4) * 15}`,
       ivp: ivp,
       deltaPoints: delta,
       axisScores: axisScoresResult,
+      clinicalFeedback: feedbackStr,
       answers: { ...answers }
     };
 
+    // Atualização otimista imediata na interface do paciente
     setCheckIns(prev => [...prev, newRecord]);
     setIsModalOpen(false);
+
+    // Gravação oficial na subcoleção do Cloud Firestore (/patients/{email}/checkins)
+    const firestore = db;
+    if (isFirebaseConfigured() && firestore) {
+      try {
+        const checkinRef = doc(firestore, 'patients', targetPatientEmail, 'checkins', newRecord.id);
+        await setDoc(checkinRef, newRecord);
+        setIsCloudSynced(true);
+      } catch (cloudErr) {
+        console.warn('Erro ao salvar check-in no Firestore:', cloudErr);
+      }
+    }
   };
 
   // Gerador de Comentário da IA conforme as regras da Seção 6
@@ -411,10 +500,16 @@ export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full pb-4">
       
       {/* Cabeçalho da Aba */}
-      <div className="mb-3">
+      <div className="mb-3 flex items-center justify-between">
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
           Meu Bem Estar
         </div>
+        {isCloudSynced && (
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#5eea8f]/10 border border-[#5eea8f]/30 text-[#5eea8f] text-[12.5px] font-semibold animate-fadeIn">
+            <CloudCheck className="w-4 h-4 text-[#5eea8f]" />
+            <span>Nuvem Conectada</span>
+          </div>
+        )}
       </div>
 
       {/* Cartão "Realizar Agora" */}
