@@ -128,7 +128,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
                     </div>
                   ) : (
                     <button
-                      onClick={() => setPrescriptionModalItem({ ...prot, title: displayTitle })}
+                      onClick={() => setPrescriptionModalItem(prot)}
                       className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
                     >
                       <i className="ti ti-file-type-pdf text-[17px]"></i>
@@ -137,7 +137,7 @@ export const ProtocolTab: React.FC<ProtocolTabProps> = ({
                   )}
 
                   <button
-                    onClick={() => setSelectedRecipe({ ...prot, title: displayTitle })}
+                    onClick={() => setSelectedRecipe(prot)}
                     className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3 rounded-xl bg-[#0f7a3a] border border-[#0f7a3a] text-white hover:bg-[#128d43] active:scale-95 transition cursor-pointer"
                   >
                     <i className="ti ti-eye text-[17px]"></i>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ProtocolItem } from '../../types/patient';
 import { X, Printer, ShieldCheck } from 'lucide-react';
+import { parseClinicalItemsToActives } from '../../services/crmDataService';
 
 interface PrescriptionPdfModalProps {
   isOpen: boolean;
@@ -22,30 +23,66 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
   if (!isOpen || !protocol) return null;
 
   // Datas
-  const emissionDateStr = protocol.emissionDate || '03/11/2026';
+  const emissionDateStr = protocol.emissionDate || '10/11/2026';
   const expirationDateStr =
     protocol.expirationDate ||
     protocol.expirationStr?.replace('Validade: ', '').replace('Data: ', '') ||
-    '08/12/2026';
+    '10/12/2026';
 
-  // Montagem da lista de fórmulas
-  const formulasList = protocol.formulas && protocol.formulas.length > 0
-    ? protocol.formulas
-    : [
-        {
-          id: 'form-default',
-          name: protocol.formulaName || protocol.title || 'Articulares 1',
-          posology: protocol.posology || 'Tomar 1 dose, 2 vezes ao dia com água após as refeições.',
-          observations: protocol.observations || 'Pode interagir com anticoagulantes. Manter em local fresco e seco.',
-          actives: protocol.actives && protocol.actives.length > 0
-            ? protocol.actives
-            : [
-                { name: 'Glucosamina', concentration: '500 mg' },
-                { name: 'Condroitina', concentration: '400 mg' },
-                { name: 'MSM', concentration: '300 mg' }
-              ]
-        }
-      ];
+  // Montagem da lista de fórmulas estritamente a partir do protocolo real
+  const formulasList = (() => {
+    const rawForms = Array.isArray(protocol.formulas)
+      ? protocol.formulas
+      : (protocol.formulas && typeof protocol.formulas === 'object' ? Object.values(protocol.formulas) : []);
+
+    // Extração resiliente de ativos:
+    // Prioriza actives diretos; se vazio, processa itens clínicos agregados do CRM
+    const fallbackActives = (() => {
+      const fromActives = parseClinicalItemsToActives(protocol.actives);
+      if (fromActives.length > 0) return fromActives;
+      return parseClinicalItemsToActives(protocol.items || (protocol as any).itensPrescritos);
+    })();
+
+    if (rawForms.length > 0) {
+      return rawForms.map((f: any, idx: number) => {
+        const fActives = parseClinicalItemsToActives(f.actives || f.ativos || f.itens || f.itensPrescritos || f.items);
+        const resolvedActives = fActives.length > 0 ? fActives : fallbackActives;
+        const rawTitle = f.name || f.formulaName || protocol.formulaName || protocol.title || 'Formula Farmácia Manipulação';
+        const cleanTitle = String(rawTitle).replace(/^\d+[\.\-\s]+/, '').trim();
+
+        return {
+          id: f.id || `form-${idx + 1}`,
+          name: cleanTitle || 'Formula Farmácia Manipulação',
+          posology: f.posology || f.modoDeUso || protocol.posology || 'Tomar 1 dose, 30 minutos antes do almoço e do jantar',
+          observations: f.observations || f.obsClinica || protocol.observations || '',
+          actives: resolvedActives
+        };
+      });
+    }
+
+    const derivedTitle = (() => {
+      if (protocol.formulaName && protocol.formulaName !== 'Formula Farmácia Manipulação') {
+        return protocol.formulaName;
+      }
+      if (protocol.items && protocol.items[0] && protocol.items[0].includes(':')) {
+        const pfx = protocol.items[0].split(':')[0].trim();
+        if (pfx) return pfx;
+      }
+      return protocol.formulaName || protocol.title || 'Formula Farmácia Manipulação';
+    })();
+
+    const cleanTitle = String(derivedTitle).replace(/^\d+[\.\-\s]+/, '').trim();
+
+    return [
+      {
+        id: 'form-main',
+        name: cleanTitle || 'Formula Farmácia Manipulação',
+        posology: protocol.posology || 'Tomar 1 dose, 30 minutos antes do almoço e do jantar',
+        observations: protocol.observations || '',
+        actives: fallbackActives
+      }
+    ];
+  })();
 
   const handlePrint = () => {
     try {
@@ -69,8 +106,39 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
                 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
                 <style>
-                  @page { size: A4 portrait; margin: 10mm; }
-                  body { font-family: 'Inter', sans-serif; background: #fff; margin: 0; padding: 0; }
+                  @page {
+                    size: A4 portrait;
+                    margin: 6mm;
+                  }
+                  html, body {
+                    font-family: 'Inter', sans-serif;
+                    background: #fff;
+                    margin: 0;
+                    padding: 0;
+                    height: 100%;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                  }
+                  #prescription-sheet {
+                    min-height: auto !important;
+                    height: auto !important;
+                    max-height: 282mm !important;
+                    padding: 4mm 6mm !important;
+                    margin: 0 auto !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    justify-content: space-between !important;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                  }
+                  .signature-box-container {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    break-after: avoid !important;
+                    page-break-after: avoid !important;
+                  }
                 </style>
               </head>
               <body>
@@ -78,7 +146,7 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
                 <script>
                   setTimeout(() => {
                     window.print();
-                  }, 600);
+                  }, 500);
                 </script>
               </body>
             </html>
@@ -96,18 +164,28 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/90 backdrop-blur-sm flex flex-col items-center p-2 sm:p-4 select-none print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-slate-900/90 backdrop-blur-sm flex flex-col items-center p-2 sm:p-4 select-none print:p-0 print:bg-white">
+      {/* BOTÃO FLUTUANTE DE FECHAR (SEMPRE VISÍVEL NO TOPO DIREITO DO DISPOSITIVO) */}
+      <button
+        type="button"
+        onClick={onClose}
+        className="fixed top-3 right-3 sm:top-4 sm:right-4 z-[70] w-10 h-10 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white flex items-center justify-center shadow-xl border border-slate-600 transition active:scale-95 cursor-pointer print:hidden"
+        title="Fechar Receituário e Voltar ao App"
+      >
+        <X className="w-5 h-5 text-white" />
+      </button>
+
       {/* BARRA SUPERIOR DE AÇÕES (OCULTA NA IMPRESSÃO) */}
-      <div className="w-full max-w-[210mm] mb-3 flex items-center justify-between bg-slate-800 border border-slate-700 text-white px-4 py-2.5 rounded-xl shadow-lg print:hidden">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Receituário Clínico Oficial | Dr. João Paulo Cecato</span>
+      <div className="w-full max-w-full sm:max-w-[210mm] mb-3 flex items-center justify-between bg-slate-800 border border-slate-700 text-white px-3 sm:px-4 py-2.5 rounded-xl shadow-lg print:hidden shrink-0">
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-200">
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="truncate">Receituário Clínico Oficial | Dr. João Paulo Cecato</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={handlePrint}
-            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow"
+            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow"
           >
             <Printer className="w-4 h-4" />
             <span>Imprimir / Salvar PDF</span>
@@ -115,10 +193,10 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer"
-            title="Fechar"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white text-xs sm:text-sm font-medium flex items-center gap-1 transition active:scale-95 cursor-pointer"
           >
             <X className="w-4 h-4" />
+            <span className="hidden sm:inline">Fechar</span>
           </button>
         </div>
       </div>
@@ -126,150 +204,162 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
       {/* FOLHA DE RECEITUÁRIO A4 OFICIAL */}
       <div
         id="prescription-sheet"
-        className="bg-white text-slate-800 w-full max-w-[210mm] min-h-[297mm] p-6 sm:p-10 shadow-2xl rounded-sm flex flex-col justify-between relative print:shadow-none print:p-6 print:m-0 print:max-w-none print:w-full"
+        className="bg-white text-slate-800 w-full max-w-full sm:max-w-[210mm] box-border overflow-x-hidden min-h-[297mm] print:min-h-0 print:h-auto print:max-h-[282mm] p-4 sm:p-7 shadow-2xl rounded-sm flex flex-col justify-between relative print:shadow-none print:p-2 print:m-0 print:max-w-none print:w-full print:page-break-inside-avoid"
         style={{ fontFamily: "'Inter', sans-serif" }}
       >
         <div>
           {/* 1. CABEÇALHO CLÍNICO */}
-          <div className="bg-[#f9fefb] border border-emerald-100 rounded-lg p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start gap-4 mb-3">
+          <div className="bg-[#f9fefb] border border-emerald-100 rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row justify-between items-start gap-3 mb-2 print:p-2.5 print:mb-1.5">
             <div>
-              <h1 className="text-[20pt] sm:text-[22pt] font-bold text-blue-600 leading-tight">
-                <span className="text-[23pt] sm:text-[25pt]">Dr. </span>João Paulo Cecato
+              <h1 className="text-[18pt] sm:text-[20pt] font-bold text-blue-600 leading-tight">
+                <span className="text-[20pt] sm:text-[22pt]">Dr. </span>João Paulo Cecato
               </h1>
-              <div className="font-semibold text-[10.5pt] text-slate-700 mt-1 mb-1">
+              <div className="font-semibold text-[10pt] text-slate-700 mt-0.5 mb-0.5">
                 Nutricionista Clínico | CRN4 – 20100054
               </div>
-              <div className="text-[9pt] text-slate-600 leading-snug">
+              <div className="text-[8.5pt] text-slate-600 leading-snug">
                 Metabologia e Sistema Digestivo
               </div>
-              <div className="text-[9pt] text-slate-600 leading-snug">
+              <div className="text-[8.5pt] text-slate-600 leading-snug">
                 Sistema Cognitivo, Emocional e Neurodegeneração
               </div>
-              <div className="mt-2 text-[9pt] font-medium text-slate-700">
+              <div className="mt-1.5 text-[8.5pt] font-medium text-slate-700">
                 Vittáre – Centro Integrado em Saúde
               </div>
-              <div className="text-[8pt] text-slate-500 mt-0.5">
+              <div className="text-[7.5pt] text-slate-500 mt-0.5">
                 Núcleo de Gestão Clínica | Rua Antônio Aleixo, 780 – Vitória / ES
               </div>
-              <div className="text-[8pt] text-slate-700 mt-0.5 flex flex-wrap gap-3">
+              <div className="text-[7.5pt] text-slate-700 mt-0.5 flex flex-wrap gap-3">
                 <span>WhatsApp: 27 99791-8100</span>
                 <span>E-mail: vittarecentrointegradoemsaude@gmail.com</span>
               </div>
             </div>
 
-            {/* Marca Vittáre - Imagem limpa sem bordas quadradas */}
-            <div className="flex items-center justify-center p-1.5 px-2 bg-transparent rounded-lg shrink-0">
+            {/* Marca Vittáre - Dimensão contida para não estourar em nenhuma tela */}
+            <div className="flex items-center justify-center p-1 bg-transparent rounded-lg shrink-0">
               <img 
                 src="https://i.ibb.co/JRkkVnRx/Vitt-re-CENTRO-INTEGRADO-EM-SA-DE-sem-fundo.png" 
                 alt="Logo Vittáre" 
-                className="h-14 w-auto object-contain mix-blend-multiply" 
+                className="max-h-12 max-w-[130px] sm:max-w-[160px] w-auto object-contain mix-blend-multiply" 
               />
             </div>
           </div>
 
           {/* 2. IDENTIFICAÇÃO DO PACIENTE E DATAS */}
-          <div className="border-t border-b border-slate-200 py-2 px-1 mb-2.5">
-            <div className="text-[10.5pt] text-slate-800 mb-1">
+          <div className="border-t border-b border-slate-200 py-1.5 px-1 mb-2 print:py-1 print:mb-1.5">
+            <div className="text-[10pt] text-slate-800 mb-0.5">
               <span className="text-slate-500">Paciente: </span>
               <strong className="text-slate-900">{patientName}</strong>
             </div>
-            <div className="text-[9pt] text-slate-600 flex flex-wrap gap-4">
+            <div className="text-[8.5pt] text-slate-600 flex flex-wrap gap-4">
               <span>Emissão: <strong className="text-slate-800">{emissionDateStr}</strong></span>
               <span>| Validade da Receita: <strong className="text-slate-800">{expirationDateStr}</strong></span>
             </div>
           </div>
 
           {/* 3. COMUNICADO OBRIGATÓRIO */}
-          <div className="text-[7.5pt] text-slate-500 italic leading-snug mb-3.5 pb-1.5 border-b border-dashed border-slate-300">
+          <div className="text-[7.5pt] text-slate-500 italic leading-snug mb-2 pb-1 border-b border-dashed border-slate-300 print:mb-1.5 print:pb-0.5">
             <strong className="font-semibold text-slate-700 not-italic">Comunicado ao Paciente e ao Farmacêutico Responsável: </strong>
             Dúvidas contatar. Esta receita é personalizada e não permite alterações em sua composição ou dosagem. O uso é exclusivo ao paciente indicado e o documento perde a validade após o vencimento. Este produto não pode ser manipulado ou adquirido em farmácias comerciais após esta data.
           </div>
 
           {/* 4. FÓRMULAS E ATIVOS PRESCRITOS */}
-          <div className="space-y-4">
+          <div className="space-y-2.5 my-1.5 print:my-1">
             {formulasList.map((formula, fIdx) => (
-              <div key={formula.id || fIdx} className="break-inside-avoid mb-2">
-                <h2 className="text-[11pt] font-bold text-blue-900 mb-1">
-                  {formula.name}
+              <div key={formula.id || fIdx} className="break-inside-avoid">
+                {/* Título numerado da Fórmula em destaque */}
+                <h2 className="text-[17px] sm:text-[18px] font-bold text-slate-900 mb-2 leading-tight">
+                  {fIdx + 1}. {formula.name}
                 </h2>
 
-                {/* Lista de Ativos com Linha Pontilhada */}
-                <ul className="list-none p-0 my-1.5 w-full leading-tight">
-                  {formula.actives.map((active, aIdx) => (
-                    <li key={aIdx} className="flex items-baseline gap-1 my-0.5 text-[10pt]">
-                      <span className="shrink-0 text-slate-700 italic">
-                        {active.name}
-                      </span>
-                      <span className="grow border-b border-dotted border-slate-300 h-px translate-y-[-3px]" />
-                      <span className="shrink-0 font-semibold text-slate-900">
-                        {active.concentration}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                {/* Lista de Ativos com Linha Pontilhada e Fonte de 17px solicitada */}
+                {formula.actives && formula.actives.length > 0 ? (
+                  <ul className="list-none p-0 my-1.5 w-full leading-tight space-y-1">
+                    {formula.actives.map((active: any, aIdx: number) => {
+                      const activeName = active?.name || active?.ativo || active?.nome || active?.composto || active?.substancia || (typeof active === 'string' ? active : 'Ativo Prescrito');
+                      const activeConc = active?.concentration || active?.dosagem || active?.concentracao || active?.dose || active?.valor || '';
 
-                {/* Posologia */}
-                <div className="mt-1 text-[9.5pt] text-slate-700">
-                  <strong className="text-slate-800 font-semibold">Posologia: </strong>
-                  {formula.posology}
-                </div>
-
-                {/* Observações */}
-                {formula.observations && (
-                  <div className="mt-0.5 text-[9pt] text-slate-500 italic">
-                    <strong>Obs.: </strong>
-                    {formula.observations}
+                      return (
+                        <li key={aIdx} className="flex items-baseline gap-2 text-[16px] sm:text-[17px] leading-snug">
+                          <span className="shrink-0 text-slate-800 italic font-medium">
+                            - {activeName} :
+                          </span>
+                          <span className="grow border-b border-dotted border-slate-400 h-px translate-y-[-3px]" />
+                          <span className="shrink-0 font-bold text-slate-900 ml-1">
+                            {activeConc}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <div className="py-1 text-[15px] text-slate-400 italic">
+                    Nenhum ativo associado a esta fórmula.
                   </div>
                 )}
 
+                {/* Aviar e Posologia */}
+                <div className="mt-2.5 text-[15px] sm:text-[16px] text-slate-800 space-y-1">
+                  <div>
+                    <span className="font-bold text-slate-900">Aviar: </span>
+                    <span className="text-slate-700">30 doses</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-900">Posologia: </span>
+                    <span className="text-slate-700">{formula.posology}</span>
+                  </div>
+                  {formula.observations ? (
+                    <div>
+                      <span className="font-bold text-slate-900">Obs. Clínica: </span>
+                      <span className="text-slate-600 italic">{formula.observations}</span>
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="font-bold text-slate-900">Obs. Clínica: </span>
+                      <span className="text-slate-400 italic">Nenhuma observação informada.</span>
+                    </div>
+                  )}
+                </div>
+
                 {fIdx < formulasList.length - 1 && (
-                  <hr className="my-3 border-0 border-t border-slate-100" />
+                  <hr className="my-2 border-0 border-t border-slate-200" />
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        {/* 5. RODAPÉ OFICIAL: ASSINATURA DIGITAL GOV.BR / ICP-BRASIL */}
-        <div className="mt-6 pt-3 flex justify-center">
-          <div className="w-full max-w-[585px] border border-slate-300 rounded-lg p-2.5 sm:p-3 bg-white flex flex-col sm:flex-row justify-between items-center gap-3">
+        {/* 5. RODAPÉ OFICIAL: ASSINATURA DIGITAL GOV.BR / ICP-BRASIL E CARIMBO LIMPO (SEM O "R" AZUL) */}
+        <div className="mt-3 pt-2 print:mt-1.5 print:pt-1 flex justify-center signature-box-container shrink-0 break-inside-avoid">
+          <div className="w-full max-w-[585px] border border-slate-300 rounded-lg p-2.5 sm:p-3 bg-white flex flex-col sm:flex-row justify-between items-center gap-2.5 shadow-sm">
             {/* Esquerda: Selo Gov.br */}
             <div className="flex items-start gap-2.5 text-left shrink-0">
-              <div className="font-bold text-[19pt] leading-none shrink-0">
+              <div className="font-bold text-[18pt] leading-none shrink-0">
                 <span className="text-[#003a70]">gov</span>
                 <span className="text-[#ffcd07]">.br</span>
               </div>
-              <div className="text-[8pt] leading-tight text-slate-700">
-                <div className="text-[7.5pt] text-slate-500">Documento assinado digitalmente</div>
+              <div className="text-[7.5pt] leading-tight text-slate-700">
+                <div className="text-[7pt] text-slate-500">Documento assinado digitalmente</div>
                 <div className="font-bold text-slate-900 uppercase mt-0.5">JOAO PAULO GONCALVES CECATO</div>
-                <div className="font-mono text-slate-600 mt-0.5 text-[7.5pt]">
+                <div className="font-mono text-slate-600 mt-0.5 text-[7pt]">
                   Data: {emissionDateStr} 12:27:01-0300
                 </div>
-                <div className="text-blue-600 underline mt-0.5 text-[7.5pt]">
+                <div className="text-blue-600 underline mt-0.5 text-[7pt]">
                   Verifique em https://validar.iti.gov.br
                 </div>
               </div>
             </div>
 
-            <div className="hidden sm:block w-px h-14 bg-slate-200" />
+            <div className="hidden sm:block w-px h-12 bg-slate-200" />
 
-            {/* Direita: Rubrica Transparente e Credenciais */}
-            <div className="w-full sm:w-[256px] relative flex items-center justify-end">
-              {/* Rubrica Sobreposta */}
-              <div className="absolute left-0 sm:left-2 -top-4 w-16 h-20 pointer-events-none">
-                <img
-                  src={AUTHENTIC_RUBRIC}
-                  alt="Rubrica Dr. João Paulo Cecato"
-                  className="w-full h-full object-contain mix-blend-multiply bg-transparent"
-                />
-              </div>
-
-              <div className="text-right text-[8pt] leading-tight text-slate-800">
-                <div className="font-bold text-slate-900 uppercase">DR. JOÃO PAULO CECATO</div>
-                <div className="font-semibold text-[7.5pt] text-slate-700">NUTRICIONISTA | CRN 20100054 REGIÃO-4</div>
-                <div className="font-semibold text-[7pt] text-slate-600 uppercase">ESPECIALISTA EM NEUROCIÊNCIAS</div>
-                <div className="text-[7pt] text-slate-600 mt-0.5">
-                  <span className="italic">Assinatura: </span>
+            {/* Direita: Credenciais Oficiais e Carimbo Profissional Limpo */}
+            <div className="w-full sm:w-[270px] flex items-center justify-end">
+              <div className="text-right text-[8pt] sm:text-[8.5pt] leading-tight text-slate-800">
+                <div className="font-bold text-slate-900 uppercase tracking-wide">DR. JOÃO PAULO CECATO</div>
+                <div className="font-semibold text-[7.5pt] text-slate-700 mt-0.5">NUTRICIONISTA | CRN 20100054 REGIÃO-4</div>
+                <div className="font-semibold text-[7pt] text-slate-600 uppercase mt-0.5">ESPECIALISTA EM NEUROCIÊNCIAS</div>
+                <div className="text-[7pt] text-slate-700 mt-0.5">
+                  <span className="italic text-slate-500">Assinatura: </span>
                   <span className="underline decoration-dotted font-semibold">ESPECIALISTA EM NUTRIÇÃO CLÍNICA FUNCIONAL</span>
                 </div>
               </div>
@@ -278,13 +368,57 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
         </div>
       </div>
 
+      {/* BARRA INFERIOR DE RETORNO ERGONÔMICO (OCULTA NA IMPRESSÃO) */}
+      <div className="w-full max-w-full sm:max-w-[210mm] mt-3 pb-4 flex justify-center print:hidden shrink-0">
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 hover:text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
+        >
+          <X className="w-4 h-4" />
+          <span>Voltar ao Aplicativo Vittáre</span>
+        </button>
+      </div>
+
       <style>
         {`
           @media print {
-            @page { size: A4 portrait; margin: 0; }
+            @page {
+              size: A4 portrait;
+              margin: 6mm;
+            }
+            body {
+              background: #fff !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
             body > *:not(#prescription-sheet) { display: none !important; }
             #prescription-sheet {
-              position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 10mm; box-shadow: none; display: block !important;
+              position: relative !important;
+              left: auto !important;
+              top: auto !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              min-height: auto !important;
+              height: auto !important;
+              max-height: 282mm !important;
+              margin: 0 !important;
+              padding: 4mm 6mm !important;
+              box-shadow: none !important;
+              border: none !important;
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+            .signature-box-container {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              break-after: avoid !important;
+              page-break-after: avoid !important;
             }
             .action-toolbar { display: none !important; }
           }

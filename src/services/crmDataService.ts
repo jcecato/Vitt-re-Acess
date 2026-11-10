@@ -1,4 +1,4 @@
-import { PatientProfile } from '../types/patient';
+import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient } from '../types/patient';
 import { INITIAL_PATIENTS } from '../patients/defaultPatient';
 import { db, auth, isFirebaseConfigured } from '../config/firebase';
 import { 
@@ -14,7 +14,175 @@ import {
   type DocumentSnapshot 
 } from 'firebase/firestore';
 
-const STORAGE_KEY = 'vittare_patients_store_v12';
+const STORAGE_KEY = 'vittare_patients_store_v13';
+
+// Cache persistente em memória das prescrições oficiais da subcoleção para blindagem contra sobrescrita
+let cachedSubPrescriptions: ProtocolItem[] = [];
+
+/**
+ * Parser de Gramática Clínica e Expressões Médicas:
+ * Decompõe strings agregadas de prescrição do CRM (ex: "Formula: Chlorella (200 mg), Quitosana (50 mg)...")
+ * ou arrays heterogêneos de itens em pares fortemente tipados de { name, concentration }.
+ */
+export function parseClinicalItemsToActives(rawItems: any): ActiveIngredient[] {
+  if (!rawItems) return [];
+  const list = Array.isArray(rawItems)
+    ? rawItems
+    : (typeof rawItems === 'object' ? Object.values(rawItems) : [rawItems]);
+
+  const actives: ActiveIngredient[] = [];
+
+  for (const item of list) {
+    if (!item) continue;
+    if (typeof item === 'object') {
+      const name = item.name || item.ativo || item.nome || item.composto || item.substancia || '';
+      const concentration = item.concentration || item.dosagem || item.concentracao || item.dose || item.valor || '';
+      if (name) {
+        actives.push({
+          name: String(name).trim(),
+          concentration: String(concentration).trim()
+        });
+      }
+      continue;
+    }
+
+    if (typeof item === 'string') {
+      let text = item.trim();
+      // Se houver prefixo de fórmula clínica (ex: "Formula Farmácia Manipulação: ...")
+      if (text.includes(':')) {
+        const colonIdx = text.indexOf(':');
+        const afterColon = text.slice(colonIdx + 1).trim();
+        if (afterColon.length > 0) {
+          text = afterColon;
+        }
+      }
+
+      // Regex para capturar padrões médicos "Nome do Composto (Dosagem e Unidade)"
+      // Ancorado especificamente no último grupo de parênteses com valores numéricos de dose
+      const activeRegex = /(.*?)\s*\(([\d\.]+\s*[a-zA-Z%µmcg\s]+)\)(?:[,\;]|\s*$)/g;
+      let matched = false;
+      let m: RegExpExecArray | null;
+      while ((m = activeRegex.exec(text)) !== null) {
+        const cleanName = m[1].replace(/^[,\;\s\-\•\*\d+\.]+/g, '').trim();
+        const cleanConc = m[2].trim();
+        if (cleanName) {
+          actives.push({ name: cleanName, concentration: cleanConc });
+          matched = true;
+        }
+      }
+
+      // Fallback para itens separados por vírgula ou hífen sem unidade expressa em parênteses
+      if (!matched && text) {
+        const parts = text.split(/[,\;\n]/).map(s => s.trim()).filter(Boolean);
+        for (const part of parts) {
+          const dashMatch = part.match(/^(.*?)\s*[\-\–\:]\s*(.*)$/);
+          if (dashMatch) {
+            actives.push({
+              name: dashMatch[1].replace(/^[,\;\s\-\•\*\d+\.]+/g, '').trim(),
+              concentration: dashMatch[2].trim()
+            });
+          } else {
+            actives.push({
+              name: part.replace(/^[,\;\s\-\•\*\d+\.]+/g, '').trim(),
+              concentration: ''
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return actives;
+}
+
+/**
+ * Normalizador polimórfico de ativos farmacêuticos e suplementos.
+ * Converte arrays nativos, dicionários indexados ({ "0": {...} }) ou strings brutas em objetos padronizados.
+ */
+export function safeExtractActives(raw: any): ActiveIngredient[] {
+  if (!raw) return [];
+  return parseClinicalItemsToActives(raw);
+}
+
+/**
+ * Normalizador polimórfico de fórmulas de prescrição manipuladas.
+ * Converte arrays ou mapas de fórmulas e extrai seus ativos clínicos com segurança.
+ */
+export function safeExtractFormulas(
+  rawFormulas: any,
+  fallbackName?: string,
+  fallbackPosology?: string,
+  fallbackObs?: string,
+  fallbackActives: ActiveIngredient[] = []
+): ProtocolFormula[] {
+  let list: any[] = [];
+  if (Array.isArray(rawFormulas)) {
+    list = rawFormulas;
+  } else if (rawFormulas && typeof rawFormulas === 'object') {
+    list = Object.values(rawFormulas);
+  }
+
+  if (list.length > 0) {
+    return list.map((f: any, idx: number) => {
+      const fActives = safeExtractActives(f.actives || f.ativos || f.itens || f.itensPrescritos);
+      const resolvedActives = fActives.length > 0 ? fActives : fallbackActives;
+      const rawTitle = f.name || f.formulaName || fallbackName || `Fórmula ${idx + 1}`;
+      const cleanTitle = String(rawTitle).replace(/^\d+[\.\-\s]+/, '').trim();
+
+      return {
+        id: f.id || `form-${idx + 1}`,
+        name: cleanTitle || `Fórmula ${idx + 1}`,
+        posology: f.posology || f.modoDeUso || fallbackPosology || 'Tomar conforme orientação clínica.',
+        observations: f.observations || f.obsClinica || fallbackObs || '',
+        actives: resolvedActives
+      };
+    });
+  }
+
+  if (fallbackActives.length > 0) {
+    const rawTitle = fallbackName || 'Formula Farmácia Manipulação';
+    const cleanTitle = String(rawTitle).replace(/^\d+[\.\-\s]+/, '').trim();
+    return [{
+      id: 'form-1',
+      name: cleanTitle || 'Formula Farmácia Manipulação',
+      posology: fallbackPosology || 'Tomar conforme orientação clínica.',
+      observations: fallbackObs || '',
+      actives: fallbackActives
+    }];
+  }
+
+  return [];
+}
+
+/**
+ * Helper para validar se uma lista de protocolos possui ativos clínicos associados.
+ */
+export function hasProtocolActives(list?: ProtocolItem[]): boolean {
+  return Array.isArray(list) && list.some(p => 
+    (p.actives && p.actives.length > 0) || 
+    (p.formulas && p.formulas.some(f => f.actives && f.actives.length > 0))
+  );
+}
+
+/**
+ * Resolvedor autoritativo de protocolos:
+ * Prioriza a subcoleção de prescrições oficiais caso contenha ativos reais.
+ */
+export function resolveAuthoritativeProtocols(
+  remoteProts?: ProtocolItem[], 
+  localProts?: ProtocolItem[]
+): ProtocolItem[] {
+  if (hasProtocolActives(cachedSubPrescriptions)) {
+    return cachedSubPrescriptions;
+  }
+  if (hasProtocolActives(remoteProts)) {
+    return remoteProts!;
+  }
+  if (hasProtocolActives(localProts)) {
+    return localProts!;
+  }
+  return (remoteProts && remoteProts.length > 0) ? remoteProts : (localProts || []);
+}
 
 /**
  * Escudo Defensivo de Dados (Sanitização profunda contra 'Tela Branca'):
@@ -162,7 +330,50 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
       }
       return fallback.mealGuides || [];
     })(),
-    protocols: Array.isArray(raw.protocols) ? raw.protocols : (fallback.protocols || []),
+    protocols: (() => {
+      const rawProts = Array.isArray(raw.protocols) 
+        ? raw.protocols 
+        : (raw.protocols && typeof raw.protocols === 'object' ? Object.values(raw.protocols) : []);
+
+      if (rawProts.length > 0) {
+        return rawProts.map((p: any, pIdx: number) => {
+          const rawFormulas = p.formulas || [];
+          const defaultActives = safeExtractActives(
+            p.actives || 
+            (Array.isArray(rawFormulas) ? rawFormulas[0]?.actives : null) ||
+            p.items || 
+            p.itensPrescritos
+          );
+          const normalizedFormulas = safeExtractFormulas(
+            rawFormulas,
+            p.formulaName || p.title || 'Formula Farmácia Manipulação',
+            p.posology || p.modoDeUso || '',
+            p.observations || '',
+            defaultActives
+          );
+          const effectiveActives = defaultActives.length > 0 
+            ? defaultActives 
+            : (normalizedFormulas[0]?.actives || []);
+          
+          return {
+            id: p.id || `prot-${pIdx + 1}`,
+            title: p.title || p.formulaName || 'Prescrição Médica',
+            expirationStr: p.expirationStr || (p.expirationDate ? `Validade: ${p.expirationDate}` : 'Validade: 30 dias'),
+            badge: (p.badge || 'novo').toLowerCase() as any,
+            audioAvailable: Boolean(p.audioAvailable),
+            items: Array.isArray(p.items) ? p.items : (p.items ? [p.items] : []),
+            formulaName: p.formulaName || (normalizedFormulas[0]?.name) || 'Formula Farmácia Manipulação',
+            emissionDate: p.emissionDate || new Date().toLocaleDateString('pt-BR'),
+            expirationDate: p.expirationDate || '',
+            posology: p.posology || p.modoDeUso || (normalizedFormulas[0]?.posology) || '',
+            observations: p.observations || (normalizedFormulas[0]?.observations) || '',
+            actives: effectiveActives,
+            formulas: normalizedFormulas
+          };
+        });
+      }
+      return fallback.protocols || [];
+    })(),
     marketplace: Array.isArray(raw.marketplace) ? raw.marketplace : (fallback.marketplace || []),
     documents: Array.isArray(raw.documents) ? raw.documents : (fallback.documents || []),
     financial: Array.isArray(raw.financial) ? raw.financial : (fallback.financial || []),
@@ -494,6 +705,7 @@ class CrmDataService {
 
     let unsubscribeFirestore: (() => void) | null = null;
     let unsubscribePlansFirestore: (() => void) | null = null;
+    let unsubscribePrescriptionsFirestore: (() => void) | null = null;
     let unsubscribeEmailFirestore: (() => void) | null = null;
 
     if (isFirebaseConfigured() && db) {
@@ -510,8 +722,20 @@ class CrmDataService {
             (snapshot: DocumentSnapshot) => {
               if (snapshot.exists()) {
                 const raw = snapshot.data();
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
                 const remotePatient = sanitizePatientPayload(raw, targetDocId);
-                callback(remotePatient);
+                
+                // Preserva prescrições com ativos reais vindos da subcoleção oficial
+                const mergedProtocols = resolveAuthoritativeProtocols(remotePatient.protocols, currentP.protocols);
+
+                const mergedPatient: PatientProfile = {
+                  ...remotePatient,
+                  protocols: mergedProtocols,
+                  mealGuides: (remotePatient.mealGuides && remotePatient.mealGuides.length > 0)
+                    ? remotePatient.mealGuides
+                    : (currentP.mealGuides || [])
+                };
+                callback(mergedPatient);
               }
             },
             (err) => {
@@ -549,6 +773,83 @@ class CrmDataService {
           } catch (pErr) {
             console.warn("Erro no listener da subcoleção plans:", pErr);
           }
+
+          // Escuta em tempo real na subcoleção /prescriptions (Fórmulas e Prescrições gravadas pelo CRM)
+          try {
+            const prescRef = collection(firestoreDb, 'patients', targetDocId, 'prescriptions');
+            unsubscribePrescriptionsFirestore = onSnapshot(prescRef, (prescSnap) => {
+              if (!prescSnap.empty) {
+                const subPrescriptions: ProtocolItem[] = prescSnap.docs.map(pDoc => {
+                  const data = pDoc.data();
+                  const badgeNorm = (data.badge || 'novo').toLowerCase();
+                  
+                  // Extração inteligente e polimórfica de fórmulas e ativos reais gravados pelo CRM
+                  const defaultActives = safeExtractActives(
+                    data.actives || 
+                    (Array.isArray(data.formulas) ? data.formulas[0]?.actives : (data.formulas?.[0]?.actives || data.formulas?.['0']?.actives))
+                  );
+
+                  const normalizedFormulas = safeExtractFormulas(
+                    data.formulas,
+                    data.formulaName || data.title || 'Formula Farmácia Manipulação',
+                    data.posology || data.modoDeUso || 'Tomar conforme orientação clínica.',
+                    data.observations || data.obsClinica || '',
+                    defaultActives
+                  );
+
+                  const effectiveActives = defaultActives.length > 0 
+                    ? defaultActives 
+                    : (normalizedFormulas[0]?.actives || []);
+
+                  return {
+                    id: pDoc.id,
+                    title: data.title || data.formulaName || 'Prescrição Médica',
+                    expirationStr: data.expirationStr || (data.expirationDate ? `Validade: ${data.expirationDate}` : 'Validade: 30 dias'),
+                    badge: (badgeNorm === 'novo' || badgeNorm === 'atualizado' || badgeNorm === 'descontinuado' ? badgeNorm : 'novo') as 'novo' | 'atualizado' | 'descontinuado',
+                    audioAvailable: Boolean(data.audioAvailable),
+                    formulaName: data.formulaName || (normalizedFormulas[0]?.name) || 'Formula Farmácia Manipulação',
+                    emissionDate: data.emissionDate || new Date().toLocaleDateString('pt-BR'),
+                    expirationDate: data.expirationDate || '',
+                    posology: data.posology || data.modoDeUso || (normalizedFormulas[0]?.posology) || '',
+                    observations: data.observations || (normalizedFormulas[0]?.observations) || '',
+                    actives: effectiveActives,
+                    formulas: normalizedFormulas
+                  };
+                });
+
+                // Atualiza o cache seguro de prescrições oficiais
+                cachedSubPrescriptions = subPrescriptions;
+
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                
+                // Desativa o reconhecimento da aba para disparar a notificação visual no aplicativo
+                const currentAck = currentP.lyaNotification?.acknowledgedTabs || [];
+                const updatedAck = currentAck.filter(t => t !== 'protocolo' && t !== 'formulas-suprimentos');
+                const updatedNotification = currentP.lyaNotification ? {
+                  ...currentP.lyaNotification,
+                  acknowledgedTabs: updatedAck
+                } : currentP.lyaNotification;
+
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  protocols: subPrescriptions,
+                  ...(updatedNotification ? { lyaNotification: updatedNotification } : {})
+                };
+                callback(updatedPatient);
+              } else if (cachedSubPrescriptions.length === 0) {
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  protocols: []
+                };
+                callback(updatedPatient);
+              }
+            }, (err) => {
+              console.info("🔒 [Vittáre Data] Subcoleção prescriptions em modo seguro:", err.code);
+            });
+          } catch (prErr) {
+            console.warn("Erro no listener da subcoleção prescriptions:", prErr);
+          }
         }
 
         const emailToCheck = auth?.currentUser?.email?.toLowerCase().trim() ||
@@ -567,8 +868,18 @@ class CrmDataService {
               (querySnap) => {
                 if (!querySnap.empty) {
                   const docSnap = querySnap.docs[0];
+                  const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
                   const remoteData = sanitizePatientPayload(docSnap.data(), docSnap.id);
-                  callback(remoteData);
+                  const mergedProtocols = resolveAuthoritativeProtocols(remoteData.protocols, currentP.protocols);
+
+                  const mergedData: PatientProfile = {
+                    ...remoteData,
+                    protocols: mergedProtocols,
+                    mealGuides: (remoteData.mealGuides && remoteData.mealGuides.length > 0)
+                      ? remoteData.mealGuides
+                      : (currentP.mealGuides || [])
+                  };
+                  callback(mergedData);
                 }
               },
               (err) => {
@@ -591,6 +902,9 @@ class CrmDataService {
       }
       if (unsubscribePlansFirestore) {
         unsubscribePlansFirestore();
+      }
+      if (unsubscribePrescriptionsFirestore) {
+        unsubscribePrescriptionsFirestore();
       }
       if (unsubscribeEmailFirestore) {
         unsubscribeEmailFirestore();
