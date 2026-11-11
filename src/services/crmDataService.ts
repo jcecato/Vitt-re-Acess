@@ -374,7 +374,21 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
       }
       return fallback.protocols || [];
     })(),
-    marketplace: Array.isArray(raw.marketplace) ? raw.marketplace : (fallback.marketplace || []),
+    marketplace: (() => {
+      const rawMarketplace = raw.marketplace || raw.acessoAgil || raw.curadoria || raw.linksCuradoria || raw.externalLinks;
+      if (Array.isArray(rawMarketplace) && rawMarketplace.length > 0) {
+        return rawMarketplace.map((m: any, idx: number) => ({
+          id: m.id || `agil-${idx + 1}`,
+          name: m.name || m.title || m.produto || 'Suplemento / Fórmula Verificada',
+          link: m.link || m.url || m.linkExterno || '#',
+          dateStr: m.dateStr || m.date || new Date().toLocaleDateString('pt-BR'),
+          icon: m.icon || 'ti-shopping-bag',
+          gradient: m.gradient || 'linear-gradient(135deg, #0f7a3a, #1f9d57)',
+          description: m.description || m.obs || m.cupom || ''
+        }));
+      }
+      return fallback.marketplace || [];
+    })(),
     documents: Array.isArray(raw.documents) ? raw.documents : (fallback.documents || []),
     financial: Array.isArray(raw.financial) ? raw.financial : (fallback.financial || []),
     terms: (() => {
