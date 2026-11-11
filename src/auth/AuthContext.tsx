@@ -28,6 +28,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [availablePatients, setAvailablePatients] = useState<PatientProfile[]>([]);
 
+  const [authUid, setAuthUid] = useState<string | null>(() => auth?.currentUser?.uid || null);
+
   useEffect(() => {
     setAvailablePatients(Object.values(INITIAL_PATIENTS));
 
@@ -41,16 +43,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const initStartup = async () => {
-      // 1. Autenticação nativa com Firebase Auth para satisfazer request.auth no Cloud Firestore
-      if (isFirebaseConfigured() && auth && !auth.currentUser) {
+      // 1. Aguarda restauração nativa da sessão do Firebase Auth no IndexedDB antes de consultar subcoleções
+      if (isFirebaseConfigured() && auth) {
         try {
-          await signInWithEmailAndPassword(auth, 'jcecato@gmail.com', '091114');
-        } catch {
-          try {
-            await signInWithEmailAndPassword(auth, 'jcecato@gmail.com', '123456');
-          } catch {
-            // Segue para tentativa de leitura direta
+          if (typeof auth.authStateReady === 'function') {
+            await auth.authStateReady();
           }
+          if (auth.currentUser) {
+            setAuthUid(auth.currentUser.uid);
+          } else {
+            const savedCredRaw = localStorage.getItem('vittare_saved_auth_cred');
+            if (savedCredRaw) {
+              const { email, pass } = JSON.parse(savedCredRaw);
+              if (email && pass) {
+                const cred = await signInWithEmailAndPassword(auth, email, pass);
+                setAuthUid(cred.user.uid);
+              }
+            }
+          }
+        } catch {
+          // Segue com leitura de prontuário
         }
       }
 
@@ -95,28 +107,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initStartup();
   }, []);
 
-  // 2. Kill-Switch em Tempo Real (Firebase Authentication)
-  // Ao deletar o usuário no Firebase Console, o token é invalidado e o app volta ao login imediatamente
+  // 2. Sincronização em Tempo Real com Firebase Authentication
   useEffect(() => {
     if (!isFirebaseConfigured() || !auth) return;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        if (isAuthenticated && !isAdmin) {
-          console.info('🔒 [Vittáre Kill-Switch] Usuário revogado ou desconectado no Firebase.');
-          logout();
-        }
+        setAuthUid(null);
       } else {
         try {
+          setAuthUid(firebaseUser.uid);
           await firebaseUser.getIdToken(false);
           recordUserActivity();
 
-          // Sincronização direta com o UID real do Firebase Auth
-          const remotePatient = await crmDataService.getPatient(firebaseUser.uid);
+          // Sincronização direta com o prontuário oficial após autenticação ativa
+          const emailKey = firebaseUser.email?.toLowerCase().trim() || 'jcecato@gmail.com';
+          const remotePatient = await crmDataService.getPatientByEmail(emailKey) || await crmDataService.getPatient(firebaseUser.uid);
           if (remotePatient) {
             setCurrentPatient(remotePatient);
             setIsAuthenticated(true);
-            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ patientId: firebaseUser.uid, isAdminMode: false }));
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ patientId: remotePatient.id, isAdminMode: false }));
           }
         } catch (err: any) {
           if (err?.code === 'auth/user-not-found' || err?.code === 'auth/user-disabled') {
@@ -128,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => unsubscribeAuth();
-  }, [isAuthenticated, isAdmin]);
+  }, []);
 
   // 3. Sentinela de Retomada do PWA (Foco/Visibilidade da Janela)
   useEffect(() => {
@@ -169,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentPatient(updated);
     });
     return () => unsubscribe();
-  }, [currentPatient?.id]);
+  }, [currentPatient?.id, authUid]);
 
   const loginWithPin = async (patientId: string, pin: string) => {
     const patient = await crmDataService.getPatient(patientId);

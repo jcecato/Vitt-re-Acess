@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PatientProfile, ExamBatch, BiomarkerComparison } from '../../types/patient';
+import { ExamRequestPdfModal } from '../../components/common/ExamRequestPdfModal';
 
 interface ExamsTabProps {
   patient: PatientProfile;
@@ -8,7 +9,7 @@ interface ExamsTabProps {
 
 export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
   const isExpired = (patient.daysToComplete ?? 0) <= 0;
-  const [selectedBatch, setSelectedBatch] = useState<ExamBatch | null>(null);
+  const [selectedBatchForPdf, setSelectedBatchForPdf] = useState<ExamBatch | null>(null);
 
   // Lotes/Solicitações de Exames separados individualmente (pronto para sincronização CRM externa)
   const batches: ExamBatch[] = patient.examBatches && patient.examBatches.length > 0
@@ -45,7 +46,8 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
         ) : (
           <div className="space-y-4">
             {batches.map((batch) => {
-            const isReady = batch.status.toLowerCase() === 'laudo' || batch.status.toLowerCase() === 'disponível';
+            const statusNorm = batch.status.toLowerCase();
+            const isReady = statusNorm === 'laudo' || statusNorm === 'disponível' || statusNorm.includes('liber') || Boolean(batch.pdfAvailable);
 
             return (
               <div
@@ -77,7 +79,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                   </div>
                 </div>
 
-                {/* Linha de Ações: PDF (com cadeado 50% maior se expirado) e Visualizar */}
+                {/* Linha de Ações: PDF */}
                 <div className="flex flex-wrap gap-2 mt-3 pt-2.5 border-t border-white/[0.05]">
                   {isExpired ? (
                     <div className="relative inline-block" title="Download em PDF bloqueado após conclusão do ciclo">
@@ -94,22 +96,13 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
                     </div>
                   ) : (
                     <button
-                      onClick={() => onOpenPdf(batch.title)}
+                      onClick={() => setSelectedBatchForPdf(batch)}
                       className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
                     >
                       <i className="ti ti-file-type-pdf text-[17px]"></i>
                       <span>PDF</span>
                     </button>
                   )}
-
-                  {/* Visualizar: Abre o modal 9:16 com os resultados deste lote específico */}
-                  <button
-                    onClick={() => setSelectedBatch(batch)}
-                    className="h-[34px] min-h-[34px] max-h-[34px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-[#0f7a3a] border border-[#0f7a3a] text-white hover:bg-[#128d43] active:scale-95 transition cursor-pointer"
-                  >
-                    <i className="ti ti-eye text-[17px]"></i>
-                    <span>Visualizar</span>
-                  </button>
                 </div>
               </div>
             );
@@ -315,114 +308,14 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient, onOpenPdf }) => {
       </div>
       )}
 
-      {/* Modal 9:16 do Exame Resultado (com X de fechar no lado superior direito E no lado inferior direito para ajudar idosos) */}
-      {selectedBatch && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 select-none font-['Plus_Jakarta_Sans',sans-serif]"
-          onClick={() => setSelectedBatch(null)}
-        >
-          <div
-            className="w-full max-w-full sm:max-w-[420px] max-h-[92vh] bg-[#14142a] border-[1px] border-white/50 rounded-[28px] p-4 sm:p-5 shadow-2xl flex flex-col justify-between animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Cabeçalho do Modal com Título, Data e Botão "X" no lado SUPERIOR DIREITO */}
-            <div className="flex items-start justify-between gap-3 pb-3 border-b border-white/10 shrink-0">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#5eea8f] shrink-0"></span>
-                  <span className="text-[19px] font-['Cormorant_Garamond',serif] font-medium text-white truncate">
-                    {selectedBatch.title}
-                  </span>
-                </div>
-                <div className="text-[15px] text-[#e0e0ed] mt-0.5">
-                  Laudo emitido em {selectedBatch.dateStr}
-                </div>
-              </div>
-
-              {/* Botão X Superior Direito: grande e acessível */}
-              <button
-                type="button"
-                onClick={() => setSelectedBatch(null)}
-                className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center text-xl cursor-pointer shrink-0 transition"
-                title="Fechar resultados (X)"
-              >
-                <i className="ti ti-x"></i>
-              </button>
-            </div>
-
-            {/* Lista dos Resultados do Lote Específico */}
-            <div className="overflow-y-auto space-y-2.5 py-3 pr-1 my-1 grow max-h-[60vh]">
-              {selectedBatch.results.map((ex) => {
-                const isOk = ex.status === 'ok';
-                const isWarn = ex.status === 'atenção';
-                const isLow = ex.status === 'baixo';
-
-                return (
-                  <div
-                    key={ex.id}
-                    className="bg-white/[0.04] border-[1px] border-white/50 rounded-xl p-3 flex flex-col gap-2"
-                  >
-                    {/* Linha 1: Nome do Exame em Destaque Full Width (21px) */}
-                    <div className="text-[21px] font-bold text-white leading-tight break-words">
-                      {ex.name}
-                    </div>
-
-                    {/* Linha 2: Ref alinhada à esquerda (17px) | Valor (17px) e Tag OK/Atenção/Baixo alinhados à direita */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[17px] text-[#e0e0ed] font-normal leading-none truncate">
-                        {ex.reference}
-                      </span>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span
-                          className={`text-[17px] font-bold whitespace-nowrap ${
-                            isOk ? 'text-[#5eea8f]' : 'text-white'
-                          }`}
-                        >
-                          {ex.value}
-                        </span>
-
-                        {isOk && (
-                          <span className="text-[13px] font-bold text-white px-2 py-0.5 rounded bg-[#0f7a3a] uppercase tracking-wider">
-                            ok
-                          </span>
-                        )}
-                        {isWarn && (
-                          <span className="text-[13px] font-bold text-white px-2 py-0.5 rounded bg-[#a35a07] uppercase tracking-wider">
-                            atenção
-                          </span>
-                        )}
-                        {isLow && (
-                          <span className="text-[13px] font-bold text-white px-2 py-0.5 rounded bg-[#b42318] uppercase tracking-wider">
-                            baixo
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Rodapé do Modal com Informação e Botão Fechar no lado INFERIOR DIREITO */}
-            <div className="pt-3 border-t border-white/10 flex items-center justify-between shrink-0">
-              <span className="text-[16px] text-[#e0e0ed]">
-                {selectedBatch.results.length} biomarcadores analisados
-              </span>
-
-              {/* Botão Fechar sem ícone 'i' e com texto 'Fechar' em 17px */}
-              <button
-                type="button"
-                onClick={() => setSelectedBatch(null)}
-                className="h-[40px] px-5 rounded-xl bg-[#5eea8f]/15 hover:bg-[#5eea8f]/25 text-[#5eea8f] border border-[#5eea8f]/35 flex items-center justify-center cursor-pointer active:scale-95 transition"
-                title="Fechar resultados"
-              >
-                <span className="text-[17px] font-semibold">Fechar</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal Oficial de Impressão e PDF de Solicitação de Exames Laboratoriais (Hemo Labor™) */}
+      <ExamRequestPdfModal
+        isOpen={Boolean(selectedBatchForPdf)}
+        onClose={() => setSelectedBatchForPdf(null)}
+        batch={selectedBatchForPdf}
+        patientName={patient.name}
+        dateStr={selectedBatchForPdf?.dateStr || '11/11/2026'}
+      />
     </div>
   );
 };

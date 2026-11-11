@@ -148,6 +148,9 @@ export interface ReferralItem {
   specialty: string;
   dateStr: string;
   hasPdf: boolean;
+  doctorName?: string;
+  instructions?: string;
+  pdfUrl?: string;
 }
 
 export interface WeightHistoryPoint {

@@ -103,61 +103,56 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
       }
     }
 
-    // Fluxo 1: Verificação Direta por E-mail no Firestore (Conexão instantânea com dados do CRM)
+    // Fluxo Principal Estrito: Autenticação via Firebase Auth Puro
     try {
-      if (cleanLogin.includes('@')) {
-        const remotePatientByEmail = await crmDataService.getPatientByEmail(cleanLogin);
+      if (isFirebaseConfigured() && auth) {
+        let userCredential = null;
 
-        if (remotePatientByEmail) {
-          // Validação de senha/PIN se cadastrado no prontuário
-          if (remotePatientByEmail.pin && remotePatientByEmail.pin !== cleanSenha && cleanSenha !== 'v123') {
-            setIsSubmitting(false);
-            setAuthError('Senha incorreta para este paciente.');
+        // Autenticação direta no Firebase Auth com a senha bruta cadastrada no console
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, cleanLogin, cleanSenha);
+        } catch (fErr: any) {
+          console.warn('Erro do Firebase Auth:', fErr?.code);
+
+          // Se o paciente existir no Firestore e o PIN do documento bater (modo legado)
+          const remotePatientByEmail = await crmDataService.getPatientByEmail(cleanLogin);
+          if (remotePatientByEmail && remotePatientByEmail.pin && remotePatientByEmail.pin === cleanSenha) {
+            if (rememberDevice) {
+              localStorage.setItem('vittare_remembered_email', cleanLogin);
+            } else {
+              localStorage.removeItem('vittare_remembered_email');
+            }
+
+            crmDataService.updatePatient(remotePatientByEmail.id, {
+              termsAccepted: true,
+              termsAcceptedAt: new Date().toISOString(),
+              termsVersion: '2.0-CFN'
+            }, 'Aceite de Termos no Login');
+
+            await switchPatient(remotePatientByEmail.id);
+
+            setTimeout(() => {
+              setIsSubmitting(false);
+              onEnter();
+            }, 350);
             return;
           }
 
-          // Persistência do dispositivo
-          if (rememberDevice) {
-            localStorage.setItem('vittare_remembered_email', cleanLogin);
+          setIsSubmitting(false);
+          if (fErr?.code === 'auth/invalid-credential' || fErr?.code === 'auth/wrong-password') {
+            setAuthError('Senha incorreta para este paciente.');
+          } else if (fErr?.code === 'auth/user-not-found') {
+            setAuthError('Paciente não localizado no sistema. Verifique o e-mail cadastrado.');
+          } else if (fErr?.code === 'auth/invalid-email') {
+            setAuthError('E-mail em formato inválido.');
           } else {
-            localStorage.removeItem('vittare_remembered_email');
+            setAuthError('Senha incorreta para este paciente.');
           }
-
-          // Atualização de Termos de Uso
-          crmDataService.updatePatient(remotePatientByEmail.id, {
-            termsAccepted: true,
-            termsAcceptedAt: new Date().toISOString(),
-            termsVersion: '2.0-CFN'
-          }, 'Aceite de Termos no Login');
-
-          // Tentativa não-bloqueante de vincular sessão Firebase Auth caso exista
-          if (isFirebaseConfigured() && auth) {
-            try {
-              await signInWithEmailAndPassword(auth, cleanLogin, cleanSenha);
-            } catch {
-              // Não bloqueia caso o usuário ainda não tenha sido registrado no Auth
-            }
-          }
-
-          await switchPatient(remotePatientByEmail.id);
-
-          setTimeout(() => {
-            setIsSubmitting(false);
-            onEnter();
-          }, 350);
           return;
         }
-      }
 
-      // Fluxo 2: Autenticação via Firebase Auth com UID
-      if (isFirebaseConfigured() && auth) {
-        try {
-          let userCredential;
-          try {
-            userCredential = await signInWithEmailAndPassword(auth, cleanLogin, cleanSenha);
-          } catch {
-            userCredential = await signInWithEmailAndPassword(auth, cleanLogin, formatAuthPassword(cleanSenha));
-          }
+        // Se autenticou com sucesso no Firebase Auth
+        if (userCredential) {
           const uid = userCredential.user.uid;
 
           if (db) {
@@ -173,77 +168,43 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
             }
           }
 
-          crmDataService.updatePatient(uid, {
+          const remotePatientByEmail = await crmDataService.getPatientByEmail(cleanLogin);
+          const targetPatientId = remotePatientByEmail?.id || uid;
+
+          // Atualiza o PIN no Firestore para que fique sincronizado com a nova senha digitada
+          crmDataService.updatePatient(targetPatientId, {
+            pin: cleanSenha,
             termsAccepted: true,
             termsAcceptedAt: new Date().toISOString(),
             termsVersion: '2.0-CFN'
-          }, 'Aceite de Termos no Login');
+          }, 'Sincronização de Senha do Firebase Auth');
 
           if (rememberDevice) {
             localStorage.setItem('vittare_remembered_email', cleanLogin);
+            localStorage.setItem('vittare_saved_auth_cred', JSON.stringify({ email: cleanLogin, pass: cleanSenha }));
           } else {
             localStorage.removeItem('vittare_remembered_email');
+            localStorage.removeItem('vittare_saved_auth_cred');
           }
 
-          await switchPatient(uid);
+          await switchPatient(targetPatientId);
 
           setTimeout(() => {
             setIsSubmitting(false);
             onEnter();
           }, 350);
           return;
-
-        } catch (firebaseErr: any) {
-          console.warn('Firebase Auth:', firebaseErr?.code);
-          if (cleanLogin.includes('@')) {
-            setIsSubmitting(false);
-            if (firebaseErr?.code === 'auth/invalid-credential' || firebaseErr?.code === 'auth/wrong-password') {
-              setAuthError('Senha incorreta. Verifique suas credenciais.');
-              return;
-            }
-            if (firebaseErr?.code === 'auth/user-not-found') {
-              setAuthError('Paciente não localizado no sistema. Verifique o e-mail cadastrado no CRM.');
-              return;
-            }
-            setAuthError('Falha ao autenticar. Verifique sua conexão e tente novamente.');
-            return;
-          }
         }
       }
 
-      // Tentativa 2: Busca na base local apenas para PIN de teste presencial ou usuário local
-      let matchedPatient = availablePatients.find(
-        p => p.email.toLowerCase() === cleanLogin.toLowerCase() ||
-             p.name.toLowerCase() === cleanLogin.toLowerCase()
-      );
-
-      // Se for a senha padrão de teste 'v123' em ambiente de demonstração
-      if (!matchedPatient && cleanSenha === 'v123') {
-        matchedPatient = availablePatients[0];
-      }
-
-      if (matchedPatient) {
-        // Validação de PIN/Senha do paciente
-        if (matchedPatient.pin && matchedPatient.pin !== cleanSenha && cleanSenha !== 'v123') {
+      // Fallback para ambiente local quando Firebase não estiver provisionado
+      const remotePatientByEmail = await crmDataService.getPatientByEmail(cleanLogin);
+      if (remotePatientByEmail) {
+        if (remotePatientByEmail.pin && remotePatientByEmail.pin !== cleanSenha) {
           setIsSubmitting(false);
-          setAuthError('Senha incorreta. Verifique suas credenciais.');
+          setAuthError('Senha incorreta para este paciente.');
           return;
         }
-
-        // Interceptação do Ciclo de Vida do Tratamento (startDate a endDate)
-        const lifecycle = isTreatmentActive(matchedPatient);
-        if (!lifecycle.isActive) {
-          setIsSubmitting(false);
-          setAuthError(lifecycle.reason || 'Acesso Expirado. Entre em contato com seu nutricionista.');
-          return;
-        }
-
-        // Registra o timestamp de aceitação dos termos
-        crmDataService.updatePatient(matchedPatient.id, {
-          termsAccepted: true,
-          termsAcceptedAt: new Date().toISOString(),
-          termsVersion: '2.0-CFN'
-        }, 'Aceite de Termos no Login');
 
         if (rememberDevice) {
           localStorage.setItem('vittare_remembered_email', cleanLogin);
@@ -251,16 +212,22 @@ export const VittareCoverScreen: React.FC<CoverScreenProps> = ({
           localStorage.removeItem('vittare_remembered_email');
         }
 
-        await switchPatient(matchedPatient.id);
+        crmDataService.updatePatient(remotePatientByEmail.id, {
+          termsAccepted: true,
+          termsAcceptedAt: new Date().toISOString(),
+          termsVersion: '2.0-CFN'
+        }, 'Aceite de Termos no Login');
+
+        await switchPatient(remotePatientByEmail.id);
 
         setTimeout(() => {
           setIsSubmitting(false);
           onEnter();
-        }, 400);
+        }, 350);
         return;
       }
 
-      // Se não encontrou no Firebase nem na base local
+      // Se não encontrou no Firebase nem no CRM
       setIsSubmitting(false);
       setAuthError('Credenciais não encontradas. Verifique o e-mail e a senha informados pelo seu nutricionista.');
 

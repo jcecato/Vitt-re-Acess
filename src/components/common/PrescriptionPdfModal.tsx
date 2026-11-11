@@ -214,22 +214,22 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
               <h1 className="text-[18pt] sm:text-[20pt] font-bold text-blue-600 leading-tight">
                 <span className="text-[20pt] sm:text-[22pt]">Dr. </span>João Paulo Cecato
               </h1>
-              <div className="font-semibold text-[10pt] text-slate-700 mt-0.5 mb-0.5">
+              <div className="font-semibold text-[15.5px] text-slate-800 mt-0.5 mb-0.5 leading-snug">
                 Nutricionista Clínico | CRN4 – 20100054
               </div>
-              <div className="text-[8.5pt] text-slate-600 leading-snug">
+              <div className="text-[15.5px] text-slate-600 leading-snug">
                 Metabologia e Sistema Digestivo
               </div>
-              <div className="text-[8.5pt] text-slate-600 leading-snug">
+              <div className="text-[15.5px] text-slate-600 leading-snug">
                 Sistema Cognitivo, Emocional e Neurodegeneração
               </div>
-              <div className="mt-1.5 text-[8.5pt] font-medium text-slate-700">
+              <div className="mt-1.5 text-[14.5px] font-semibold text-slate-800 leading-snug">
                 Vittáre – Centro Integrado em Saúde
               </div>
-              <div className="text-[7.5pt] text-slate-500 mt-0.5">
+              <div className="text-[14px] text-slate-600 mt-0.5 leading-snug">
                 Núcleo de Gestão Clínica | Rua Antônio Aleixo, 780 – Vitória / ES
               </div>
-              <div className="text-[7.5pt] text-slate-700 mt-0.5 flex flex-wrap gap-3">
+              <div className="text-[14px] text-slate-700 mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 font-medium">
                 <span>WhatsApp: 27 99791-8100</span>
                 <span>E-mail: vittarecentrointegradoemsaude@gmail.com</span>
               </div>
@@ -245,15 +245,15 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
             </div>
           </div>
 
-          {/* 2. IDENTIFICAÇÃO DO PACIENTE E DATAS */}
-          <div className="border-t border-b border-slate-200 py-1.5 px-1 mb-2 print:py-1 print:mb-1.5">
-            <div className="text-[10pt] text-slate-800 mb-0.5">
-              <span className="text-slate-500">Paciente: </span>
-              <strong className="text-slate-900">{patientName}</strong>
+          {/* 2. IDENTIFICAÇÃO DO PACIENTE E DATAS (17PX) */}
+          <div className="border-t border-b border-slate-200 py-2 px-1 mb-2 print:py-1.5 print:mb-1.5">
+            <div className="text-[17px] text-slate-800 mb-1 leading-snug">
+              <span className="text-slate-600 font-medium">Paciente: </span>
+              <strong className="text-slate-900 font-bold">{patientName}</strong>
             </div>
-            <div className="text-[8.5pt] text-slate-600 flex flex-wrap gap-4">
-              <span>Emissão: <strong className="text-slate-800">{emissionDateStr}</strong></span>
-              <span>| Validade da Receita: <strong className="text-slate-800">{expirationDateStr}</strong></span>
+            <div className="text-[17px] text-slate-700 flex flex-wrap gap-3.5 leading-snug">
+              <span>Emissão: <strong className="text-slate-900 font-bold">{emissionDateStr}</strong></span>
+              <span>| Validade da Receita: <strong className="text-slate-900 font-bold">{expirationDateStr}</strong></span>
             </div>
           </div>
 

@@ -10,22 +10,19 @@ service cloud.firestore {
 
     // Coleção Principal de Pacientes (Prontuário Nutricional e Agenda)
     // - Leitura: Liberada para o aplicativo carregar consultas, agenda e dados clínicos
-    // - Escrita: Bloqueada para clientes Web/Mobile. O CRM grava via Firebase Admin SDK (Service Account com bypass nativo IAM)
+    // - Escrita: Bloqueada para clientes Web/Mobile. O CRM grava via Firebase Admin SDK
     match /patients/{patientId} {
       allow read: if true;
       allow write: if false;
 
       // Subcoleção de Avaliações e Acompanhamento de Vitalidade (Aba Meu Bem-Estar)
-      // - Leitura: Liberada para visualização do histórico e Curva de Vitalidade
-      // - Criação: Liberada para o paciente registrar suas respostas do questionário dos 8 eixos
-      // - Alteração e Exclusão: Bloqueadas para garantir imutabilidade e integridade do histórico clínico
       match /checkins/{checkinId} {
         allow read: if true;
         allow create: if true;
         allow update, delete: if false;
       }
 
-      // Subcoleção de Planos Alimentares (Rotina Alimentar - CRM grava, Paciente lê)
+      // Subcoleção de Planos Alimentares (CRM grava, Paciente lê)
       match /plans/{planId} {
         allow read: if true;
         allow write: if false;
@@ -33,6 +30,36 @@ service cloud.firestore {
 
       // Subcoleção de Prescrições e Fórmulas (CRM grava, Paciente lê)
       match /prescriptions/{prescriptionId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Exames Laboratoriais (CRM grava, Paciente lê)
+      match /exams/{examId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Avaliação Corporal (CRM grava, Paciente lê)
+      match /anthropometry/{anthroId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Mapa Funcional (CRM grava, Paciente lê)
+      match /metabolic_map/{mapId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Avaliação Integrativa (CRM grava, Paciente lê)
+      match /anamnesis/{anamnesisId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Encaminhamento Multidisciplinar (CRM grava, Paciente lê)
+      match /referrals/{referralId} {
         allow read: if true;
         allow write: if false;
       }

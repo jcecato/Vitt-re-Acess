@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PatientProfile } from '../../types/patient';
-import { Check, ExternalLink } from 'lucide-react';
+import { Check, ExternalLink, ShoppingBasket } from 'lucide-react';
 
 interface MarketplaceTabProps {
   patient: PatientProfile;
@@ -96,8 +96,8 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
       {marketplaceItems.length === 0 ? (
         /* Estado Vazio Elegante quando o CRM ainda não cadastrou links */
         <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-6 text-center shadow-sm">
-          <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-2.5">
-            <i className="ti ti-shopping-bag text-2xl"></i>
+          <div className="w-12 h-12 rounded-full bg-white/[0.05] border border-white/10 flex items-center justify-center text-amber-400 mx-auto mb-2.5">
+            <ShoppingBasket className="w-7 h-7 text-amber-400" strokeWidth={1.9} />
           </div>
           <div className="text-[18px] font-semibold text-white mb-1">
             Curadoria em Preparação
@@ -113,29 +113,26 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
             const shortenedLabel = getShortenedDisplayUrl(item.link, item.name);
 
             return (
-              <div key={item.id} className="bg-white/[0.03] border-[1px] border-white/50 rounded-2xl p-3 flex items-center gap-3">
-                <div
-                  style={{ background: item.gradient || 'linear-gradient(135deg, #0f7a3a, #1f9d57)' }}
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-[26px] text-white shadow shrink-0"
-                >
-                  <i className={`ti ${item.icon || 'ti-shopping-bag'}`}></i>
+              <div key={item.id} className="bg-white/[0.03] border-[1px] border-white/50 rounded-2xl p-3 flex items-start sm:items-center gap-3">
+                {/* Contêiner de Ícone proporcional 42x43px com -ml-[5px] e cesta moderna */}
+                <div className="w-[42px] h-[43px] -ml-[5px] rounded-xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-amber-400 shadow-sm shrink-0 mt-0.5 sm:mt-0">
+                  <ShoppingBasket className="w-[26px] h-[26px] text-amber-400 shrink-0" strokeWidth={1.9} />
                 </div>
 
-                <div className="grow min-w-0">
-                  <div className="text-[18px] font-semibold text-white leading-snug truncate">
+                <div className="grow min-w-0 flex flex-col">
+                  {/* 1. Nome do Produto (ex.: Creatina) */}
+                  <div className="text-[19px] font-semibold text-white leading-snug truncate">
                     {item.name}
                   </div>
-                  <div className="text-[15px] text-[#e0e0ed] mt-0.5">
-                    Atualizado: {item.dateStr}
-                  </div>
 
+                  {/* 2. Posologia / Descrição (ex.: 1 dosador ao dia) */}
                   {item.description && (
-                    <div className="text-[13px] text-[#a5a4b8] mt-0.5 truncate">
+                    <div className="text-[17px] sm:text-[18px] text-[#e0e0ed] mt-0.5 leading-snug">
                       {item.description}
                     </div>
                   )}
 
-                  {/* Link Encurtado Visualmente com Abertura Externa e Cópia */}
+                  {/* 3. Link de Acesso Rápido */}
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <button
                       type="button"
@@ -152,6 +149,11 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
                         <Check className="w-3 h-3" /> Link Aberto e Copiado
                       </span>
                     )}
+                  </div>
+
+                  {/* 4. Data de Atualização no Rodapé */}
+                  <div className="text-[13px] sm:text-[14px] text-[#8e8da8] mt-1.5 flex items-center gap-1">
+                    <span>Atualizado: {item.dateStr}</span>
                   </div>
                 </div>
               </div>

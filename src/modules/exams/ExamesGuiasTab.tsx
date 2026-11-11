@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { PatientProfile } from '../../types/patient';
+import React, { useState, useEffect } from 'react';
+import { PatientProfile, ReferralItem } from '../../types/patient';
 import { ExamsTab } from '../exams/ExamsTab';
 import { PhysicalAssessmentTab } from '../physical-assessment/PhysicalAssessmentTab';
 import { MetabolicProfileTab } from '../metabolic-profile/MetabolicProfileTab';
 import { TextDocumentModal } from '../../components/common/TextDocumentModal';
+import { ReferralPdfModal } from '../../components/common/ReferralPdfModal';
+import { crmDataService } from '../../services/crmDataService';
 
 interface ExamesGuiasTabProps {
   patient: PatientProfile;
@@ -21,6 +23,55 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
   >(defaultSubTab);
 
   const [isAnamneseModalOpen, setIsAnamneseModalOpen] = useState(false);
+  const [selectedReferral, setSelectedReferral] = useState<ReferralItem | null>(null);
+  const [selectedReferralForPdf, setSelectedReferralForPdf] = useState<ReferralItem | null>(null);
+  const [liveReferrals, setLiveReferrals] = useState<ReferralItem[]>(
+    Array.isArray(patient.referrals) ? patient.referrals : []
+  );
+  const [isSyncingReferrals, setIsSyncingReferrals] = useState(false);
+  const [referralsSyncError, setReferralsSyncError] = useState<string | null>(
+    crmDataService.getReferralsSyncError()
+  );
+
+  useEffect(() => {
+    setLiveReferrals(Array.isArray(patient.referrals) ? patient.referrals : []);
+    setReferralsSyncError(crmDataService.getReferralsSyncError());
+  }, [patient.referrals]);
+
+  const handleSyncReferralsNow = async () => {
+    setIsSyncingReferrals(true);
+    const emailOrId = patient.email || patient.id || 'jcecato@gmail.com';
+    const fresh = await crmDataService.refreshReferrals(emailOrId);
+    setLiveReferrals(Array.isArray(fresh) ? fresh : []);
+    setReferralsSyncError(crmDataService.getReferralsSyncError());
+    setIsSyncingReferrals(false);
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'encaminhamentos') {
+      handleSyncReferralsNow();
+    }
+  }, [activeSubTab, patient.email, patient.id]);
+
+  const handleOpenReferralPdf = async (ref: ReferralItem) => {
+    if (ref.pdfUrl) {
+      window.open(ref.pdfUrl, '_blank');
+      return;
+    }
+    setSelectedReferralForPdf(ref);
+    const emailOrId = patient.email || patient.id || 'jcecato@gmail.com';
+    const freshList = await crmDataService.refreshReferrals(emailOrId);
+    setLiveReferrals(Array.isArray(freshList) ? freshList : []);
+    setReferralsSyncError(crmDataService.getReferralsSyncError());
+    if (Array.isArray(freshList)) {
+      const updatedRef = freshList.find((item) => item.id === ref.id);
+      if (updatedRef) {
+        setSelectedReferralForPdf(updatedRef);
+      } else if (freshList.length === 0) {
+        setSelectedReferralForPdf(null);
+      }
+    }
+  };
 
   const subTabs = [
     { 
@@ -176,78 +227,105 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
           </div>
         )}
 
-        {/* 5. Encaminhamento Multidisciplinar */}
+        {/* 5. Encaminhamento Multidisciplinar (100% Dinâmico do Firebase) */}
         {activeSubTab === 'encaminhamentos' && (
           <div className="space-y-4 select-none animate-fadeIn">
-            <div className="mb-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
               <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
                 Encaminhamento Multidisciplinar
               </div>
+              <button
+                type="button"
+                onClick={handleSyncReferralsNow}
+                disabled={isSyncingReferrals}
+                className="h-[34px] inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 rounded-xl bg-white/[0.06] border border-white/20 text-[#d5dee4] hover:bg-white/[0.12] active:scale-95 transition cursor-pointer shrink-0"
+              >
+                <i className={`ti ti-refresh text-[16px] ${isSyncingReferrals ? 'animate-spin text-[#5eea8f]' : 'text-[#5eea8f]'}`}></i>
+                <span>{isSyncingReferrals ? 'Sincronizando...' : 'Atualizar'}</span>
+              </button>
             </div>
 
             <div className="space-y-3">
-              {patient.referrals && patient.referrals.map((ref) => {
-                const cleanDate = ref.dateStr.replace('PDF · ', '').replace('PDF . ', '');
-
-                return (
-                  <div
-                    key={ref.id}
-                    className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center text-[22px] shrink-0 ${
-                          ref.hasPdf
-                            ? 'bg-[#5eea8f]/15 text-[#5eea8f]'
-                            : 'bg-white/[0.05] text-[#e0e0ed]'
-                        }`}
-                      >
-                        <i className="ti ti-send"></i>
-                      </div>
-                      <div className="grow min-w-0">
-                        <div className="text-[18px] font-semibold text-white leading-tight uppercase">
-                          {ref.specialty.toUpperCase()}
-                        </div>
-                        <div className="text-[15px] text-[#e0e0ed] mt-0.5 leading-snug">
-                          Data: {cleanDate}
-                        </div>
-                      </div>
+              {liveReferrals.length === 0 ? (
+                referralsSyncError === 'permission-denied' ? (
+                  <div className="bg-amber-500/10 border border-amber-400/40 rounded-2xl p-4 text-left space-y-2">
+                    <div className="flex items-center gap-2 text-amber-300 font-bold text-[16px]">
+                      <i className="ti ti-lock text-[20px]"></i>
+                      <span>Leitura bloqueada pelas Regras do Firebase (permission-denied)</span>
                     </div>
+                    <p className="text-[14px] text-[#e0e0ed] leading-relaxed">
+                      O banco <strong>vittareacess</strong> liberou <code>patients</code> e <code>checkins</code>, mas bloqueou a subcoleção <code>/patients/{patient.email || 'jcecato@gmail.com'}/referrals</code>. Publique a regra <code>match /referrals/&#123;referralId&#125; &#123; allow read: if true; &#125;</code> na aba <strong>Firestore Database &rarr; Regras</strong> do Console do Firebase e clique em <strong>Atualizar</strong> acima.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white/[0.03] border border-dashed border-white/20 rounded-2xl p-5 text-center text-[15px] text-[#a9b4c0]">
+                    Nenhum encaminhamento registrado no Firebase para este paciente.
+                  </div>
+                )
+              ) : (
+                liveReferrals.map((ref) => {
+                  const cleanDate = ref.dateStr.replace('PDF · ', '').replace('PDF . ', '');
 
-                    <div className="flex flex-wrap gap-2 mt-3 pt-2.5 border-t border-white/[0.06]">
-                      {ref.hasPdf ? (
-                        <>
+                  return (
+                    <div
+                      key={ref.id}
+                      className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-11 h-11 rounded-xl flex items-center justify-center text-[22px] shrink-0 ${
+                            ref.hasPdf || ref.instructions
+                              ? 'bg-[#5eea8f]/15 text-[#5eea8f]'
+                              : 'bg-white/[0.05] text-[#e0e0ed]'
+                          }`}
+                        >
+                          <i className="ti ti-send"></i>
+                        </div>
+                        <div className="grow min-w-0">
+                          <div className="text-[18px] font-semibold text-white leading-tight uppercase">
+                            {ref.specialty.toUpperCase()}
+                          </div>
+                          <div className="text-[15px] text-[#e0e0ed] mt-0.5 leading-snug">
+                            Data: {cleanDate}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mt-3 pt-2.5 border-t border-white/[0.06]">
+                        {ref.hasPdf || ref.instructions || ref.pdfUrl ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenReferralPdf(ref)}
+                              className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-semibold py-0 px-3.5 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
+                            >
+                              <i className="ti ti-file-type-pdf text-[18px]"></i>
+                              <span>PDF</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenReferralPdf(ref)}
+                              className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-semibold py-0 px-4 rounded-xl bg-[#0f7a3a] border border-[#0f7a3a] text-white hover:bg-[#128d43] active:scale-95 transition cursor-pointer"
+                            >
+                              <i className="ti ti-eye text-[18px]"></i>
+                              <span>Visualizar</span>
+                            </button>
+                          </>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => onOpenPdf(`Encaminhamento - ${ref.specialty}`)}
-                            className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-semibold py-0 px-3.5 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
+                            disabled
+                            className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-white/[0.03] border border-dashed border-white/15 text-[#e0e0ed] opacity-50 cursor-default"
                           >
                             <i className="ti ti-file-type-pdf text-[18px]"></i>
                             <span>PDF</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => onOpenPdf(`Encaminhamento - ${ref.specialty}`)}
-                            className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-semibold py-0 px-4 rounded-xl bg-[#0f7a3a] border border-[#0f7a3a] text-white hover:bg-[#128d43] active:scale-95 transition cursor-pointer"
-                          >
-                            <i className="ti ti-eye text-[18px]"></i>
-                            <span>Visualizar</span>
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled
-                          className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-medium py-0 px-3.5 rounded-xl bg-white/[0.03] border border-dashed border-white/15 text-[#e0e0ed] opacity-50 cursor-default"
-                        >
-                          <i className="ti ti-file-type-pdf text-[18px]"></i>
-                          <span>PDF</span>
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -265,6 +343,28 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
           onClose={() => setIsAnamneseModalOpen(false)}
         />
       )}
+
+      {/* Modal de Encaminhamento Multidisciplinar */}
+      {selectedReferral && (
+        <TextDocumentModal
+          isOpen={true}
+          title={selectedReferral.specialty || "Encaminhamento Médico / Clínico"}
+          category="Encaminhamento Multidisciplinar · Vittáre"
+          dateStr={selectedReferral.dateStr}
+          patientName={patient.name}
+          content={selectedReferral.instructions || 'Oriento o(a) paciente para acompanhamento especializado multidisciplinar.'}
+          onClose={() => setSelectedReferral(null)}
+        />
+      )}
+
+      {/* Modal Oficial de Impressão e PDF do Encaminhamento Multidisciplinar */}
+      <ReferralPdfModal
+        isOpen={Boolean(selectedReferralForPdf)}
+        onClose={() => setSelectedReferralForPdf(null)}
+        referral={selectedReferralForPdf}
+        patientName={patient.name}
+        dateStr={selectedReferralForPdf?.dateStr || '11/11/2026'}
+      />
     </div>
   );
 };

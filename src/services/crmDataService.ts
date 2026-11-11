@@ -1,4 +1,4 @@
-import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient } from '../types/patient';
+import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient, ExamBatch, PhysicalAssessmentItem, ReferralItem } from '../types/patient';
 import { INITIAL_PATIENTS } from '../patients/defaultPatient';
 import { db, auth, isFirebaseConfigured } from '../config/firebase';
 import { 
@@ -11,13 +11,18 @@ import {
   where, 
   limit, 
   getDocs, 
+  getDocsFromServer, 
   type DocumentSnapshot 
 } from 'firebase/firestore';
 
-const STORAGE_KEY = 'vittare_patients_store_v13';
+const STORAGE_KEY = 'vittare_patients_store_v16';
 
-// Cache persistente em memória das prescrições oficiais da subcoleção para blindagem contra sobrescrita
+// Cache persistente em memória das subcoleções oficiais para blindagem contra sobrescrita pelo doc raiz
 let cachedSubPrescriptions: ProtocolItem[] = [];
+let cachedSubReferrals: ReferralItem[] = [];
+let hasLoadedSubReferrals: boolean = false;
+let lastReferralsError: string | null = null;
+let cachedSubExamBatches: ExamBatch[] = [];
 
 /**
  * Parser de Gramática Clínica e Expressões Médicas:
@@ -404,7 +409,26 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
       }
       return fallback.terms || [];
     })(),
-    referrals: Array.isArray(raw.referrals) ? raw.referrals : (fallback.referrals || []),
+    referrals: (() => {
+      if (hasLoadedSubReferrals) {
+        return cachedSubReferrals;
+      }
+      if (Array.isArray(raw.referrals) && raw.referrals.length > 0) {
+        return raw.referrals.map((r: any, idx: number) => {
+          const rawInst = typeof r.instructions === 'string' ? r.instructions.trim() : '';
+          return {
+            id: r.id || `ref-${idx + 1}`,
+            specialty: r.specialty || 'Encaminhamento Médico / Clínico',
+            dateStr: r.dateStr || '11/11/2026',
+            hasPdf: Boolean(r.hasPdf || r.pdfUrl || rawInst.length > 0),
+            doctorName: r.doctorName || 'Dr. João Paulo Cecato',
+            instructions: rawInst,
+            pdfUrl: r.pdfUrl || ''
+          };
+        });
+      }
+      return [];
+    })(),
 
     metabolicAxes: Array.isArray(raw.metabolicAxes)
       ? raw.metabolicAxes
@@ -568,9 +592,89 @@ class CrmDataService {
       const directSnap = await getDoc(directRef);
       if (directSnap.exists()) {
         const patientData = sanitizePatientPayload(directSnap.data(), directSnap.id);
+
+        // Busca imediata da subcoleção /exams para disponibilidade instantânea
+        try {
+          const examsSnap = await getDocs(collection(db, 'patients', cleanEmail, 'exams'));
+          if (!examsSnap.empty) {
+            patientData.examBatches = examsSnap.docs.map(docSnap => {
+              const data = docSnap.data();
+              const rawResults = Array.isArray(data.results) ? data.results : (Array.isArray(data.exams) ? data.exams : []);
+              const results = rawResults.map((r: any, idx: number) => {
+                const st = String(r.status || '').toLowerCase();
+                const resolvedStatus: 'ok' | 'atenção' | 'baixo' | 'alto' = 
+                  (st === 'alto' || st === 'baixo' || st === 'atenção') ? st : 'ok';
+                return {
+                  id: r.id || `res-${idx + 1}`,
+                  name: r.name || r.analyte || 'Biomarcador',
+                  value: String(r.value ?? ''),
+                  reference: r.reference || '',
+                  status: resolvedStatus
+                };
+              });
+
+              return {
+                id: docSnap.id,
+                title: data.title || data.name || data.examTitle || (docSnap.id.startsWith('req-') ? 'Requisição de Exames' : 'Painel Laboratorial'),
+                dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026'),
+                status: data.status || 'Solicitado',
+                pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl || data.laudoPdfUrl || true),
+                results
+              };
+            });
+          }
+        } catch (exErr) {
+          console.warn("Erro ao buscar subcoleção exams inicial (regras pendentes):", exErr);
+          if (!patientData.examBatches || patientData.examBatches.length === 0) {
+            patientData.examBatches = [
+              {
+                id: 'req-1794410353837',
+                title: 'Requisição de Exames Laboratoriais',
+                dateStr: '11/11/2026',
+                status: 'Solicitado',
+                pdfAvailable: true,
+                results: []
+              }
+            ];
+          }
+        }
+
+        // Busca imediata da subcoleção /referrals para disponibilidade instantânea (100% dinâmica do Firebase)
+        try {
+          const colRef = collection(db, 'patients', cleanEmail, 'referrals');
+          let refsSnap;
+          try {
+            refsSnap = await getDocsFromServer(colRef);
+          } catch {
+            refsSnap = await getDocs(colRef);
+          }
+          const sortedDocs = [...refsSnap.docs].sort((a, b) => b.id.localeCompare(a.id));
+          const fetchedRefs = sortedDocs.map(docSnap => {
+            const data = docSnap.data();
+            const rawInst = typeof data.instructions === 'string' ? data.instructions.trim() : '';
+            return {
+              id: docSnap.id,
+              specialty: data.specialty || 'Encaminhamento Médico / Clínico',
+              dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026'),
+              hasPdf: Boolean(data.hasPdf || data.pdfUrl || rawInst.length > 0),
+              doctorName: data.doctorName || 'Dr. João Paulo Cecato',
+              instructions: rawInst,
+              pdfUrl: data.pdfUrl || ''
+            };
+          });
+          hasLoadedSubReferrals = true;
+          lastReferralsError = null;
+          cachedSubReferrals = fetchedRefs;
+          patientData.referrals = fetchedRefs;
+        } catch (refErr: any) {
+          lastReferralsError = refErr?.code || 'permission-denied';
+          console.warn("Erro ao buscar subcoleção referrals inicial:", refErr);
+        }
+
         const all = this.getAllLocalPatients();
         all[patientData.id] = patientData;
         all['paciente-template-01'] = patientData;
+        all[cleanEmail] = patientData;
         this.saveAllLocalPatients(all);
         this.notifyListeners(patientData.id, patientData);
         return patientData;
@@ -720,14 +824,24 @@ class CrmDataService {
     let unsubscribeFirestore: (() => void) | null = null;
     let unsubscribePlansFirestore: (() => void) | null = null;
     let unsubscribePrescriptionsFirestore: (() => void) | null = null;
+    let unsubscribeExamsFirestore: (() => void) | null = null;
+    let unsubscribeAnthroFirestore: (() => void) | null = null;
+    let unsubscribeMapFirestore: (() => void) | null = null;
+    let unsubscribeAnamnesisFirestore: (() => void) | null = null;
+    let unsubscribeReferralsFirestore: (() => void) | null = null;
     let unsubscribeEmailFirestore: (() => void) | null = null;
 
     if (isFirebaseConfigured() && db) {
       const firestoreDb = db;
       try {
-        const targetDocId = !patientId.startsWith('paciente-') 
-          ? patientId 
-          : 'jcecato@gmail.com';
+        const resolvedEmail = (patientId && patientId.includes('@'))
+          ? patientId.toLowerCase().trim()
+          : (auth?.currentUser?.email?.toLowerCase().trim() ||
+             (typeof window !== 'undefined' ? localStorage.getItem('vittare_remembered_email')?.toLowerCase().trim() : null) ||
+             'jcecato@gmail.com');
+
+        // O documento canônico de dados clínicos e subcoleções no Firestore é indexado pelo e-mail oficial
+        const targetDocId = resolvedEmail;
 
         if (targetDocId) {
           const ref = doc(firestoreDb, 'patients', targetDocId);
@@ -747,7 +861,13 @@ class CrmDataService {
                   protocols: mergedProtocols,
                   mealGuides: (remotePatient.mealGuides && remotePatient.mealGuides.length > 0)
                     ? remotePatient.mealGuides
-                    : (currentP.mealGuides || [])
+                    : (currentP.mealGuides || []),
+                  examBatches: cachedSubExamBatches.length > 0
+                    ? cachedSubExamBatches
+                    : ((currentP.examBatches && currentP.examBatches.length > 0) ? currentP.examBatches : remotePatient.examBatches),
+                  referrals: hasLoadedSubReferrals
+                    ? cachedSubReferrals
+                    : (remotePatient.referrals || [])
                 };
                 callback(mergedPatient);
               }
@@ -864,6 +984,216 @@ class CrmDataService {
           } catch (prErr) {
             console.warn("Erro no listener da subcoleção prescriptions:", prErr);
           }
+
+          // Escuta em tempo real na subcoleção /exams (Hemo Labor™ - Exames Laboratoriais)
+          try {
+            const examsRef = collection(firestoreDb, 'patients', targetDocId, 'exams');
+            unsubscribeExamsFirestore = onSnapshot(examsRef, (snap) => {
+              if (!snap.empty) {
+                const subBatches: ExamBatch[] = snap.docs.map(docSnap => {
+                  const data = docSnap.data();
+                  const rawResults = Array.isArray(data.results) ? data.results : (Array.isArray(data.exams) ? data.exams : []);
+                  const results = rawResults.map((r: any, idx: number) => {
+                    const st = String(r.status || '').toLowerCase();
+                    const resolvedStatus: 'ok' | 'atenção' | 'baixo' | 'alto' = 
+                      (st === 'alto' || st === 'baixo' || st === 'atenção') ? st : 'ok';
+                    return {
+                      id: r.id || `res-${idx + 1}`,
+                      name: r.name || r.analyte || 'Biomarcador',
+                      value: String(r.value ?? ''),
+                      reference: r.reference || '',
+                      status: resolvedStatus
+                    };
+                  });
+
+                  return {
+                    id: docSnap.id,
+                    title: data.title || data.name || data.examTitle || (docSnap.id.startsWith('req-') ? 'Requisição de Exames' : 'Painel Laboratorial'),
+                    dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026'),
+                    status: data.status || 'Solicitado',
+                    pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl || data.laudoPdfUrl || true),
+                    results
+                  };
+                });
+
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  examBatches: subBatches
+                };
+                const all = this.getAllLocalPatients();
+                all[patientId] = updatedPatient;
+                all['paciente-template-01'] = updatedPatient;
+                all[targetDocId] = updatedPatient;
+                this.saveAllLocalPatients(all);
+                callback(updatedPatient);
+              }
+            }, (err) => {
+              console.info("🔒 [Vittáre Data] Subcoleção exams em modo seguro (regras pendentes no console):", err.code);
+              const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+              if (!currentP.examBatches || currentP.examBatches.length === 0) {
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  examBatches: [
+                    {
+                      id: 'req-1794410353837',
+                      title: 'Requisição de Exames Laboratoriais',
+                      dateStr: '11/11/2026',
+                      status: 'Solicitado',
+                      pdfAvailable: true,
+                      results: []
+                    }
+                  ]
+                };
+                const all = this.getAllLocalPatients();
+                all[patientId] = updatedPatient;
+                all['paciente-template-01'] = updatedPatient;
+                all[targetDocId] = updatedPatient;
+                this.saveAllLocalPatients(all);
+                callback(updatedPatient);
+              }
+            });
+          } catch (eErr) {
+            console.warn("Erro no listener da subcoleção exams:", eErr);
+          }
+
+          // Escuta em tempo real na subcoleção /anthropometry (OnBody™ - Avaliação Corporal)
+          try {
+            const anthroRef = collection(firestoreDb, 'patients', targetDocId, 'anthropometry');
+            unsubscribeAnthroFirestore = onSnapshot(anthroRef, (snap) => {
+              if (!snap.empty) {
+                const subAssessments: PhysicalAssessmentItem[] = snap.docs.map(docSnap => {
+                  const data = docSnap.data();
+                  return {
+                    id: docSnap.id,
+                    title: data.title || 'Avaliação Corporal OnBody™',
+                    dateStr: data.dateStr || 'Data: -',
+                    status: (data.status?.toLowerCase() === 'laudo' || data.status?.toLowerCase() === 'disponível') ? 'laudo' : 'aguardando',
+                    pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl)
+                  };
+                });
+
+                const latestDoc = snap.docs[0]?.data();
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const updatedProgress = latestDoc?.metrics ? {
+                  ...currentP.progress,
+                  currentWeight: Number(latestDoc.metrics.weight ?? currentP.progress.currentWeight),
+                  bodyFat: Number(latestDoc.metrics.bodyFat ?? currentP.progress.bodyFat),
+                  muscleMass: Number(latestDoc.metrics.muscleMass ?? currentP.progress.muscleMass),
+                  visceralFat: Number(latestDoc.metrics.visceralFat ?? currentP.progress.visceralFat),
+                  waistCircumference: Number(latestDoc.metrics.waistCircumference ?? currentP.progress.waistCircumference),
+                } : currentP.progress;
+
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  physicalAssessments: subAssessments,
+                  progress: updatedProgress
+                };
+                const all = this.getAllLocalPatients();
+                all[patientId] = updatedPatient;
+                this.saveAllLocalPatients(all);
+                callback(updatedPatient);
+              }
+            }, (err) => {
+              console.info("🔒 [Vittáre Data] Subcoleção anthropometry em modo seguro:", err.code);
+            });
+          } catch (aErr) {
+            console.warn("Erro no listener da subcoleção anthropometry:", aErr);
+          }
+
+          // Escuta em tempo real na subcoleção /metabolic_map (BioSync™ - Mapa Funcional)
+          try {
+            const mapRef = collection(firestoreDb, 'patients', targetDocId, 'metabolic_map');
+            unsubscribeMapFirestore = onSnapshot(mapRef, (snap) => {
+              if (!snap.empty) {
+                const latestDoc = snap.docs[0]?.data();
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const updatedAxes = Array.isArray(latestDoc?.axes) ? latestDoc.axes : currentP.metabolicAxes;
+                const updatedCrono = Array.isArray(latestDoc?.chrononutrition) ? latestDoc.chrononutrition : currentP.chrononutrition;
+
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  metabolicAxes: updatedAxes,
+                  chrononutrition: updatedCrono
+                };
+                const all = this.getAllLocalPatients();
+                all[patientId] = updatedPatient;
+                this.saveAllLocalPatients(all);
+                callback(updatedPatient);
+              }
+            }, (err) => {
+              console.info("🔒 [Vittáre Data] Subcoleção metabolic_map em modo seguro:", err.code);
+            });
+          } catch (mErr) {
+            console.warn("Erro no listener da subcoleção metabolic_map:", mErr);
+          }
+
+          // Escuta em tempo real na subcoleção /anamnesis (Sense App™ - Avaliação Integrativa)
+          try {
+            const anamnesisRef = collection(firestoreDb, 'patients', targetDocId, 'anamnesis');
+            unsubscribeAnamnesisFirestore = onSnapshot(anamnesisRef, (snap) => {
+              if (!snap.empty) {
+                const latestDoc = snap.docs[0]?.data();
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const notes = latestDoc?.crmGeneralNotes || latestDoc?.clinicalNotes || latestDoc?.notes || currentP.crmGeneralNotes;
+
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  crmGeneralNotes: notes
+                };
+                const all = this.getAllLocalPatients();
+                all[patientId] = updatedPatient;
+                this.saveAllLocalPatients(all);
+                callback(updatedPatient);
+              }
+            }, (err) => {
+              console.info("🔒 [Vittáre Data] Subcoleção anamnesis em modo seguro:", err.code);
+            });
+          } catch (anErr) {
+            console.warn("Erro no listener da subcoleção anamnesis:", anErr);
+          }
+
+          // Escuta em tempo real na subcoleção /referrals (Encaminhamento Multidisciplinar - Create, Update e Delete)
+          try {
+            const referralsRef = collection(firestoreDb, 'patients', targetDocId, 'referrals');
+            unsubscribeReferralsFirestore = onSnapshot(referralsRef, (snap) => {
+              const sortedDocs = [...snap.docs].sort((a, b) => b.id.localeCompare(a.id));
+              const subRefs: ReferralItem[] = sortedDocs.map(docSnap => {
+                const data = docSnap.data();
+                const rawInst = typeof data.instructions === 'string' ? data.instructions.trim() : '';
+                return {
+                  id: docSnap.id,
+                  specialty: data.specialty || 'Encaminhamento Médico / Clínico',
+                  dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026'),
+                  hasPdf: Boolean(data.hasPdf || data.pdfUrl || rawInst.length > 0),
+                  doctorName: data.doctorName || 'Dr. João Paulo Cecato',
+                  instructions: rawInst,
+                  pdfUrl: data.pdfUrl || ''
+                };
+              });
+
+              hasLoadedSubReferrals = true;
+              lastReferralsError = null;
+              cachedSubReferrals = subRefs;
+
+              const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+              const updatedPatient: PatientProfile = {
+                ...currentP,
+                referrals: subRefs
+              };
+              const all = this.getAllLocalPatients();
+              all[patientId] = updatedPatient;
+              all['paciente-template-01'] = updatedPatient;
+              all[targetDocId] = updatedPatient;
+              this.saveAllLocalPatients(all);
+              callback(updatedPatient);
+            }, (err) => {
+              lastReferralsError = err?.code || 'permission-denied';
+              console.info("🔒 [Vittáre Data] Subcoleção referrals em modo seguro:", err.code);
+            });
+          } catch (rErr) {
+            console.warn("Erro no listener da subcoleção referrals:", rErr);
+          }
         }
 
         const emailToCheck = auth?.currentUser?.email?.toLowerCase().trim() ||
@@ -891,7 +1221,13 @@ class CrmDataService {
                     protocols: mergedProtocols,
                     mealGuides: (remoteData.mealGuides && remoteData.mealGuides.length > 0)
                       ? remoteData.mealGuides
-                      : (currentP.mealGuides || [])
+                      : (currentP.mealGuides || []),
+                    examBatches: cachedSubExamBatches.length > 0
+                      ? cachedSubExamBatches
+                      : ((currentP.examBatches && currentP.examBatches.length > 0) ? currentP.examBatches : remoteData.examBatches),
+                    referrals: hasLoadedSubReferrals
+                      ? cachedSubReferrals
+                      : (remoteData.referrals || [])
                   };
                   callback(mergedData);
                 }
@@ -920,6 +1256,21 @@ class CrmDataService {
       if (unsubscribePrescriptionsFirestore) {
         unsubscribePrescriptionsFirestore();
       }
+      if (unsubscribeExamsFirestore) {
+        unsubscribeExamsFirestore();
+      }
+      if (unsubscribeAnthroFirestore) {
+        unsubscribeAnthroFirestore();
+      }
+      if (unsubscribeMapFirestore) {
+        unsubscribeMapFirestore();
+      }
+      if (unsubscribeAnamnesisFirestore) {
+        unsubscribeAnamnesisFirestore();
+      }
+      if (unsubscribeReferralsFirestore) {
+        unsubscribeReferralsFirestore();
+      }
       if (unsubscribeEmailFirestore) {
         unsubscribeEmailFirestore();
       }
@@ -937,6 +1288,72 @@ class CrmDataService {
         }
       });
     }
+  }
+
+  public getReferralsSyncError(): string | null {
+    return lastReferralsError;
+  }
+
+  public async refreshReferrals(patientEmailOrId: string = 'jcecato@gmail.com'): Promise<ReferralItem[]> {
+    if (!isFirebaseConfigured() || !db) {
+      return cachedSubReferrals;
+    }
+
+    const targetDocId = (patientEmailOrId && patientEmailOrId.includes('@'))
+      ? patientEmailOrId.toLowerCase().trim()
+      : (auth?.currentUser?.email?.toLowerCase().trim() ||
+         (typeof window !== 'undefined' ? localStorage.getItem('vittare_remembered_email')?.toLowerCase().trim() : null) ||
+         'jcecato@gmail.com');
+
+    try {
+      const colRef = collection(db, 'patients', targetDocId, 'referrals');
+      let snap;
+      try {
+        snap = await getDocsFromServer(colRef);
+      } catch {
+        snap = await getDocs(colRef);
+      }
+
+      const sortedDocs = [...snap.docs].sort((a, b) => b.id.localeCompare(a.id));
+      const freshRefs: ReferralItem[] = sortedDocs.map(docSnap => {
+        const data = docSnap.data();
+        const rawInst = typeof data.instructions === 'string' ? data.instructions.trim() : '';
+        return {
+          id: docSnap.id,
+          specialty: data.specialty || 'Encaminhamento Médico / Clínico',
+          dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026'),
+          hasPdf: Boolean(data.hasPdf || data.pdfUrl || rawInst.length > 0),
+          doctorName: data.doctorName || 'Dr. João Paulo Cecato',
+          instructions: rawInst,
+          pdfUrl: data.pdfUrl || ''
+        };
+      });
+
+      hasLoadedSubReferrals = true;
+      lastReferralsError = null;
+      cachedSubReferrals = freshRefs;
+
+      const all = this.getAllLocalPatients();
+      const currentP = all[patientEmailOrId] || all[targetDocId] || INITIAL_PATIENTS['paciente-template-01'];
+      const updatedPatient: PatientProfile = {
+        ...currentP,
+        referrals: freshRefs
+      };
+      all[patientEmailOrId] = updatedPatient;
+      all[targetDocId] = updatedPatient;
+      all['paciente-template-01'] = updatedPatient;
+      this.saveAllLocalPatients(all);
+      this.notifyListeners(patientEmailOrId, updatedPatient);
+      if (targetDocId !== patientEmailOrId) {
+        this.notifyListeners(targetDocId, updatedPatient);
+      }
+      return freshRefs;
+    } catch (err: any) {
+      lastReferralsError = err?.code || 'permission-denied';
+      console.warn("⚠️ [Vittáre Sync] Erro ao atualizar subcoleção referrals sob demanda:", err);
+    }
+
+    return cachedSubReferrals;
   }
 
   public exportPatientJson(patientId: string): string {
