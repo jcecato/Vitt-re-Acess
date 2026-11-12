@@ -1,4 +1,4 @@
-import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient, ExamBatch, PhysicalAssessmentItem, ReferralItem } from '../types/patient';
+import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient, ExamBatch, PhysicalAssessmentItem, AssessmentComparisonMetric, ReferralItem } from '../types/patient';
 import { INITIAL_PATIENTS } from '../patients/defaultPatient';
 import { db, auth, isFirebaseConfigured } from '../config/firebase';
 import { 
@@ -23,6 +23,8 @@ let cachedSubReferrals: ReferralItem[] = [];
 let hasLoadedSubReferrals: boolean = false;
 let lastReferralsError: string | null = null;
 let cachedSubExamBatches: ExamBatch[] = [];
+let cachedSubAssessments: PhysicalAssessmentItem[] = [];
+let lastAnthroError: string | null = null;
 
 /**
  * Parser de Gramática Clínica e Expressões Médicas:
@@ -1062,39 +1064,54 @@ class CrmDataService {
             const anthroRef = collection(firestoreDb, 'patients', targetDocId, 'anthropometry');
             unsubscribeAnthroFirestore = onSnapshot(anthroRef, (snap) => {
               if (!snap.empty) {
-                const subAssessments: PhysicalAssessmentItem[] = snap.docs.map(docSnap => {
+                const sortedDocs = [...snap.docs].sort((a, b) => b.id.localeCompare(a.id));
+                const subAssessments: PhysicalAssessmentItem[] = sortedDocs.map(docSnap => {
                   const data = docSnap.data();
+                  const rawDate = data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026');
+                  const formattedDate = rawDate.startsWith('Data:') ? rawDate : `Data: ${rawDate}`;
                   return {
                     id: docSnap.id,
-                    title: data.title || 'Avaliação Corporal OnBody™',
-                    dateStr: data.dateStr || 'Data: -',
+                    title: data.title || 'Avaliação Corporal',
+                    dateStr: formattedDate,
                     status: (data.status?.toLowerCase() === 'laudo' || data.status?.toLowerCase() === 'disponível') ? 'laudo' : 'aguardando',
-                    pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl)
+                    pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl),
+                    pdfUrl: data.pdfUrl || '',
+                    metrics: data.metrics || {},
+                    updatedAt: data.updatedAt || ''
                   };
                 });
 
-                const latestDoc = snap.docs[0]?.data();
+                cachedSubAssessments = subAssessments;
+                lastAnthroError = null;
+
+                const latestDoc = subAssessments[0]?.metrics || {};
                 const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
-                const updatedProgress = latestDoc?.metrics ? {
+                const updatedProgress = latestDoc ? {
                   ...currentP.progress,
-                  currentWeight: Number(latestDoc.metrics.weight ?? currentP.progress.currentWeight),
-                  bodyFat: Number(latestDoc.metrics.bodyFat ?? currentP.progress.bodyFat),
-                  muscleMass: Number(latestDoc.metrics.muscleMass ?? currentP.progress.muscleMass),
-                  visceralFat: Number(latestDoc.metrics.visceralFat ?? currentP.progress.visceralFat),
-                  waistCircumference: Number(latestDoc.metrics.waistCircumference ?? currentP.progress.waistCircumference),
+                  currentWeight: (latestDoc.weight !== undefined && latestDoc.weight !== '') ? Number(latestDoc.weight) : currentP.progress.currentWeight,
+                  bodyFat: (latestDoc.bodyFat !== undefined && latestDoc.bodyFat !== '') ? Number(latestDoc.bodyFat) : currentP.progress.bodyFat,
+                  muscleMass: (latestDoc.muscleMass !== undefined && latestDoc.muscleMass !== '') ? Number(latestDoc.muscleMass) : currentP.progress.muscleMass,
+                  visceralFat: (latestDoc.visceralFat !== undefined && latestDoc.visceralFat !== '') ? Number(latestDoc.visceralFat) : currentP.progress.visceralFat,
+                  waistCircumference: (latestDoc.waistCircumference !== undefined && latestDoc.waistCircumference !== '') ? Number(latestDoc.waistCircumference) : currentP.progress.waistCircumference,
                 } : currentP.progress;
+
+                const derivedComparisons = this.computeAssessmentComparisons(subAssessments);
 
                 const updatedPatient: PatientProfile = {
                   ...currentP,
                   physicalAssessments: subAssessments,
-                  progress: updatedProgress
+                  progress: updatedProgress,
+                  ...(derivedComparisons.length > 0 ? { physicalAssessmentComparisons: derivedComparisons } : {})
                 };
                 const all = this.getAllLocalPatients();
                 all[patientId] = updatedPatient;
+                all['paciente-template-01'] = updatedPatient;
+                all[targetDocId] = updatedPatient;
                 this.saveAllLocalPatients(all);
                 callback(updatedPatient);
               }
             }, (err) => {
+              lastAnthroError = err?.code || 'permission-denied';
               console.info("🔒 [Vittáre Data] Subcoleção anthropometry em modo seguro:", err.code);
             });
           } catch (aErr) {
@@ -1354,6 +1371,140 @@ class CrmDataService {
     }
 
     return cachedSubReferrals;
+  }
+
+  public getAnthropometrySyncError(): string | null {
+    return lastAnthroError;
+  }
+
+  public computeAssessmentComparisons(assessments: PhysicalAssessmentItem[]): AssessmentComparisonMetric[] {
+    if (!assessments || assessments.length < 2) return [];
+
+    const parsePtDate = (dStr: string): number => {
+      const match = dStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (!match) return 0;
+      return new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10)).getTime();
+    };
+
+    const sorted = [...assessments].sort((a, b) => parsePtDate(a.dateStr) - parsePtDate(b.dateStr));
+
+    const metricsDef = [
+      { key: 'weight', name: 'Peso', unit: 'kg', ref: 'Meta clínica: 75,0 kg', higherIsBetter: false },
+      { key: 'bodyFat', name: '% de Gordura', unit: '%', ref: 'Meta clínica: < 20%', higherIsBetter: false },
+      { key: 'muscleMass', name: '% de Massa Muscular', unit: '%', ref: 'Meta clínica: > 35%', higherIsBetter: true },
+      { key: 'waistCircumference', name: 'Circunferência Abdominal', unit: 'cm', ref: 'Ref. < 94 cm', higherIsBetter: false },
+      { key: 'visceralFat', name: 'Gordura Visceral', unit: '', ref: 'Ref. Nível 1 a 9', higherIsBetter: false }
+    ];
+
+    const result: AssessmentComparisonMetric[] = [];
+
+    metricsDef.forEach(mDef => {
+      const points = sorted
+        .filter(item => item.metrics && item.metrics[mDef.key] !== undefined && item.metrics[mDef.key] !== null && item.metrics[mDef.key] !== '')
+        .map(item => {
+          const valNum = Number(item.metrics![mDef.key]);
+          const dateClean = item.dateStr.replace('Data: ', '').trim();
+          return {
+            date: dateClean,
+            value: isNaN(valNum) ? 0 : valNum,
+            valueDisplay: `${item.metrics![mDef.key]}${mDef.unit ? ` ${mDef.unit}` : ''}`
+          };
+        })
+        .filter(pt => pt.value > 0);
+
+      if (points.length >= 2) {
+        result.push({
+          id: `comp-${mDef.key}`,
+          name: mDef.name,
+          reference: mDef.ref,
+          unit: mDef.unit,
+          higherIsBetter: mDef.higherIsBetter,
+          points
+        });
+      }
+    });
+
+    return result;
+  }
+
+  public async refreshPhysicalAssessments(patientEmailOrId: string = 'jcecato@gmail.com'): Promise<PhysicalAssessmentItem[]> {
+    if (!isFirebaseConfigured() || !db) {
+      return cachedSubAssessments;
+    }
+
+    const targetDocId = (patientEmailOrId && patientEmailOrId.includes('@'))
+      ? patientEmailOrId.toLowerCase().trim()
+      : (auth?.currentUser?.email?.toLowerCase().trim() ||
+         (typeof window !== 'undefined' ? localStorage.getItem('vittare_remembered_email')?.toLowerCase().trim() : null) ||
+         'jcecato@gmail.com');
+
+    try {
+      const colRef = collection(db, 'patients', targetDocId, 'anthropometry');
+      let snap;
+      try {
+        snap = await getDocsFromServer(colRef);
+      } catch {
+        snap = await getDocs(colRef);
+      }
+
+      lastAnthroError = null;
+
+      const sortedDocs = [...snap.docs].sort((a, b) => b.id.localeCompare(a.id));
+      const freshAssessments: PhysicalAssessmentItem[] = sortedDocs.map(docSnap => {
+        const data = docSnap.data();
+        const rawDate = data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026');
+        const formattedDate = rawDate.startsWith('Data:') ? rawDate : `Data: ${rawDate}`;
+        return {
+          id: docSnap.id,
+          title: data.title || 'Avaliação Corporal',
+          dateStr: formattedDate,
+          status: (data.status?.toLowerCase() === 'laudo' || data.status?.toLowerCase() === 'disponível') ? 'laudo' : 'aguardando',
+          pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl),
+          pdfUrl: data.pdfUrl || '',
+          metrics: data.metrics || {},
+          updatedAt: data.updatedAt || ''
+        };
+      });
+
+      cachedSubAssessments = freshAssessments;
+
+      const latestMetrics = freshAssessments[0]?.metrics || {};
+      const all = this.getAllLocalPatients();
+      const currentP = all[patientEmailOrId] || all[targetDocId] || INITIAL_PATIENTS['paciente-template-01'];
+
+      const updatedProgress = latestMetrics ? {
+        ...currentP.progress,
+        currentWeight: (latestMetrics.weight !== undefined && latestMetrics.weight !== '') ? Number(latestMetrics.weight) : currentP.progress.currentWeight,
+        bodyFat: (latestMetrics.bodyFat !== undefined && latestMetrics.bodyFat !== '') ? Number(latestMetrics.bodyFat) : currentP.progress.bodyFat,
+        muscleMass: (latestMetrics.muscleMass !== undefined && latestMetrics.muscleMass !== '') ? Number(latestMetrics.muscleMass) : currentP.progress.muscleMass,
+        visceralFat: (latestMetrics.visceralFat !== undefined && latestMetrics.visceralFat !== '') ? Number(latestMetrics.visceralFat) : currentP.progress.visceralFat,
+        waistCircumference: (latestMetrics.waistCircumference !== undefined && latestMetrics.waistCircumference !== '') ? Number(latestMetrics.waistCircumference) : currentP.progress.waistCircumference,
+      } : currentP.progress;
+
+      const derivedComparisons = this.computeAssessmentComparisons(freshAssessments);
+
+      const updatedPatient: PatientProfile = {
+        ...currentP,
+        physicalAssessments: freshAssessments,
+        progress: updatedProgress,
+        ...(derivedComparisons.length > 0 ? { physicalAssessmentComparisons: derivedComparisons } : {})
+      };
+
+      all[patientEmailOrId] = updatedPatient;
+      all[targetDocId] = updatedPatient;
+      all['paciente-template-01'] = updatedPatient;
+      this.saveAllLocalPatients(all);
+      this.notifyListeners(patientEmailOrId, updatedPatient);
+      if (targetDocId !== patientEmailOrId) {
+        this.notifyListeners(targetDocId, updatedPatient);
+      }
+      return freshAssessments;
+    } catch (err: any) {
+      lastAnthroError = err?.code || 'permission-denied';
+      console.warn("⚠️ [Vittáre Sync] Erro ao atualizar subcoleção anthropometry sob demanda:", err);
+    }
+
+    return cachedSubAssessments;
   }
 
   public exportPatientJson(patientId: string): string {

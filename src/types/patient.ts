@@ -58,12 +58,35 @@ export interface ConsultationItem {
   audioNotes?: string;
 }
 
+export interface PhysicalAssessmentMetrics {
+  weight?: number | string;
+  bodyFat?: number | string;
+  muscleMass?: number | string;
+  visceralFat?: number | string;
+  waistCircumference?: number | string;
+  abdominal?: number | string;
+  antebraco?: number | string;
+  braco?: number | string;
+  coxa?: number | string;
+  dobraCoxa?: number | string;
+  dobraTricipital?: number | string;
+  femur?: number | string;
+  panturrilha?: number | string;
+  punho?: number | string;
+  quadril?: number | string;
+  umero?: number | string;
+  [key: string]: any;
+}
+
 export interface PhysicalAssessmentItem {
   id: string;
   title: string;
   dateStr: string;
   status: 'laudo' | 'aguardando';
   pdfAvailable: boolean;
+  pdfUrl?: string;
+  metrics?: PhysicalAssessmentMetrics;
+  updatedAt?: string;
 }
 
 export interface MealGuideItem {

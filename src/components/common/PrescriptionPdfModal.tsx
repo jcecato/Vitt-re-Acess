@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ProtocolItem } from '../../types/patient';
-import { X, Printer, ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Share2, X, Loader2 } from 'lucide-react';
 import { parseClinicalItemsToActives } from '../../services/crmDataService';
+import { shareOrDownloadPdf } from '../../utils/pdfExportUtils';
+import { VITTARE_LOGO_PNG } from '../../assets/vittareLogoBase64';
 
 interface PrescriptionPdfModalProps {
   isOpen: boolean;
@@ -21,6 +23,8 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
   patientName
 }) => {
   if (!isOpen || !protocol) return null;
+
+  const [isExporting, setIsExporting] = useState(false);
 
   // Datas
   const emissionDateStr = protocol.emissionDate || '10/11/2026';
@@ -84,119 +88,69 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
     ];
   })();
 
-  const handlePrint = () => {
+  const handleShareOrDownload = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     try {
-      const sheetElem = document.getElementById('prescription-sheet');
-      if (!sheetElem) {
-        window.print();
-        return;
-      }
-
-      const isIframe = window.self !== window.top;
-      if (isIframe) {
-        const printWindow = window.open('', '_blank', 'width=900,height=1000');
-        if (printWindow) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>Receituário - ${patientName}</title>
-                <script src="https://cdn.tailwindcss.com"></script>
-                <link rel="preconnect" href="https://fonts.googleapis.com">
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-                <style>
-                  @page {
-                    size: A4 portrait;
-                    margin: 6mm;
-                  }
-                  html, body {
-                    font-family: 'Inter', sans-serif;
-                    background: #fff;
-                    margin: 0;
-                    padding: 0;
-                    height: 100%;
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
-                  }
-                  #prescription-sheet {
-                    min-height: auto !important;
-                    height: auto !important;
-                    max-height: 282mm !important;
-                    padding: 4mm 6mm !important;
-                    margin: 0 auto !important;
-                    box-shadow: none !important;
-                    border: none !important;
-                    display: flex !important;
-                    flex-direction: column !important;
-                    justify-content: space-between !important;
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                  }
-                  .signature-box-container {
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                    break-after: avoid !important;
-                    page-break-after: avoid !important;
-                  }
-                </style>
-              </head>
-              <body>
-                ${sheetElem.outerHTML}
-                <script>
-                  setTimeout(() => {
-                    window.print();
-                  }, 500);
-                </script>
-              </body>
-            </html>
-          `);
-          printWindow.document.close();
-          return;
-        }
-      }
-      
-      window.print();
-    } catch (err) {
-      console.warn('Fallback para janela de impressão nativa:', err);
-      window.print();
+      const sanitizedName = (patientName || 'JOAO_CECATO').toUpperCase().replace(/[^a-zA-Z0-9]/g, '_');
+      await shareOrDownloadPdf({
+        elementId: 'prescription-sheet',
+        filename: `Receituario_${sanitizedName}.pdf`,
+        title: 'Receituário Nutricional Oficial',
+        text: `Receituário nutricional oficial de ${patientName} emitido pelo Dr. João Paulo Cecato.`
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-slate-900/90 backdrop-blur-sm flex flex-col items-center p-2 sm:p-4 select-none print:p-0 print:bg-white">
-      {/* BOTÃO FLUTUANTE DE FECHAR (SEMPRE VISÍVEL NO TOPO DIREITO DO DISPOSITIVO) */}
-      <button
-        type="button"
-        onClick={onClose}
-        className="fixed top-3 right-3 sm:top-4 sm:right-4 z-[70] w-10 h-10 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white flex items-center justify-center shadow-xl border border-slate-600 transition active:scale-95 cursor-pointer print:hidden"
-        title="Fechar Receituário e Voltar ao App"
-      >
-        <X className="w-5 h-5 text-white" />
-      </button>
-
-      {/* BARRA SUPERIOR DE AÇÕES (OCULTA NA IMPRESSÃO) */}
-      <div className="w-full max-w-full sm:max-w-[210mm] mb-3 flex items-center justify-between bg-slate-800 border border-slate-700 text-white px-3 sm:px-4 py-2.5 rounded-xl shadow-lg print:hidden shrink-0">
-        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-200">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="truncate">Receituário Clínico Oficial | Dr. João Paulo Cecato</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Imprimir / Salvar PDF</span>
-          </button>
+    <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex flex-col items-center justify-start overflow-y-auto p-2 sm:p-4 select-none font-['Inter',sans-serif]">
+      {/* BARRA SUPERIOR DE AÇÕES MOBILE-FIRST (OCULTA NA IMPRESSÃO) */}
+      <div className="w-full max-w-full sm:max-w-[210mm] bg-[#14142a] border border-white/20 rounded-2xl p-2.5 sm:px-5 sm:py-3 mb-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-2xl shrink-0 print:hidden">
+        <div className="w-full sm:w-auto flex items-center justify-between gap-2 text-xs sm:text-sm font-semibold text-slate-200 min-w-0">
+          <div className="flex items-center gap-2 truncate">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="truncate">Receituário Clínico Oficial</span>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white text-xs sm:text-sm font-medium flex items-center gap-1 transition active:scale-95 cursor-pointer"
+            aria-label="Fechar"
+            className="sm:hidden p-1.5 rounded-lg bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 transition cursor-pointer"
           >
-            <X className="w-4 h-4" />
-            <span className="hidden sm:inline">Fechar</span>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* BOTÃO ERGONÔMICO FULL-WIDTH: ENCAMINHAR AO WHATSAPP / SALVAR PDF (16PX) */}
+        <div className="w-full sm:w-auto sm:flex-1 sm:max-w-[440px] flex items-center justify-end gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleShareOrDownload}
+            disabled={isExporting}
+            className="w-full h-[48px] px-4 rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-[#0a0d12] text-[16px] font-extrabold flex items-center justify-center gap-2.5 transition active:scale-95 cursor-pointer shadow-md shadow-[#25D366]/20 disabled:opacity-60"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Gerando PDF...</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-5 h-5" />
+                <span>Encaminhar ao WhatsApp / Salvar PDF</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="hidden sm:flex h-[48px] w-[48px] items-center justify-center rounded-xl bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 transition cursor-pointer border border-white/10 shrink-0"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -235,10 +189,10 @@ export const PrescriptionPdfModal: React.FC<PrescriptionPdfModalProps> = ({
               </div>
             </div>
 
-            {/* Marca Vittáre - Dimensão contida para não estourar em nenhuma tela */}
+            {/* Marca Vittáre Oficial (Base64 Síncrono sem dependência de rede) */}
             <div className="flex items-center justify-center p-1 bg-transparent rounded-lg shrink-0">
               <img 
-                src="https://i.ibb.co/JRkkVnRx/Vitt-re-CENTRO-INTEGRADO-EM-SA-DE-sem-fundo.png" 
+                src={VITTARE_LOGO_PNG} 
                 alt="Logo Vittáre" 
                 className="max-h-12 max-w-[130px] sm:max-w-[160px] w-auto object-contain mix-blend-multiply" 
               />

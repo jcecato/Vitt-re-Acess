@@ -33,10 +33,16 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
     crmDataService.getReferralsSyncError()
   );
 
+  const [isSyncingAnthro, setIsSyncingAnthro] = useState(false);
+  const [anthroSyncError, setAnthroSyncError] = useState<string | null>(
+    crmDataService.getAnthropometrySyncError()
+  );
+
   useEffect(() => {
     setLiveReferrals(Array.isArray(patient.referrals) ? patient.referrals : []);
     setReferralsSyncError(crmDataService.getReferralsSyncError());
-  }, [patient.referrals]);
+    setAnthroSyncError(crmDataService.getAnthropometrySyncError());
+  }, [patient.referrals, patient.physicalAssessments]);
 
   const handleSyncReferralsNow = async () => {
     setIsSyncingReferrals(true);
@@ -47,9 +53,19 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
     setIsSyncingReferrals(false);
   };
 
+  const handleSyncAnthroNow = async () => {
+    setIsSyncingAnthro(true);
+    const emailOrId = patient.email || patient.id || 'jcecato@gmail.com';
+    await crmDataService.refreshPhysicalAssessments(emailOrId);
+    setAnthroSyncError(crmDataService.getAnthropometrySyncError());
+    setIsSyncingAnthro(false);
+  };
+
   useEffect(() => {
     if (activeSubTab === 'encaminhamentos') {
       handleSyncReferralsNow();
+    } else if (activeSubTab === 'corporal') {
+      handleSyncAnthroNow();
     }
   }, [activeSubTab, patient.email, patient.id]);
 
@@ -165,7 +181,13 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
 
         {/* 2. Avaliação Corporal | Vittáre OnBody™ */}
         {activeSubTab === 'corporal' && (
-          <PhysicalAssessmentTab patient={patient} onOpenPdf={onOpenPdf} />
+          <PhysicalAssessmentTab
+            patient={patient}
+            onOpenPdf={onOpenPdf}
+            onRefresh={handleSyncAnthroNow}
+            isSyncing={isSyncingAnthro}
+            syncError={anthroSyncError}
+          />
         )}
 
         {/* 3. Mapa Funcional | BioSync™ */}
@@ -293,24 +315,14 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
 
                       <div className="flex flex-wrap gap-2 mt-3 pt-2.5 border-t border-white/[0.06]">
                         {ref.hasPdf || ref.instructions || ref.pdfUrl ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenReferralPdf(ref)}
-                              className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-semibold py-0 px-3.5 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
-                            >
-                              <i className="ti ti-file-type-pdf text-[18px]"></i>
-                              <span>PDF</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenReferralPdf(ref)}
-                              className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-semibold py-0 px-4 rounded-xl bg-[#0f7a3a] border border-[#0f7a3a] text-white hover:bg-[#128d43] active:scale-95 transition cursor-pointer"
-                            >
-                              <i className="ti ti-eye text-[18px]"></i>
-                              <span>Visualizar</span>
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReferralPdf(ref)}
+                            className="h-[36px] inline-flex items-center gap-1.5 text-[15px] font-semibold py-0 px-3.5 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/35 text-[#5eea8f] hover:bg-[#5eea8f]/20 active:scale-95 transition cursor-pointer"
+                          >
+                            <i className="ti ti-file-type-pdf text-[18px]"></i>
+                            <span>PDF</span>
+                          </button>
                         ) : (
                           <button
                             type="button"

@@ -1,0 +1,2116 @@
+
+Mapeamento de Arquivos do Projeto:
+/constants.ts: Armazena todas as tabelas de referência clínica (REFERENCIAS_GORDURA, ANTROPOMETRIA_REF, REFERENCIAS_MUSCULO, METAS_GORDURA) e todos os textos clínicos interpretativos (DESCRICOES_COMPLEMENTARES).
+/utils.ts: Contém o motor de cálculo principal (generateReportData) e funções auxiliares (calcularIdade, calcularCMB, calcFFMI, getRef, getFatRef, obterClassificacaoMusculo).
+/types.ts: Define os contratos de entrada (PatientData) e de saída (FullReport, ReportResults, ChecklistItem).
+/App.tsx: Contém a função handleSave(overwrite: boolean) (linhas 381–468), que atualmente grava no Firebase Realtime Database (ref(db, 'antopometria/avaliacoes/...')).
+Divergência Crítica Detectada (Realtime DB vs. Firestore): O sistema atual usa Firebase Realtime Database (firebase/database), gravando os objetos patient e results (formatados para UI). Para que o app Vittáre Acess leia diretamente em /patients/{email}/anthropometry/{docId} via Firestore (ou mantenha um nó estruturado metrics), é necessário serializar os valores numéricos puros junto com os textos de saída final das referências dentro de um objeto unificado metrics.
+2. Visão Geral da Solução (Catálogo Completo de Fórmulas, Referências e Textos de Saída)
+Aqui está a especificação exata de como cada índice é calculado, quais são as faixas de referência e qual é o texto exato de saída final gerado pelo sistema (pronto para copiar):
+A. Idade e Classificação Etária
+Cálculo: Diferença em anos completos entre a data atual e a data de nascimento (nascimento).
+Regra de Corte:
+idade < 60: Protocolo Adulto (isElderly = false)
+idade >= 60: Protocolo Idoso (isElderly = true)
+B. IMC (Índice de Massa Corporal)
+Fórmula:
+
+(Arredondado para 2 casas decimais).
+Saída de Texto e Referências:
+Se Adulto (idade < 60) — Padrão OMS:
+< 16.0: Texto de saída: "OMS: Magreza (<16.0)" | Checklist: "Magreza (<16.0)" (danger)
+16.0 a 18.49: Texto de saída: "OMS: Baixo Peso (16.0–18.4)" | Checklist: "Baixo Peso (16.0–18.4)" (danger)
+18.5 a 24.99: Texto de saída: "OMS: Adequado (18.5–24.9)" | Checklist: "Adequado (18.5–24.9)" (success)
+25.0 a 29.99: Texto de saída: "OMS: Sobrepeso (25.0–29.9)" | Checklist: "Sobrepeso (25.0–29.9)" (warning)
+30.0 a 34.99: Texto de saída: "OMS: Obesidade 1 (30.0–34.9)" | Checklist: "Obesidade 1 (30.0–34.9)" (danger)
+35.0 a 39.99: Texto de saída: "OMS: Obesidade 2 (35.0–39.9)" | Checklist: "Obesidade 2 (35.0–39.9)" (danger)
+>= 40.0: Texto de saída: "OMS: Obesidade 3 (>=40.0)" | Checklist: "Obesidade 3 (>=40.0)" (danger)
+Se Idoso (idade >= 60) — Padrão Lipschitz:
+< 22.0: Texto de saída: "LIPSCHITZ: Baixo Peso (<22.0)" | Checklist: "Baixo Peso (<22.0)" (danger)
+22.0 a 27.0: Texto de saída: "LIPSCHITZ: Eutrofia (22.0–27.0)" | Checklist: "Eutrofia (22.0–27.0)" (success)
+> 27.0: Texto de saída: "LIPSCHITZ: Sobrepeso (>27.0)" | Checklist: "Sobrepeso (>27.0)" (warning)
+C. Peso Ideal (Critério Híbrido: IMC + % Gordura Alvo)
+Fórmula Base (por IMC 22 a 24):
+Ajuste por Composição Corporal (se % Gordura e sexo estiverem preenchidos):
+Metas de Gordura Alvo (METAS_GORDURA):
+Masculino (M): 18% a 24% (gMin = 18, gMax = 24)
+Feminino (F): 25% a 31% (gMin = 25, gMax = 31)
+Se gordura% > gMin:
+Calcula a intersecção: 
+ e 
+.
+Se interMin <= interMax:
+Faixa Final: interMin a interMax
+Subtexto de saída: "Critério híbrido: IMC 22–24 + %G alvo (18–24%)" (para M) ou "(25–31%)" (para F).
+Se interMin > interMax (sem intersecção):
+Faixa Final: pesoIMCmin a pesoIMCmax
+Subtexto de saída: "Critério híbrido: IMC 22–24 (sem intersecção com %G alvo; priorizado IMC)"
+Se gordura% <= gMin:
+Faixa Final: pesoIMCmin a pesoIMCmax
+Subtexto de saída: "Critério híbrido: IMC 22–24; %G atual ≤ 18% — foco em recomposição (↑MM, peso estável)"
+Texto Complementar Fixo de Saída:
+"Faixa de peso sugerida para favorecer saúde geral e menor risco de doenças ao longo do tempo."
+D. FFMI (Índice de Massa Magra)
+Fórmula:
+
+Pontos de Corte e Textos de Saída:
+< 18: Status "baixo" -> Subtexto: "Referência: 18–21 (adultos) — baixo"
+18 a 21: Status "adequado" -> Subtexto: "Referência: 18–21 (adultos) — adequado"
+> 21: Status "elevado" -> Subtexto: "Referência: 18–21 (adultos) — elevado"
+Texto Complementar Fixo de Saída:
+"Indicador da quantidade de músculo em relação à altura, usado para avaliar se há preservação ou perda muscular."
+E. Gordura Corporal (% e kg) — Bioimpedância Omron
+Fórmula do Peso Gordo (kg):
+Valor Formatado de Saída: "{gordura}% – {kg} kg"
+Tabelas de Referência por Sexo e Idade (REFERENCIAS_GORDURA):
+Feminino (F):
+20 a 39 anos: Normal 21.0 – 32.9% | Alto 33.0 – 38.9% | Muito Alto >= 39.0%
+40 a 59 anos: Normal 23.0 – 33.9% | Alto 34.0 – 39.9% | Muito Alto >= 40.0%
+>= 60 anos: Normal 24.0 – 35.9% | Alto 36.0 – 41.9% | Muito Alto >= 42.0%
+Masculino (M):
+20 a 39 anos: Normal 8.0 – 19.9% | Alto 20.0 – 24.9% | Muito Alto >= 25.0%
+40 a 59 anos: Normal 11.0 – 21.9% | Alto 22.0 – 27.9% | Muito Alto >= 28.0%
+>= 60 anos: Normal 13.0 – 24.9% | Alto 25.0 – 29.9% | Muito Alto >= 30.0%
+Textos de Saída:
+Subtexto do Card: "Ideal: {minNorm} – {maxNorm} %"
+Texto do Checklist (Percentual de Gordura):
+Abaixo de minNorm: "Abaixo do ideal (Baixo)" (warning)
+Entre minNorm e maxNorm: "Na faixa ideal (Normal)" (success)
+Entre minAlto e maxAlto: "Acima do ideal (Alto)" (warning)
+Acima de maxAlto: "Muito Acima (Muito Alto)" (danger)
+F. Massa Muscular Esquelética (% e kg) — Bioimpedância Omron
+Fórmula da Massa Muscular (kg):
+Valor Formatado de Saída: "{musculo}% – {kg} kg"
+Tabelas de Referência (REFERENCIAS_MUSCULO):
+Adulto (idade < 60):
+Masculino (M):
+<= 32.9%: "Baixo"
+33.0 a 39.0%: "Normal" | Texto Ideal: "Ideal: 33.0 – 39.0%"
+39.1 a 44.0%: "Alto"
+> 44.0%: "Muito Alto"
+Feminino (F):
+<= 23.9%: "Baixo"
+24.0 a 30.0%: "Normal" | Texto Ideal: "Ideal: 24.0 – 30.0%"
+30.1 a 35.0%: "Alto"
+> 35.0%: "Muito Alto"
+Idoso (idade >= 60):
+Masculino (M):
+<= 29.0%: "Baixo (Risco Sarcopenia)"
+29.1 a 38.0%: "Normal" | Texto Ideal: "Ideal: 29.1 – 38.0%"
+38.1 a 42.0%: "Alto (Excelente)"
+> 42.0%: "Muito Alto"
+Feminino (F):
+<= 23.0%: "Baixo (Risco Sarcopenia)"
+23.1 a 30.0%: "Normal" | Texto Ideal: "Ideal: 23.1 – 30.0%"
+30.1 a 34.0%: "Alto (Excelente)"
+> 34.0%: "Muito Alto"
+G. Gordura Visceral
+Entrada: Valor inteiro direto da bioimpedância (visceral).
+Subtexto Fixo do Card: "Normal: 1-9 | Alto: >10"
+Classificação e Texto de Saída no Checklist:
+<= 9: "Normal" (success)
+10 a 14: "Aumentada" (warning)
+>= 15: "Muito Alta" (danger)
+H. Peso Ósseo Estimado (Rocha 1975 vs. Estimativa Etária)
+Regra Condicional Dupla:
+Se punho (cm) E femur (cm) forem informados (Fórmula de Rocha, 1975):
+Subtexto de saída: "Cálculo: Rocha (1975)"
+Caso contrário (se punho ou femur estiverem vazios — Estimativa por Idade):
+Se idade >= 50: subtrai adicionalmente 
+.
+Subtexto de saída: "Estimativa por idade"
+I. Massa Livre de Gordura (MMLG)
+Fórmula:
+
+Textos Fixos de Saída:
+Subtexto: "Isenta de gordura, pelo e ossos"
+Complemento: "Peso de tudo no corpo que NÃO é gordura, ou seja: músculos, ossos, órgãos e água."
+J. Taxa Metabólica Basal (TMB) e Gasto Energético Total (GET)
+Fórmula TMB (Mifflin-St Jeor):
+Masculino (M): 
+Feminino (F): 
+
+(Arredondado com Math.round(tmb)).
+Fórmula GET:
+Fatores de Atividade: Sedentário (1.2), Levemente Ativo (1.375), Moderadamente Ativo (1.55), Muito Ativo (1.725), Extremamente Ativo (1.9).
+Textos de Saída:
+TMB: Subtexto "Mifflin-St Jeor" | Complemento: "Quantidade mínima de calorias que o corpo necessita em repouso para manter funções vitais."
+GET: Subtexto "Estimativa diária" | Complemento: "Estimativa do total de calorias necessárias por dia, considerando o metabolismo e as atividades diárias extras."
+K. Circunferências, Relações e Dobras Cutâneas
+Circunferência da Cintura (cintura em cm):
+Masculino (M): <= 79.9: "Baixo" (warning) | 80.0 a 93.9: "Adequado" (success) | >= 94.0: "Alto" (danger)
+Feminino (F): <= 69.9: "Baixo" (warning) | 70.0 a 79.9: "Adequada" (success) | >= 80.0: "Alto" (danger)
+Circunferência Abdominal (abdominal em cm):
+Masculino (M): <= 79.9: "Baixo" (warning) | 80.0 a 93.9: "Adequado" (success) | >= 94.0: "Alto" (danger)
+Feminino (F): <= 69.9: "Baixo" (warning) | 70.0 a 79.9: "Adequada" (success) | >= 80.0: "Alto" (danger)
+Relação Cintura-Quadril — RCQ (cintura / quadril):
+Fórmula: 
+ (2 casas decimais).
+Cortes Masculino (M): <= 0.80: "Baixo" (low) | 0.81 a 0.90: "Adequado" (normal) | > 0.90: "Alto" (high)
+Cortes Feminino (F): <= 0.70: "Baixo" (low) | 0.71 a 0.80: "Adequado" (normal) | > 0.80: "Alto" (high)
+Textos Complementares de Saída:
+high: "Acúmulo de gordura visceral. Importante preditor de risco cardiovascular, associado a hipertensão, diabetes tipo 2 e risco de infarto/AVC."
+normal: "Distribuição de gordura corporal saudável. Baixo risco metabólico."
+low: "Medida abaixo da média. Indica baixa concentração de gordura abdominal, geralmente associado a baixo peso ou biotipo específico."
+Relação Cintura-Estatura — RCE (cintura / altura):
+Fórmula: 
+ (2 casas decimais).
+Cortes (Ambos os Sexos): <= 0.40: "Baixo" (low) | 0.41 a 0.50: "Adequado" (normal) | > 0.50: "Alto" (high)
+Textos Complementares de Saída:
+high: "A circunferência abdominal ultrapassa metade da altura. Sobrecarga cardiovascular e alto risco metabólico."
+normal: "Proporção abdominal saudável em relação à altura. Baixo risco cardíaco."
+low: "Proporção muito reduzida. Pode indicar baixo peso ou déficit de massa corporal na região do tronco."
+Braço — MUAC (braco em cm):
+Cortes Masculino (M): <= 26.9: "Baixo" (low/warning) | 27.0 a 32.0: "Adequado" (normal/success) | > 32.0: "Alto" (high/danger)
+Cortes Feminino (F): <= 25.9: "Baixo" (low/warning) | 26.0 a 31.0: "Adequado" (normal/success) | > 31.0: "Alto" (high/danger)
+Textos Complementares de Saída:
+high: "Circunferência elevada. Pode indicar excesso de gordura subcutânea ou grande hipertrofia muscular (avaliar junto às dobras)."
+normal: "Boa reserva de energia e tecidos. Baixo risco de desnutrição."
+low: "Alerta para desnutrição e potencial perda de massa magra. Indica fragilidade física."
+Reserva Muscular Real — Circunferência Muscular do Braço (CMB):
+Fórmula (requer braco em cm e dobraTricipital em mm):
+
+(Arredondado para 1 casa decimal).
+Cortes Masculino (M): <= 25.0: "Baixo" (low/warning) | 25.1 a 30.0: "Adequado" (normal/success) | > 30.0: "Alto" (high/success)
+Cortes Feminino (F): <= 21.0: "Baixo" (low/warning) | 21.1 a 25.0: "Adequado" (normal/success) | > 25.0: "Alto" (high/success)
+Textos Complementares de Saída:
+high: "Hipertrofia muscular. Indica grande volume de massa magra e excelente reserva proteica."
+normal: "Massa muscular do braço preservada. Boa reserva de proteínas."
+low: "Depleção muscular (perda de músculo). Queda de força, perda de reserva proteica e maior risco de fragilidade."
+Dobra Tricipital (dobraTricipital em mm):
+Cortes Masculino (M): <= 7.9: "Baixo" (low) | 8.0 a 20.0: "Adequado" (normal) | > 20.0: "Alto" (high)
+Cortes Feminino (F): <= 9.9: "Baixo" (low) | 10.0 a 25.0: "Adequado" (normal) | > 25.0: "Alto" (high)
+Textos Complementares de Saída:
+high: "Excesso de gordura subcutânea nos membros superiores."
+normal: "Reserva de gordura periférica dentro do padrão saudável."
+low: "Baixa reserva de energia. Possível risco nutricional ou percentual de gordura muito reduzido (perfil atlético)."
+Panturrilha e Rastreio de Sarcopenia (panturrilha em cm):
+Regras de Corte:
+< 31 cm (Ambos): Subtexto "Baixo" (status = 'low', Checklist "Risco Sarcopenia": "Baixo" com alerta vermelho danger).
+Masculino < 34 cm ou Feminino < 33 cm: Subtexto "Baixo" (status = 'low', Checklist warning).
+Masculino > 40 cm ou Feminino > 39 cm: Subtexto "Alto" (status = 'high', Checklist danger).
+Demais valores (M: 34 a 40, F: 33 a 39): Subtexto "Adequado" (status = 'normal', Checklist success).
+Textos Complementares de Saída:
+high: "Circunferência elevada. Pode indicar hipertrofia muscular, retenção de líquidos (edema) ou acúmulo de gordura."
+normal: "Boa reserva de massa muscular periférica. Indicador de mobilidade e força preservadas."
+low: "Alerta para sarcopenia (perda muscular severa). Maior risco de perda de autonomia motora e quedas."
+Composição Média de Coxa (Estimativa Geométrica — requer coxa em cm e dobraCoxa em mm):
+Fórmulas Geométricas:
+Limites de Corte por Idade:
+Se idade >= 60: limitLow = 50%, limitHighFat = 40%
+Se idade < 60: limitLow = 55%, limitHighFat = 45%
+Classificação (baseada em % Músculo Coxa):
+< limitHighFat: "Alto (Excesso de Gordura)" (high / danger)
+< limitLow: "Baixo (Déficit de Músculo)" (low / warning)
+>= limitLow: "Adequado" (normal / success)
+Valor Formatado: "{pctMusculo}% músculo* | {pctGordura}% gordura"
+Subtexto: "{labelReserva}. Estimativa geométrica."
+Textos Complementares de Saída:
+high: "Alta proporção de gordura em relação ao músculo. Sobrecarga articular e menor eficiência metabólica."
+normal: "Adequada reserva muscular. Boa proporção para força, mobilidade e metabolismo ativo."
+low: "Baixa proporção muscular. Risco de fraqueza nos membros inferiores, menor proteção articular e impacto na mobilidade."
+Gordura Subcutânea de Coxa (dobraCoxa em mm):
+< 10 mm: "Baixo" (low) -> "Camada de gordura muito fina. Pode indicar baixo peso, desnutrição ou perfil atlético de alto rendimento."
+10 a 30 mm: "Adequado" (normal) -> "Distribuição saudável de gordura nos membros inferiores."
+> 30 mm: "Alto" (high) -> "Acúmulo excessivo de gordura localizada. Pode gerar sobrecarga para as articulações dos joelhos e quadril."
+Medidas Aferidas Simples (coxa, antebraco, punho, umero):
+Quando preenchidas, geram um card simples com valor "{valor} cm" e subtexto fixo "Medida aferida".
+
+
+
+
+export const REFERENCIAS_GORDURA: any = {
+    F: [
+      { minAge: 20, maxAge: 39, normal: [21.0, 32.9], alto: [33.0, 38.9], muitoAlto: 39.0 },
+      { minAge: 40, maxAge: 59, normal: [23.0, 33.9], alto: [34.0, 39.9], muitoAlto: 40.0 },
+      { minAge: 60, maxAge: 999, normal: [24.0, 35.9], alto: [36.0, 41.9], muitoAlto: 42.0 }
+    ],
+    M: [
+      { minAge: 20, maxAge: 39, normal: [8.0, 19.9], alto: [20.0, 24.9], muitoAlto: 25.0 },
+      { minAge: 40, maxAge: 59, normal: [11.0, 21.9], alto: [22.0, 27.9], muitoAlto: 28.0 },
+      { minAge: 60, maxAge: 999, normal: [13.0, 24.9], alto: [25.0, 29.9], muitoAlto: 30.0 }
+    ]
+};
+
+export const ANTROPOMETRIA_REF: any = {
+  cintura: {
+    M: [
+      { max: 79.9, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 93.9, label: 'Adequado', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ],
+    F: [
+      { max: 69.9, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 79.9, label: 'Adequada', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ]
+  },
+  abdominal: {
+    M: [
+      { max: 79.9, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 93.9, label: 'Adequado', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ],
+    F: [
+      { max: 69.9, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 79.9, label: 'Adequada', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ]
+  },
+  rcq: {
+    M: [
+      { max: 0.80, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 0.90, label: 'Adequado', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ],
+    F: [
+      { max: 0.70, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 0.80, label: 'Adequado', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ]
+  },
+  rce: {
+    ALL: [
+      { max: 0.40, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 0.50, label: 'Adequado', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ]
+  },
+  muac: {
+    M: [
+      { max: 26.9, label: "Baixo", color: "#f1c40f", status: "low", chk: "warning" },
+      { max: 32.0, label: "Adequado", color: "#1ca657", status: "normal", chk: "success" },
+      { max: 999, label: "Alto", color: "#d93025", status: "high", chk: "danger" }
+    ],
+    F: [
+      { max: 25.9, label: "Baixo", color: "#f1c40f", status: "low", chk: "warning" },
+      { max: 31.0, label: "Adequado", color: "#1ca657", status: "normal", chk: "success" },
+      { max: 999, label: "Alto", color: "#d93025", status: "high", chk: "danger" }
+    ]
+  },
+  cmb: {
+    M: [
+      { max: 25.0, label: "Baixo", color: "#f1c40f", status: "low", chk: "warning" },
+      { max: 30.0, label: "Adequado", color: "#1ca657", status: "normal", chk: "success" },
+      { max: 999, label: "Alto", color: "#0044cc", status: "high", chk: "success" }
+    ],
+    F: [
+      { max: 21.0, label: "Baixo", color: "#f1c40f", status: "low", chk: "warning" },
+      { max: 25.0, label: "Adequado", color: "#1ca657", status: "normal", chk: "success" },
+      { max: 999, label: "Alto", color: "#0044cc", status: "high", chk: "success" }
+    ]
+  },
+  tsf: {
+    M: [
+      { max: 7.9, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 20.0, label: 'Adequado', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ],
+    F: [
+      { max: 9.9, label: 'Baixo', color: '#f1c40f', status: 'low', chk: 'warning' },
+      { max: 25.0, label: 'Adequado', color: '#1ca657', status: 'normal', chk: 'success' },
+      { max: 999, label: 'Alto', color: '#d93025', status: 'high', chk: 'danger' }
+    ]
+  }
+};
+
+export const REFERENCIAS_MUSCULO: any = {
+  adulto: {
+    M: [
+      { max: 32.9, label: "Baixo", cor: "#d93025" },
+      { max: 39.0, label: "Normal", cor: "#1ca657", ideal: "33.0 – 39.0%" },
+      { max: 44.0, label: "Alto", cor: "#0044cc" },
+      { max: 999, label: "Muito Alto", cor: "#8e44ad" }
+    ],
+    F: [
+      { max: 23.9, label: "Baixo", cor: "#d93025" },
+      { max: 30.0, label: "Normal", cor: "#1ca657", ideal: "24.0 – 30.0%" },
+      { max: 35.0, label: "Alto", cor: "#0044cc" },
+      { max: 999, label: "Muito Alto", cor: "#8e44ad" }
+    ]
+  },
+  idoso: {
+    M: [
+      { max: 29.0, label: "Baixo (Risco Sarcopenia)", cor: "#d93025" },
+      { max: 38.0, label: "Normal", cor: "#1ca657", ideal: "29.1 – 38.0%" },
+      { max: 42.0, label: "Alto (Excelente)", cor: "#0044cc" },
+      { max: 999, label: "Muito Alto", cor: "#8e44ad" }
+    ],
+    F: [
+      { max: 23.0, label: "Baixo (Risco Sarcopenia)", cor: "#d93025" },
+      { max: 30.0, label: "Normal", cor: "#1ca657", ideal: "23.1 – 30.0%" },
+      { max: 34.0, label: "Alto (Excelente)", cor: "#0044cc" },
+      { max: 999, label: "Muito Alto", cor: "#8e44ad" }
+    ]
+  }
+};
+
+export const METAS_GORDURA: any = {
+  M: { saude: [18, 24] },
+  F: { saude: [25, 31] }
+};
+
+export const DESCRICOES_COMPLEMENTARES: any = {
+  pesoIdeal: "Faixa de peso sugerida para favorecer saúde geral e menor risco de doenças ao longo do tempo.",
+  ffmi: "Indicador da quantidade de músculo em relação à altura, usado para avaliar se há preservação ou perda muscular.",
+  massaLivre: "Peso de tudo no corpo que NÃO é gordura, ou seja: músculos, ossos, órgãos e água.",
+  rcq: {
+    high: "Acúmulo de gordura visceral. Importante preditor de risco cardiovascular, associado a hipertensão, diabetes tipo 2 e risco de infarto/AVC.",
+    normal: "Distribuição de gordura corporal saudável. Baixo risco metabólico.",
+    low: "Medida abaixo da média. Indica baixa concentração de gordura abdominal, geralmente associado a baixo peso ou biotipo específico."
+  },
+  rce: {
+    high: "A circunferência abdominal ultrapassa metade da altura. Sobrecarga cardiovascular e alto risco metabólico.",
+    normal: "Proporção abdominal saudável em relação à altura. Baixo risco cardíaco.",
+    low: "Proporção muito reduzida. Pode indicar baixo peso ou déficit de massa corporal na região do tronco."
+  },
+  muac: {
+    high: "Circunferência elevada. Pode indicar excesso de gordura subcutânea ou grande hipertrofia muscular (avaliar junto às dobras).",
+    normal: "Boa reserva de energia e tecidos. Baixo risco de desnutrição.",
+    low: "Alerta para desnutrição e potencial perda de massa magra. Indica fragilidade física."
+  },
+  cmb: {
+    high: "Hipertrofia muscular. Indica grande volume de massa magra e excelente reserva proteica.",
+    normal: "Massa muscular do braço preservada. Boa reserva de proteínas.",
+    low: "Depleção muscular (perda de músculo). Queda de força, perda de reserva proteica e maior risco de fragilidade."
+  },
+  dobraTricipital: {
+    high: "Excesso de gordura subcutânea nos membros superiores.",
+    normal: "Reserva de gordura periférica dentro do padrão saudável.",
+    low: "Baixa reserva de energia. Possível risco nutricional ou percentual de gordura muito reduzido (perfil atlético)."
+  },
+  panturrilha: {
+    high: "Circunferência elevada. Pode indicar hipertrofia muscular, retenção de líquidos (edema) ou acúmulo de gordura.",
+    normal: "Boa reserva de massa muscular periférica. Indicador de mobilidade e força preservadas.",
+    low: "Alerta para sarcopenia (perda muscular severa). Maior risco de perda de autonomia motora e quedas."
+  },
+  compCoxa: {
+    high: "Alta proporção de gordura em relação ao músculo. Sobrecarga articular e menor eficiência metabólica.",
+    normal: "Adequada reserva muscular. Boa proporção para força, mobilidade e metabolismo ativo.",
+    low: "Baixa proporção muscular. Risco de fraqueza nos membros inferiores, menor proteção articular e impacto na mobilidade."
+  },
+  gorduraCoxa: {
+    high: "Acúmulo excessivo de gordura localizada. Pode gerar sobrecarga para as articulações dos joelhos e quadril.",
+    normal: "Distribuição saudável de gordura nos membros inferiores.",
+    low: "Camada de gordura muito fina. Pode indicar baixo peso, desnutrição ou perfil atlético de alto rendimento."
+  },
+  tmb: "Quantidade mínima de calorias que o corpo necessita em repouso para manter funções vitais.",
+  get: "Estimativa do total de calorias necessárias por dia, considerando o metabolismo e as atividades diárias extras."
+};
+
+export const REPORT_CSS = `
+  :root { font-size: 16px; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    margin: 0; padding: 0;
+    background-color: #fff;
+    color: #111;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tbody { display: table-row-group; }
+  tr { page-break-inside: avoid; }
+  .page > table > tbody > tr {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  .print-section {
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+  }
+  h1 { text-align: center; color: #0044cc; }
+  h2, h3 { color: #0044cc; margin-top: 0; }
+  .info-box {
+    background-color: #f9f9f9;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #eee;
+    margin-bottom: 15px;
+    position: relative;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .info-box h3 { margin: 0; font-size: 14px; color: #333; }
+  .info-box .valor {
+    font-size: 24px;
+    font-weight: bold;
+    margin-top: 5px;
+    color: #111;
+  }
+  .info-box .faixa {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+  }
+  .info-box .complement {
+    font-size: 10px;
+    color: #888;
+    margin-top: 5px;
+    font-style: italic;
+    line-height: 1.2;
+  }
+  .progress {
+    position: relative;
+    height: 6px !important;
+    border-radius: 4px;
+    background: #eee;
+    margin-top: 12px;
+    overflow: visible;
+    border: 1px solid #ddd;
+  }
+  .segment-left, .segment-mid, .segment-right {
+    height: 100%;
+    position: absolute;
+    top: 0;
+  }
+  .marker-arrow {
+    position: absolute;
+    bottom: -12px;
+    transform: translateX(-50%);
+    font-size: 14px;
+    color: #000;
+    line-height: 1;
+  }
+  .marker-arrow::after { content: '▲'; }
+  .age-tag {
+    display: inline-block;
+    background-color: #00bcd4;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    margin-left: 5px;
+    vertical-align: middle;
+  }
+  .page {
+    background: white;
+    width: 210mm;
+    margin: 0 auto;
+    padding: 10mm 15mm;
+    box-sizing: border-box;
+  }
+  .report-header-wrapper {
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  .page-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+  }
+  .header-logo-container {
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .page-logo {
+    width: auto;
+    height: 80px; /* Increased by ~30% from 60px */
+    display: block;
+    margin: 0 auto;
+  }
+  .page-header h2 {
+    margin: 0;
+    font-size: 25px;
+    text-align: center;
+    color: #0044cc;
+    border: none;
+  }
+  .dados-paciente-print {
+    font-size: 16px;
+    padding: 10px 0;
+    border-top: none;
+    border-bottom: 3px solid #0044cc;
+    background: none;
+    margin-bottom: 20px;
+    width: 100%;
+  }
+  .cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  #body-map-container {
+    width: 60% !important;
+    margin: 0 auto;
+    display: block;
+    height: auto;
+  }
+  #body-svg {
+    width: 100%;
+    height: auto;
+  }
+  .chk-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+  }
+  .chk-item:last-child { border-bottom: none; }
+  .chk-left { display: flex; align-items: center; gap: 10px; }
+  .chk-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .chk-icon.success { background-color: #1ca657; }
+  .chk-icon.warning { background-color: #f1c40f; color: #fff; }
+  .chk-icon.danger { background-color: #d93025; }
+  .chk-label {
+    font-weight: 600;
+    color: #444;
+    font-size: 14px;
+  }
+  .chk-val {
+    font-weight: bold;
+    font-size: 14px;
+  }
+  .chk-val.success { color: #1ca657; }
+  .chk-val.warning { color: #d35400; }
+  .chk-val.danger { color: #d93025; }
+  @media print {
+    .page { width: 100%; margin: 0; padding: 0; }
+    body {
+      background-color: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .no-print { display: none !important; }
+  }
+`;
+
+export const INBODY_REPORT_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+  :root { font-size: 14px; }
+  body {
+    font-family: 'Roboto', Arial, sans-serif;
+    margin: 0; padding: 0;
+    background-color: #fff;
+    color: #333;
+  }
+  .inbody-page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 10mm;
+    box-sizing: border-box;
+    background: white;
+    display: flex;
+    flex-direction: column;
+  }
+  .inbody-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #333;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+  }
+  .inbody-logo {
+    color: #e63946;
+    font-size: 32px;
+    font-weight: 900;
+    font-style: italic;
+  }
+  .inbody-patient-info {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    font-size: 10px;
+    width: 80%;
+  }
+  .info-item {
+    display: flex;
+    flex-direction: column;
+  }
+  .info-label {
+    font-weight: bold;
+    color: #666;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 2px;
+  }
+  .info-value {
+    font-weight: bold;
+    font-size: 12px;
+  }
+
+  .inbody-main {
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    gap: 15px;
+    flex-grow: 1;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: bold;
+    background: #f0f0f0;
+    padding: 2px 8px;
+    margin: 10px 0 5px 0;
+    border-bottom: 1px solid #333;
+  }
+
+  /* Body Composition Analysis Table */
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .comp-table th, .comp-table td {
+    border: 1px solid #ddd;
+    padding: 4px 6px;
+    text-align: left;
+  }
+  .comp-table th {
+    background: #f9f9f9;
+    font-weight: normal;
+    color: #555;
+  }
+  .comp-table .val-cell {
+    font-weight: bold;
+    text-align: right;
+    width: 60px;
+  }
+  .comp-table .ref-cell {
+    color: #888;
+    text-align: right;
+    width: 100px;
+  }
+
+  /* Analysis Bars (Weight, SMM, Body Fat Mass) */
+  .analysis-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 15px;
+  }
+  .analysis-row {
+    display: grid;
+    grid-template-columns: 80px 50px 1fr;
+    align-items: center;
+    height: 30px;
+    border-bottom: 1px solid #eee;
+  }
+  .analysis-label {
+    font-size: 11px;
+    font-weight: bold;
+  }
+  .analysis-value {
+    font-size: 12px;
+    font-weight: bold;
+    text-align: right;
+    padding-right: 10px;
+  }
+  .analysis-bar-container {
+    height: 12px;
+    background: #f0f0f0;
+    position: relative;
+    border-radius: 2px;
+    margin: 0 40px;
+  }
+  .analysis-bar {
+    height: 100%;
+    background: #444;
+    border-radius: 2px;
+  }
+  .analysis-axis {
+    position: absolute;
+    top: -15px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8px;
+    color: #999;
+  }
+  .axis-mark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(0,0,0,0.1);
+  }
+
+  /* Segmental Analysis */
+  .segmental-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .human-figure-container {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    background: #fcfcfc;
+    border: 1px solid #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .human-figure-svg {
+    height: 180px;
+    opacity: 0.8;
+  }
+  .segment-box {
+    position: absolute;
+    background: rgba(255,255,255,0.9);
+    border: 1px solid #ccc;
+    padding: 2px 4px;
+    font-size: 9px;
+    text-align: center;
+    width: 45px;
+    box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+  }
+  .segment-val { font-weight: bold; }
+  .segment-pct { color: #666; }
+
+  /* Sidebar */
+  .inbody-sidebar {
+    border-left: 1px solid #ddd;
+    padding-left: 10px;
+  }
+  .score-container {
+    text-align: center;
+    border: 2px solid #333;
+    padding: 10px;
+    margin-bottom: 15px;
+  }
+  .score-label { font-size: 12px; font-weight: bold; }
+  .score-value { font-size: 36px; font-weight: 900; }
+  .score-total { font-size: 14px; color: #666; }
+
+  .sidebar-section {
+    margin-bottom: 15px;
+    font-size: 11px;
+  }
+  .sidebar-title {
+    font-weight: bold;
+    border-bottom: 1px solid #333;
+    margin-bottom: 5px;
+    padding-bottom: 2px;
+  }
+  .sidebar-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+  }
+  .sidebar-val { font-weight: bold; }
+
+  /* History Chart */
+  .history-container {
+    margin-top: 15px;
+    border: 1px solid #eee;
+    padding: 10px;
+    height: 120px;
+  }
+  .history-title { font-size: 12px; font-weight: bold; margin-bottom: 5px; }
+  .history-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    height: 80px;
+    border-bottom: 1px solid #333;
+    padding: 0 20px;
+  }
+  .history-point {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .history-dot {
+    width: 6px;
+    height: 6px;
+    background: #333;
+    border-radius: 50%;
+    margin-bottom: 5px;
+  }
+  .history-val { font-size: 10px; font-weight: bold; }
+  .history-date { font-size: 8px; color: #999; margin-top: 2px; }
+
+  @media print {
+    .inbody-page { width: 100%; margin: 0; padding: 10mm; }
+    body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+`;
+
+
+
+
+Type.ts
+
+export interface PatientData {
+  nome: string;
+  peso: string;
+  nascimento: string;
+  sexo: string;
+  altura: string;
+  atividade: string;
+  gordura: string;
+  musculo: string;
+  visceral: string;
+  cintura: string;
+  quadril: string;
+  abdominal: string;
+  braco: string;
+  dobraTricipital: string;
+  coxa: string;
+  dobraCoxa: string;
+  panturrilha: string;
+  antebraco: string;
+  punho: string;
+  femur: string;
+  umero: string;
+  id?: string;
+}
+
+export interface BoxSegment {
+  l: number;
+  w: number;
+  c: string;
+}
+
+export interface BoxProgress {
+  segments: BoxSegment[];
+  marker: number;
+}
+
+export interface ReportBox {
+  title: string;
+  value: string;
+  subtext: string;
+  complement?: string;
+  progress?: BoxProgress;
+  valueColor?: string;
+  isIMC?: boolean;
+}
+
+export type ChecklistStatus = 'success' | 'warning' | 'danger';
+
+export interface ChecklistItem {
+  label: string;
+  status: ChecklistStatus;
+  value: string;
+}
+
+export interface ReportResults {
+  metas: ReportBox[];
+  bio: ReportBox[];
+  mmlg: ReportBox[];
+  circ: ReportBox[];
+  gasto: ReportBox[];
+  checklist: ChecklistItem[];
+  idade: number | null;
+}
+
+export interface FullReport {
+  patient: PatientData;
+  results: ReportResults;
+}
+
+export interface RefItem {
+  max: number;
+  label: string;
+  color: string;
+  status?: string;
+  ideal?: string;
+  cor?: string;
+  chk?: ChecklistStatus;
+}
+
+export interface FatRef {
+  minAge: number;
+  maxAge: number;
+  normal: [number, number];
+  alto: [number, number];
+  muyAlto: number;
+}
+
+
+
+
+Util .ts
+import { PatientData, FullReport, ReportBox, ChecklistItem, ChecklistStatus, RefItem } from './types';
+import { REFERENCIAS_GORDURA, ANTROPOMETRIA_REF, REFERENCIAS_MUSCULO, METAS_GORDURA, REPORT_CSS, INBODY_REPORT_CSS, DESCRICOES_COMPLEMENTARES } from './constants';
+
+const toChecklistStatus = (ref: RefItem): ChecklistStatus => {
+  if (ref.chk === 'success' || ref.chk === 'warning' || ref.chk === 'danger') return ref.chk;
+  if (ref.status === 'normal') return 'success';
+  if (ref.status === 'low') return 'warning';
+  if (ref.status === 'high') return 'danger';
+  return 'warning';
+};
+
+// ... (existing code)
+
+export const generateInBodyReportHtml = (reportData: FullReport): string => {
+    const { patient, results } = reportData;
+    const peso = parseFloat(patient.peso) || 0;
+    const altura = parseFloat(patient.altura) || 0;
+    const idade = results.idade || 0;
+    const sexo = patient.sexo || 'M';
+    
+    // Calculate Score (Simple mock based on metrics)
+    const imc = results.mmlg.find(b => b.title === 'IMC')?.value.split(' ')[0] || '0';
+    const pGordura = results.bio.find(b => b.title === 'Gordura Corporal')?.value.split('%')[0] || '0';
+    const pMusculo = results.bio.find(b => b.title === 'Massa Muscular')?.value.split('%')[0] || '0';
+    
+    // Heuristic for score: 100 - (abs(IMC - 23) * 2) - (abs(pGordura - 20) * 0.5)
+    const scoreVal = Math.max(0, Math.min(100, Math.round(100 - (Math.abs(parseFloat(imc) - 23) * 3) - (Math.abs(parseFloat(pGordura) - (sexo === 'M' ? 15 : 23)) * 1))));
+
+    const pesoIdealMax = parseFloat(results.metas[0]?.value.split('– ')[1]?.split(' ')[0] || '0');
+
+    const dateStr = new Date().toLocaleDateString('pt-BR');
+    const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Segmental Mock Data (Based on total muscle/fat)
+    // In a real app, this would come from the form fields if we had them per limb
+    const totalMuscleKg = (parseFloat(pMusculo) * peso / 100);
+    const totalFatKg = (parseFloat(pGordura) * peso / 100);
+
+    const segmentalLean = {
+        RA: { kg: (totalMuscleKg * 0.15).toFixed(1), pct: '100' },
+        LA: { kg: (totalMuscleKg * 0.15).toFixed(1), pct: '100' },
+        TR: { kg: (totalMuscleKg * 0.40).toFixed(1), pct: '100' },
+        RL: { kg: (totalMuscleKg * 0.15).toFixed(1), pct: '100' },
+        LL: { kg: (totalMuscleKg * 0.15).toFixed(1), pct: '100' },
+    };
+
+    const segmentalFat = {
+        RA: { kg: (totalFatKg * 0.10).toFixed(1), pct: '100' },
+        LA: { kg: (totalFatKg * 0.10).toFixed(1), pct: '100' },
+        TR: { kg: (totalFatKg * 0.50).toFixed(1), pct: '100' },
+        RL: { kg: (totalFatKg * 0.15).toFixed(1), pct: '100' },
+        LL: { kg: (totalFatKg * 0.15).toFixed(1), pct: '100' },
+    };
+
+    const renderAnalysisRow = (label: string, value: string, percent: number, axisPoints: number[]) => {
+        const barWidth = Math.min(100, percent);
+        const axisHtml = axisPoints.map((p, i) => `<div class="axis-mark" style="left: ${(p/160)*100}%"><div class="axis-label" style="position:absolute;top:-12px;left:-5px">${p}</div></div>`).join('');
+        
+        return `
+            <div class="analysis-row">
+                <div class="analysis-label">${label}</div>
+                <div class="analysis-value">${value}</div>
+                <div style="flex-grow:1; position:relative">
+                    <div class="analysis-bar-container">
+                        <div class="analysis-bar" style="width: ${barWidth}%"></div>
+                        ${axisHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    // Human Figure SVG Path
+    const humanSvg = `
+        <svg viewBox="0 0 100 200" class="human-figure-svg">
+            <circle cx="50" cy="20" r="15" fill="#eee" stroke="#ccc" />
+            <path d="M50 35 L50 100 M20 50 L80 50 M50 100 L30 180 M50 100 L70 180" stroke="#ccc" stroke-width="8" fill="none" stroke-linecap="round" />
+        </svg>
+    `;
+
+    return `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <title>Relatório InBody Style</title>
+            <style>${INBODY_REPORT_CSS}</style>
+        </head>
+        <body>
+            <div class="inbody-page">
+                <div class="inbody-header">
+                    <div class="inbody-logo">InBody</div>
+                    <div class="inbody-patient-info">
+                        <div class="info-item"><div class="info-label">ID do Paciente</div><div class="info-value">${patient.nome.split(' ')[0] || '---'}</div></div>
+                        <div class="info-item"><div class="info-label">Altura</div><div class="info-value">${altura}cm</div></div>
+                        <div class="info-item"><div class="info-label">Idade</div><div class="info-value">${idade}</div></div>
+                        <div class="info-item"><div class="info-label">Gênero</div><div class="info-value">${sexo === 'M' ? 'Masculino' : 'Feminino'}</div></div>
+                        <div class="info-item"><div class="info-label">Data / Hora</div><div class="info-value">${dateStr} ${timeStr}</div></div>
+                    </div>
+                </div>
+
+                <div class="inbody-main">
+                    <div class="left-content">
+                        <div class="section-title">Análise da Composição Corporal</div>
+                        <table class="comp-table">
+                            <tr><th>Componentes</th><th>Valores Atuais</th><th>Referência</th></tr>
+                            <tr><td>Água Corporal Total (L)</td><td class="val-cell">${(peso * 0.6).toFixed(1)}</td><td class="ref-cell">---</td></tr>
+                            <tr><td>Proteína (kg)</td><td class="val-cell">${(peso * 0.15).toFixed(1)}</td><td class="ref-cell">---</td></tr>
+                            <tr><td>Minerais (kg)</td><td class="val-cell">${(peso * 0.05).toFixed(1)}</td><td class="ref-cell">---</td></tr>
+                            <tr><td>Massa de Gordura Corporal (kg)</td><td class="val-cell">${results.bio.find(b => b.title === 'Gordura Corporal')?.value.split('– ')[1] || '---'}</td><td class="ref-cell">---</td></tr>
+                            <tr><td>Peso (kg)</td><td class="val-cell">${peso}</td><td class="ref-cell">---</td></tr>
+                        </table>
+
+                        <div class="section-title">Análise de Músculo-Gordura</div>
+                        <div class="analysis-grid">
+                            ${renderAnalysisRow('Peso', peso + ' kg', (peso / 100) * 100, [55, 70, 85, 100, 115, 130])}
+                            ${renderAnalysisRow('SMM', totalMuscleKg.toFixed(1) + ' kg', (totalMuscleKg / 40) * 100, [70, 80, 90, 100, 110, 120])}
+                            ${renderAnalysisRow('Gordura', totalFatKg.toFixed(1) + ' kg', (totalFatKg / 25) * 100, [40, 60, 80, 100, 160, 220])}
+                        </div>
+
+                        <div class="section-title">Análise de Obesidade</div>
+                        <div class="analysis-grid">
+                            ${renderAnalysisRow('IMC', imc + ' kg/m²', (parseFloat(imc) / 22) * 100, [10, 15, 18, 22, 30, 35])}
+                            ${renderAnalysisRow('PBF', pGordura + ' %', (parseFloat(pGordura) / 20) * 100, [8, 13, 18, 23, 30, 38])}
+                        </div>
+
+                        <div class="section-title">Análise de Massa Magra Segmental</div>
+                        <div class="segmental-container">
+                            <div class="human-figure-container">
+                                ${humanSvg}
+                                <div class="segment-box" style="top: 40px; right: 10px"><div class="segment-val">${segmentalLean.RA.kg}kg</div><div class="segment-pct">${segmentalLean.RA.pct}%</div></div>
+                                <div class="segment-box" style="top: 40px; left: 10px"><div class="segment-val">${segmentalLean.LA.kg}kg</div><div class="segment-pct">${segmentalLean.LA.pct}%</div></div>
+                                <div class="segment-box" style="top: 80px; left: 50%; transform: translateX(-50%)"><div class="segment-val">${segmentalLean.TR.kg}kg</div><div class="segment-pct">${segmentalLean.TR.pct}%</div></div>
+                                <div class="segment-box" style="bottom: 30px; right: 10px"><div class="segment-val">${segmentalLean.RL.kg}kg</div><div class="segment-pct">${segmentalLean.RL.pct}%</div></div>
+                                <div class="segment-box" style="bottom: 30px; left: 10px"><div class="segment-val">${segmentalLean.LL.kg}kg</div><div class="segment-pct">${segmentalLean.LL.pct}%</div></div>
+                            </div>
+                            <div class="history-side">
+                                <div class="history-title">Histórico de Composição</div>
+                                <div class="history-grid">
+                                    <div class="history-point"><div class="history-val">${peso}</div><div class="history-dot"></div><div class="history-date">${dateStr}</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="inbody-sidebar">
+                        <div class="score-container">
+                            <div class="score-label">InBody Score</div>
+                            <div class="score-value">${scoreVal}</div>
+                            <div class="score-total">/ 100 Pontos</div>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <div class="sidebar-title">Controle de Peso</div>
+                            <div class="sidebar-row"><span>Peso Alvo</span><span class="sidebar-val">${results.metas[0]?.value.split('– ')[1] || '---'} kg</span></div>
+                            <div class="sidebar-row"><span>Controle Peso</span><span class="sidebar-val">${(peso - pesoIdealMax).toFixed(1)} kg</span></div>
+                            <div class="sidebar-row"><span>Controle Gord.</span><span class="sidebar-val">${(totalFatKg - (pesoIdealMax * 0.2)).toFixed(1)} kg</span></div>
+                            <div class="sidebar-row"><span>Controle Musc.</span><span class="sidebar-val">0.0 kg</span></div>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <div class="sidebar-title">Parâmetros de Pesquisa</div>
+                            <div class="sidebar-row"><span>Massa Isenta Gord.</span><span class="sidebar-val">${results.mmlg.find(b => b.title === 'Massa Livre de Gordura')?.value || '---'}</span></div>
+                            <div class="sidebar-row"><span>TMB</span><span class="sidebar-val">${results.gasto.find(b => b.title === 'Taxa Metabólica Basal (TMB)')?.value || '---'}</span></div>
+                            <div class="sidebar-row"><span>GET</span><span class="sidebar-val">${results.gasto.find(b => b.title === 'Gasto Energético Total (GET)')?.value || '---'}</span></div>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <div class="sidebar-title">Nível de Gordura Visceral</div>
+                            <div class="score-value" style="font-size: 24px; text-align: center">${results.bio.find(b => b.title === 'Gordura Visceral')?.value || '---'}</div>
+                            <div style="text-align:center; font-size: 9px">Normal: 1-9</div>
+                        </div>
+                        
+                        <div class="sidebar-section" style="margin-top: 50px; text-align: center">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=https://vittare.app" style="width: 60px; height: 60px">
+                            <div style="font-size: 8px; margin-top: 5px">Escaneie para mais detalhes</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+};
+
+
+export const numBR = (n: number | null | undefined, max = 2): string => {
+  if (n === null || n === undefined || isNaN(n)) return '';
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: max }).format(n);
+};
+
+export const parseDate = (dateString: string): Date | null => {
+  if (!dateString) return null;
+  const parts = dateString.split('-');
+  return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+};
+
+export const calcularIdade = (nasc: Date): number => {
+  const hoje = new Date();
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
+  return idade;
+};
+
+export const generateTimestampId = (): string => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+};
+
+const calcularCMB = (bracoCm: number, dobraTricipitalMm: number): number => {
+  let resultado = bracoCm - (0.314 * dobraTricipitalMm);
+  return parseFloat(resultado.toFixed(1));
+};
+
+const calcFFMI = (peso: number, gorduraPct: number, alturaCm: number): number | null => {
+  const h = (alturaCm || 0) / 100;
+  if (!peso || !h) return null;
+  const massaMagra = peso * (1 - (Number(gorduraPct || 0) / 100));
+  return massaMagra > 0 ? massaMagra / (h * h) : null;
+};
+
+const getRef = (type: string, sex: string, value: number): RefItem => {
+  const list = ANTROPOMETRIA_REF[type][sex] || ANTROPOMETRIA_REF[type]['ALL'];
+  if (!list) return { label: 'N/A', color: '#333', status: 'default', max: 0 };
+  for (const item of list) {
+    if (value <= item.max) return item;
+  }
+  return list[list.length - 1];
+};
+
+const getFatRef = (sex: string, age: number): any => {
+  if (!REFERENCIAS_GORDURA[sex]) return null;
+  let ref = REFERENCIAS_GORDURA[sex].find((r: any) => age >= r.minAge && age <= r.maxAge);
+  if (!ref) {
+    if (age < 20) ref = REFERENCIAS_GORDURA[sex][0];
+    else ref = REFERENCIAS_GORDURA[sex][REFERENCIAS_GORDURA[sex].length - 1];
+  }
+  return ref;
+};
+
+const obterClassificacaoMusculo = (sexo: string, idade: number, valorAtual: number): any => {
+  const faixaEtaria = (idade >= 60) ? 'idoso' : 'adulto';
+  const referencias = REFERENCIAS_MUSCULO[faixaEtaria][sexo];
+  const classificacao = referencias.find((ref: any) => valorAtual <= ref.max) || referencias[referencias.length - 1];
+  const referenciaIdeal = referencias.find((ref: any) => ref.label.includes("Normal"));
+  return {
+    status: classificacao.label,
+    cor: classificacao.cor,
+    textoIdeal: referenciaIdeal ? referenciaIdeal.ideal : "Consulte Tabela",
+    referencias: referencias
+  };
+};
+
+const createBox = (label: string, value: number, unit: string, range: number[], isPercent: boolean, suffix = ''): ReportBox => {
+  const [mn, mx] = range;
+  const margin = isPercent ? 0 : 10;
+  const maxScale = isPercent ? 100 : Math.max(mx + margin, value);
+  const lw = (mn / maxScale) * 100;
+  const mw = ((mx - mn) / maxScale) * 100;
+  const rw = isPercent ? Math.max(0, 100 - mx) : Math.max(0, 100 - (lw + mw));
+  const mk = Math.min((value / maxScale) * 100, 100);
+  return {
+    title: label,
+    value: `${numBR(value)}${unit}${suffix}`,
+    subtext: `Ideal: ${mn} – ${mx} ${unit}`,
+    progress: {
+      segments: [
+        { l: 0, w: lw, c: '#e74c3c' },
+        { l: lw, w: mw, c: '#1ca657' },
+        { l: lw + mw, w: rw, c: '#e74c3c' }
+      ],
+      marker: mk
+    }
+  };
+};
+
+const createVisceralBox = (val: number): ReportBox => {
+  const max = 20;
+  const mk = Math.min((val / max) * 100, 100);
+  return {
+    title: 'Gordura Visceral',
+    value: val.toString(),
+    subtext: 'Normal: 1-9 | Alto: >10',
+    progress: {
+      segments: [
+        { l: 0, w: 45, c: '#1ca657' },
+        { l: 45, w: 25, c: '#f1c40f' },
+        { l: 70, w: 30, c: '#e74c3c' }
+      ],
+      marker: mk
+    }
+  };
+};
+
+const createMuscleBox = (pctVal: number, kgVal: number, classData: any): ReportBox => {
+  const refs = classData.referencias;
+  const maxScale = refs[2].max + 10;
+  const mk = Math.min((pctVal / maxScale) * 100, 100);
+  const w1 = (refs[0].max / maxScale) * 100;
+  const w2 = ((refs[1].max - refs[0].max) / maxScale) * 100;
+  const w3 = ((refs[2].max - refs[1].max) / maxScale) * 100;
+  const w4 = 100 - w1 - w2 - w3;
+  return {
+    title: 'Massa Muscular',
+    value: `${numBR(pctVal)}% – ${numBR(kgVal)} kg`,
+    subtext: `Ideal: ${classData.textoIdeal}`,
+    progress: {
+      segments: [
+        { l: 0, w: w1, c: refs[0].cor },
+        { l: w1, w: w2, c: refs[1].cor },
+        { l: w1 + w2, w: w3, c: refs[2].cor },
+        { l: w1 + w2 + w3, w: w4, c: refs[3].cor }
+      ],
+      marker: mk
+    }
+  };
+};
+
+const createMuacBox = (val: number, sex: string, ref: RefItem): ReportBox => {
+  const maxScale = 50;
+  const mk = Math.min((val / maxScale) * 100, 100);
+  let redLim, yellowLim;
+  if (sex === 'M') {
+    redLim = 23; yellowLim = 27;
+  } else {
+    redLim = 22; yellowLim = 26;
+  }
+  const wRed = (redLim / maxScale) * 100;
+  const wYellow = ((yellowLim - redLim) / maxScale) * 100;
+  const wGreen = 100 - wRed - wYellow;
+  return {
+    title: 'Braço (MUAC)',
+    value: `${numBR(val)} cm`,
+    subtext: ref.label,
+    progress: {
+      segments: [
+        { l: 0, w: wRed, c: '#d93025' },
+        { l: wRed, w: wYellow, c: '#f1c40f' },
+        { l: wRed + wYellow, w: wGreen, c: '#1ca657' }
+      ],
+      marker: mk
+    }
+  };
+};
+
+export const generateReportData = (data: PatientData): FullReport => {
+  const peso = parseFloat(data.peso) || 0;
+  const altura = parseFloat(data.altura) || 0;
+  const nascDate = parseDate(data.nascimento);
+  const idade = nascDate ? calcularIdade(nascDate) : null;
+  const sexo = data.sexo;
+  const isElderly = idade !== null && idade >= 60;
+
+  const res: any = { metas: [], bio: [], mmlg: [], circ: [], gasto: [], checklist: [], idade };
+  const checklist: ChecklistItem[] = [];
+  let cmbData = null;
+
+  if (altura > 0 && peso > 0) {
+    const pGordura = parseFloat(data.gordura);
+    const h2 = Math.pow((altura / 100), 2);
+    const IMC_MIN = 22; const IMC_MAX = 24;
+    const pesoIMCmin = IMC_MIN * h2;
+    const pesoIMCmax = IMC_MAX * h2;
+    let legenda = `Critério híbrido: IMC ${IMC_MIN}–${IMC_MAX}`;
+    let corValor = '#1ca657';
+    let pesoIdealMin = pesoIMCmin;
+    let pesoIdealMax = pesoIMCmax;
+
+    if (!isNaN(pGordura) && sexo) {
+      const massaMagra = peso * (1 - pGordura / 100);
+      const alvo = METAS_GORDURA[sexo];
+      const gMin = alvo?.saude?.[0];
+      const gMax = alvo?.saude?.[1];
+      if (typeof gMin === 'number' && typeof gMax === 'number') {
+        if (pGordura > gMin) {
+          const pesoCompMin = massaMagra / (1 - gMin / 100);
+          const pesoCompMax = massaMagra / (1 - gMax / 100);
+          const interMin = Math.max(pesoIMCmin, pesoCompMin);
+          const interMax = Math.min(pesoIMCmax, pesoCompMax);
+          if (interMin <= interMax) {
+            pesoIdealMin = interMin;
+            pesoIdealMax = interMax;
+            legenda += ` + %G alvo (${gMin}–${gMax}%)`;
+          } else {
+            legenda += ` (sem intersecção com %G alvo; priorizado IMC)`;
+            corValor = '#f1c40f';
+          }
+        } else {
+          legenda += `; %G atual ≤ ${gMin}% — foco em recomposição (↑MM, peso estável)`;
+        }
+      }
+    }
+
+    res.metas.push({
+      title: 'Peso Ideal',
+      value: `${numBR(pesoIdealMin, 1)} – ${numBR(pesoIdealMax, 1)} kg`,
+      subtext: legenda,
+      complement: DESCRICOES_COMPLEMENTARES.pesoIdeal,
+      valueColor: corValor
+    });
+
+    const ffmi = calcFFMI(peso, parseFloat(data.gordura), altura);
+    if (ffmi) {
+      const statusFFMI = ffmi < 18 ? 'baixo' : (ffmi <= 21 ? 'adequado' : 'elevado');
+      const corFFMI = ffmi < 18 ? '#d93025' : (ffmi <= 21 ? '#1ca657' : '#0044cc');
+      
+      const maxScale = 30;
+      const mk = Math.min((ffmi / maxScale) * 100, 100);
+      const wRed = (18 / maxScale) * 100;
+      const wGreen = ((21 - 18) / maxScale) * 100;
+      const wBlue = 100 - wRed - wGreen;
+
+      res.metas.push({
+        title: 'FFMI (Índice de Massa Magra)',
+        value: `${numBR(ffmi, 1)} kg/m²`,
+        subtext: `Referência: 18–21 (adultos) — ${statusFFMI}`,
+        complement: DESCRICOES_COMPLEMENTARES.ffmi,
+        valueColor: corFFMI,
+        progress: {
+          segments: [
+            { l: 0, w: wRed, c: '#d93025' }, // Baixo
+            { l: wRed, w: wGreen, c: '#1ca657' }, // Adequado
+            { l: wRed + wGreen, w: wBlue, c: '#0044cc' } // Elevado
+          ],
+          marker: mk
+        }
+      });
+    }
+  }
+
+  const h = altura / 100;
+  const imc = (peso && altura) ? parseFloat((peso / (h * h)).toFixed(2)) : null;
+  let imcClass = { key: '', label: 'Indisponível' };
+
+  if (imc) {
+    if (isElderly) {
+      if (imc < 22) imcClass = { key: 'magreza', label: 'Baixo Peso (<22.0)' };
+      else if (imc <= 27) imcClass = { key: 'normal', label: 'Eutrofia (22.0–27.0)' };
+      else imcClass = { key: 'sobrepeso', label: 'Sobrepeso (>27.0)' };
+    } else {
+      if (imc < 16) imcClass = { key: 'magreza', label: 'Magreza (<16.0)' };
+      else if (imc < 18.5) imcClass = { key: 'baixo_peso', label: 'Baixo Peso (16.0–18.4)' };
+      else if (imc < 25) imcClass = { key: 'normal', label: 'Adequado (18.5–24.9)' };
+      else if (imc < 30) imcClass = { key: 'sobrepeso', label: 'Sobrepeso (25.0–29.9)' };
+      else if (imc < 35) imcClass = { key: 'obesidade1', label: 'Obesidade 1 (30.0–34.9)' };
+      else if (imc < 40) imcClass = { key: 'obesidade2', label: 'Obesidade 2 (35.0–39.9)' };
+      else imcClass = { key: 'obesidade3', label: 'Obesidade 3 (>=40.0)' };
+    }
+
+    checklist.push({
+      label: 'IMC',
+      status: imcClass.key === 'normal'
+        ? 'success'
+        : (imcClass.key.includes('obesidade') || imcClass.key === 'magreza' || imcClass.key === 'baixo_peso'
+          ? 'danger' : 'warning'),
+      value: imcClass.label
+    });
+  }
+
+  const pGordura = parseFloat(data.gordura);
+  if (!isNaN(pGordura)) {
+    const refGordura = getFatRef(sexo, idade || 30);
+    let range: any = [0, 0]; let status: any = 'warning'; let labelStatus = '';
+    if (refGordura) {
+      const [minNorm, maxNorm] = refGordura.normal;
+      const [minAlto, maxAlto] = refGordura.alto;
+      range = refGordura.normal;
+      if (pGordura < minNorm) { status = 'warning'; labelStatus = 'Abaixo do ideal (Baixo)'; }
+      else if (pGordura <= maxNorm) { status = 'success'; labelStatus = 'Na faixa ideal (Normal)'; }
+      else if (pGordura <= maxAlto) { status = 'warning'; labelStatus = 'Acima do ideal (Alto)'; }
+      else { status = 'danger'; labelStatus = 'Muito Acima (Muito Alto)'; }
+    }
+    const kg = (pGordura * peso / 100);
+    res.bio.push(createBox('Gordura Corporal', pGordura, '%', range, true, ` – ${numBR(kg)} kg`));
+    checklist.push({
+      label: 'Percentual de Gordura',
+      status,
+      value: labelStatus
+    });
+  }
+
+  const pMusculo = parseFloat(data.musculo);
+  if (!isNaN(pMusculo) && sexo && idade !== null) {
+    const kg = (pMusculo * peso / 100);
+    const classMusculo = obterClassificacaoMusculo(sexo, idade, pMusculo);
+    res.bio.push(createMuscleBox(pMusculo, kg, classMusculo));
+  }
+
+  const visceral = parseFloat(data.visceral);
+  if (!isNaN(visceral)) {
+    res.bio.push(createVisceralBox(visceral));
+    checklist.push({
+      label: 'Gordura Visceral',
+      status: visceral <= 9 ? 'success' : (visceral <= 14 ? 'warning' : 'danger'),
+      value: visceral <= 9 ? 'Normal' : (visceral <= 14 ? 'Aumentada' : 'Muito Alta')
+    });
+  }
+
+  if (imc) {
+    res.mmlg.push({
+      title: 'IMC',
+      value: `${numBR(imc)} kg/m²`,
+      subtext: isElderly ? `LIPSCHITZ: ${imcClass.label}` : `OMS: ${imcClass.label}`,
+      valueColor: `imc-${imcClass.key}`,
+      isIMC: true
+    });
+
+    let pesoO = 0; let legPO = '';
+    const vPunho = parseFloat(data.punho);
+    const vFemur = parseFloat(data.femur);
+    if (vPunho && vFemur) {
+      const hM = altura / 100;
+      pesoO = 3.02 * Math.pow(Math.pow(hM, 2) * (vPunho / 100) * (vFemur / 100) * 400, 0.712);
+      legPO = 'Cálculo: Rocha (1975)';
+    } else if (idade !== null) {
+      pesoO = -0.25 + 0.046 * altura + 0.036 * peso - 0.012 * idade;
+      if (idade >= 50) pesoO -= idade * 12 / 1000;
+      legPO = 'Estimativa por idade';
+    }
+
+    if (!isNaN(pGordura)) {
+      const pesoG = pGordura * peso / 100;
+      const mmlg = peso - pesoG - pesoO;
+      
+      // Calculate progress bar for Massa Livre de Gordura
+      // Using FFMI logic to determine the segments
+      const hM = altura / 100;
+      const ffmi = mmlg / (hM * hM);
+      
+      // Define ranges based on FFMI (18-21 is normal for adults)
+      const minNormal = 18 * (hM * hM);
+      const maxNormal = 21 * (hM * hM);
+      
+      const maxScale = Math.max(maxNormal + 10, mmlg);
+      const lw = (minNormal / maxScale) * 100;
+      const mw = ((maxNormal - minNormal) / maxScale) * 100;
+      const rw = Math.max(0, 100 - (lw + mw));
+      const mk = Math.min((mmlg / maxScale) * 100, 100);
+
+      res.mmlg.push({
+        title: 'Massa Livre de Gordura',
+        value: `${numBR(mmlg)} kg`,
+        subtext: 'Isenta de gordura, pelo e ossos',
+        complement: DESCRICOES_COMPLEMENTARES.massaLivre,
+        progress: {
+          segments: [
+            { l: 0, w: lw, c: '#d93025' }, // Low (Red)
+            { l: lw, w: mw, c: '#1ca657' }, // Normal (Green)
+            { l: lw + mw, w: rw, c: '#0044cc' } // High (Blue)
+          ],
+          marker: mk
+        }
+      });
+    }
+
+    res.mmlg.push({
+      title: 'Peso Ósseo Estimado',
+      value: `${numBR(pesoO)} kg`,
+      subtext: legPO
+    });
+  }
+
+  if (peso && altura && sexo && idade !== null) {
+    const fator = parseFloat(data.atividade) || 1.2;
+    let tmb = (10 * peso) + (6.25 * altura) - (5 * idade) + (sexo === 'M' ? 5 : -161);
+    res.gasto.push({
+      title: 'Taxa Metabólica Basal (TMB)',
+      value: `${Math.round(tmb)} kcal`,
+      subtext: 'Mifflin-St Jeor',
+      complement: DESCRICOES_COMPLEMENTARES.tmb
+    });
+    res.gasto.push({
+      title: 'Gasto Energético Total (GET)',
+      value: `${Math.round(tmb * fator)} kcal`,
+      subtext: 'Estimativa diária',
+      complement: DESCRICOES_COMPLEMENTARES.get
+    });
+  }
+
+  const cintura = parseFloat(data.cintura);
+  if (cintura && sexo) {
+    const ref = getRef('cintura', sexo, cintura);
+    res.circ.push({
+      title: 'Cintura',
+      value: `${numBR(cintura)} cm`,
+      subtext: ref.label,
+      valueColor: ref.color
+    });
+    checklist.push({
+      label: 'Circunferência da Cintura',
+      status: toChecklistStatus(ref),
+      value: ref.label
+    });
+  }
+
+  const abdominal = parseFloat(data.abdominal);
+  if (abdominal && sexo) {
+    const ref = getRef('abdominal', sexo, abdominal);
+    res.circ.push({
+      title: 'Abdominal',
+      value: `${numBR(abdominal)} cm`,
+      subtext: ref.label,
+      valueColor: ref.color
+    });
+    checklist.push({
+      label: 'Circunferência Abdominal',
+      status: toChecklistStatus(ref),
+      value: ref.label
+    });
+  }
+
+  const quadril = parseFloat(data.quadril);
+  if (cintura && quadril && sexo) {
+    const rcq = cintura / quadril;
+    const ref = getRef('rcq', sexo, rcq);
+    res.circ.push({
+      title: 'Relação Cintura-Quadril',
+      value: rcq.toFixed(2),
+      subtext: ref.label,
+      complement: DESCRICOES_COMPLEMENTARES.rcq[ref.status],
+      valueColor: ref.color
+    });
+    checklist.push({
+      label: 'RCQ (Risco Metabólico)',
+      status: toChecklistStatus(ref),
+      value: ref.label
+    });
+  }
+
+  if (cintura && altura) {
+    const rce = cintura / altura;
+    const ref = getRef('rce', 'ALL', rce);
+    
+    const maxScale = 0.8;
+    const mk = Math.min((rce / maxScale) * 100, 100);
+    const wYellow = (0.40 / maxScale) * 100;
+    const wGreen = ((0.50 - 0.40) / maxScale) * 100;
+    const wRed = 100 - wYellow - wGreen;
+
+    res.circ.push({
+      title: 'Relação Cintura-Estatura',
+      value: rce.toFixed(2),
+      subtext: ref.label,
+      complement: DESCRICOES_COMPLEMENTARES.rce[ref.status],
+      valueColor: ref.color,
+      progress: {
+        segments: [
+          { l: 0, w: wYellow, c: '#f1c40f' }, // Baixo
+          { l: wYellow, w: wGreen, c: '#1ca657' }, // Adequado
+          { l: wYellow + wGreen, w: wRed, c: '#d93025' } // Alto
+        ],
+        marker: mk
+      }
+    });
+  }
+
+  const braco = parseFloat(data.braco);
+  const dobraTri = parseFloat(data.dobraTricipital);
+  const coxa = parseFloat(data.coxa);
+  const dobraCoxa = parseFloat(data.dobraCoxa);
+
+  if (braco && sexo) {
+    const refMUAC = getRef('muac', sexo, braco);
+    res.circ.push({
+      ...createMuacBox(braco, sexo, refMUAC),
+      complement: DESCRICOES_COMPLEMENTARES.muac[refMUAC.status]
+    });
+
+    checklist.push({
+      label: 'Braço (MUAC)',
+      status: toChecklistStatus(refMUAC),
+      value: refMUAC.label
+    });
+
+    if (!isNaN(dobraTri)) {
+      const cmb = calcularCMB(braco, dobraTri);
+      const refCMB = getRef('cmb', sexo, cmb);
+      cmbData = { value: refCMB.label, status: toChecklistStatus(refCMB) };
+      res.circ.push({
+        title: 'Reserva Muscular Real (CMB)',
+        value: `${numBR(cmb)} cm`,
+        subtext: refCMB.label,
+        complement: DESCRICOES_COMPLEMENTARES.cmb[refCMB.status],
+        valueColor: refCMB.color
+      });
+
+      const refTSF = getRef('tsf', sexo, dobraTri);
+      res.circ.push({
+        title: 'Dobra Tricipital',
+        value: `${dobraTri} mm`,
+        subtext: refTSF.label,
+        complement: DESCRICOES_COMPLEMENTARES.dobraTricipital[refTSF.status],
+        valueColor: refTSF.color
+      });
+    }
+  }
+
+  const panturrilha = parseFloat(data.panturrilha);
+  if (panturrilha) {
+    let subtext = 'Adequado';
+    let color = '#1ca657';
+    let status = 'normal';
+    let chkStatus = 'success';
+    if (panturrilha < 31) {
+      subtext = 'Baixo';
+      color = '#d93025';
+      status = 'low';
+      chkStatus = 'danger';
+    } else if ((sexo === 'M' && panturrilha < 34) || (sexo === 'F' && panturrilha < 33)) {
+      subtext = 'Baixo';
+      color = '#f1c40f';
+      status = 'low';
+      chkStatus = 'warning';
+    } else if ((sexo === 'M' && panturrilha > 40) || (sexo === 'F' && panturrilha > 39)) {
+      subtext = 'Alto';
+      color = '#d93025';
+      status = 'high';
+      chkStatus = 'danger';
+    }
+    res.circ.push({
+      title: 'Panturrilha',
+      value: `${numBR(panturrilha)} cm`,
+      subtext: subtext,
+      complement: DESCRICOES_COMPLEMENTARES.panturrilha[status],
+      valueColor: color
+    });
+    checklist.push({
+      label: 'Risco Sarcopenia',
+      status: chkStatus as any,
+      value: subtext
+    });
+  }
+
+  if (!isNaN(coxa) && coxa > 0 && !isNaN(dobraCoxa) && dobraCoxa > 0) {
+    const dobraCoxaCm = dobraCoxa / 10;
+    const areaTotal = (coxa * coxa) / (4 * Math.PI);
+    const circMuscular = coxa - Math.PI * dobraCoxaCm;
+    const circMuscularCorrigida = Math.max(circMuscular, 0.1);
+    const areaMuscular = (circMuscularCorrigida * circMuscularCorrigida) / (4 * Math.PI);
+    const areaGordura = Math.max(areaTotal - areaMuscular, 0);
+    const pctMusculo = areaMuscular / areaTotal * 100;
+    const pctGordura = areaGordura / areaTotal * 100;
+
+    let labelReserva = 'Adequado';
+    let color = '#1ca657';
+    let status = 'normal';
+    let chkStatus = 'success';
+
+    const limitLow = (idade !== null && idade >= 60) ? 50 : 55;
+    const limitHighFat = (idade !== null && idade >= 60) ? 40 : 45;
+
+    if (pctMusculo < limitHighFat) {
+      labelReserva = 'Alto (Excesso de Gordura)';
+      color = '#d93025';
+      status = 'high';
+      chkStatus = 'danger';
+    } else if (pctMusculo < limitLow) {
+      labelReserva = 'Baixo (Déficit de Músculo)';
+      color = '#f1c40f';
+      status = 'low';
+      chkStatus = 'warning';
+    } else {
+      labelReserva = 'Adequado';
+      color = '#1ca657';
+      status = 'normal';
+      chkStatus = 'success';
+    }
+
+    res.circ.push({
+      title: 'Composição média de coxa',
+      value: `${numBR(pctMusculo, 1)}% músculo* | ${numBR(pctGordura, 1)}% gordura`,
+      subtext: `${labelReserva}. Estimativa geométrica.`,
+      complement: DESCRICOES_COMPLEMENTARES.compCoxa[status],
+      valueColor: color
+    });
+
+    let gorduraCoxaStatus = 'normal';
+    let gorduraCoxaLabel = 'Adequado';
+    let gorduraCoxaColor = '#1ca657';
+    
+    if (dobraCoxa < 10) {
+      gorduraCoxaStatus = 'low';
+      gorduraCoxaLabel = 'Baixo';
+      gorduraCoxaColor = '#f1c40f';
+    } else if (dobraCoxa > 30) {
+      gorduraCoxaStatus = 'high';
+      gorduraCoxaLabel = 'Alto';
+      gorduraCoxaColor = '#d93025';
+    }
+
+    res.circ.push({
+      title: 'Gordura subcutânea de coxa',
+      value: `${numBR(dobraCoxa, 1)} mm`,
+      subtext: gorduraCoxaLabel,
+      complement: DESCRICOES_COMPLEMENTARES.gorduraCoxa[gorduraCoxaStatus],
+      valueColor: gorduraCoxaColor
+    });
+
+    checklist.push({
+      label: 'Reserva muscular de coxa',
+      status: chkStatus as any,
+      value: labelReserva
+    });
+
+    if (cmbData) {
+      checklist.push({
+        label: 'Reserva Muscular Real (CMB)',
+        status: cmbData.status as any,
+        value: cmbData.value
+      });
+    }
+  } else {
+    if (cmbData) {
+      checklist.push({
+        label: 'Reserva Muscular Real (CMB)',
+        status: cmbData.status as any,
+        value: cmbData.value
+      });
+    }
+  }
+
+  ['coxa', 'antebraco', 'punho', 'umero'].forEach(k => {
+    const v = parseFloat((data as any)[k]);
+    if (!isNaN(v)) {
+      res.circ.push({
+        title: k.charAt(0).toUpperCase() + k.slice(1),
+        value: `${numBR(v)} cm`,
+        subtext: 'Medida aferida'
+      });
+    }
+  });
+
+  res.checklist = checklist;
+  return { patient: data, results: res };
+};
+
+export const openPrintWindow = (reportHtml: string) => {
+    try {
+      const win = window.open('', '_blank');
+      if (win) {
+        win.document.open();
+        win.document.write(reportHtml);
+        win.document.close();
+        win.focus();
+        setTimeout(() => {
+          try { win.print(); } catch (e) { console.error('Erro ao acionar impressão na janela:', e); }
+        }, 300);
+        return;
+      }
+    } catch (err) {
+      console.warn('Pop-up bloqueado, utilizando fallback de iframe oculto para impressão:', err);
+    }
+
+    // Fallback: Iframe invisível para impressão segura sem pop-up
+    const existingFrame = document.getElementById('print-sandbox-frame');
+    if (existingFrame) existingFrame.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'print-sandbox-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(reportHtml);
+      doc.close();
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      }, 400);
+    }
+};
+
+export const generateHtmlReportString = (reportData: FullReport): string => {
+    const { patient, results } = reportData;
+    
+    // Logo Selection (Vittáre ONLY)
+    const logoUrl = 'https://i.ibb.co/JRkkVnRx/Vitt-re-CENTRO-INTEGRADO-EM-SA-DE-sem-fundo.png';
+
+    // Footer Selection (Vittáre ONLY)
+    const footerHtml = `
+        <div class="text-center mt-10">
+            <p class="font-semibold text-gray-800">Dr. Joao Paulo Cecato | CRN4.20100054</p>
+            <p class="text-gray-600">Nutricionista Clínico Funcional & Neurociências</p>
+        </div>
+    `;
+
+    // Helper to render a box in HTML
+    const renderBoxHtml = (data: ReportBox, isElderly: boolean) => {
+        let valHtml = data.value;
+        let subtextClass = "text-xs text-gray-500 mt-1 faixa";
+        if (data.valueColor) {
+            valHtml = `<span style="color:${data.valueColor}">${data.value}</span>`;
+        }
+        if (data.isIMC) {
+            valHtml += ` <span class="age-tag">${isElderly ? 'Idoso' : 'Adulto'}</span>`;
+            subtextClass = "text-[0.7rem] text-gray-500 mt-1 font-medium";
+        }
+        let progressHtml = '';
+        if (data.progress) {
+            const segs = data.progress.segments.map(s =>
+                `<div style="position:absolute;height:100%;background:${s.c};width:${s.w}%;left:${s.l}%"></div>`
+            ).join('');
+            progressHtml = `
+              <div class="progress relative h-2 rounded bg-gray-200 mt-3 overflow-visible">
+                ${segs}
+                <div class="marker-arrow" style="left:${data.progress.marker}%"></div>
+              </div>
+            `;
+        }
+        return `
+            <div class="bg-[#f9f9f9] rounded-xl p-4 shadow-sm border border-gray-100 flex flex-col h-full relative info-box">
+              <h3>${data.title}</h3>
+              <div class="text-2xl font-bold text-gray-900 mt-1 valor">${valHtml}</div>
+              <div class="${subtextClass}">${data.subtext || ''}</div>
+              ${data.complement ? `<div class="complement">${data.complement}</div>` : ''}
+              ${progressHtml}
+            </div>
+          `;
+    };
+
+    const isElderly = (results.idade || 0) >= 60;
+    
+    const metasHtml = results.metas.map(b => renderBoxHtml(b, isElderly)).join('');
+    const bioHtml = [...results.bio, ...results.mmlg].map(b => renderBoxHtml(b, isElderly)).join('');
+    const circHtml = results.circ.map(b => renderBoxHtml(b, isElderly)).join('');
+    const gastoHtml = results.gasto.map(b => renderBoxHtml(b, isElderly)).join('');
+    
+    const checklistHtml = results.checklist.map(item => {
+        let colorClass = item.status === 'success' ? 'success' : (item.status === 'warning' ? 'warning' : 'danger');
+        let icon = item.status === 'success' ? '✔' : (item.status === 'warning' ? '!' : '✖');
+        return `
+            <div class="chk-item flex items-center justify-between p-4 border-b border-gray-200 last:border-0 hover:bg-white transition-colors">
+              <div class="chk-left flex items-center gap-3">
+                <div class="chk-icon ${colorClass} w-8 h-8 rounded-full ${item.status === 'success' ? 'bg-green-500' : (item.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500')} flex items-center justify-center shrink-0 text-white font-bold">${icon}</div>
+                <span class="chk-label font-semibold text-gray-700">${item.label}</span>
+              </div>
+              <span class="chk-val ${colorClass} font-bold ${item.status === 'success' ? 'text-green-600' : (item.status === 'warning' ? 'text-yellow-600' : 'text-red-600')} text-right">
+                ${item.value}
+              </span>
+            </div>
+        `;
+    }).join('');
+
+    const bodySvgElement = document.getElementById('body-svg');
+    const svgHtml = bodySvgElement ? bodySvgElement.innerHTML : '';
+
+    const headerHtml = `
+        <div class="report-header-wrapper">
+          <div class="page-header">
+            <div class="header-logo-container">
+              <img src="${logoUrl}" alt="Logo" class="page-logo">
+            </div>
+            <h2>Relatório de Avaliação</h2>
+          </div>
+          <div class="dados-paciente-print">
+            <div>
+              Nome: ${patient.nome || ''} |
+              Nascimento: ${patient.nascimento ? patient.nascimento.split('-').reverse().join('/') : ''} 
+              ${results.idade ? `(${results.idade} anos)` : ''}
+            </div>
+            <div>
+              Peso: ${patient.peso || ''} kg |
+              Altura: ${patient.altura || ''} cm |
+              Sexo: ${patient.sexo || ''}
+            </div>
+          </div>
+        </div>
+    `;
+
+    const contentHtml = `
+         <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+            <div class="mb-8 print-section">
+                <h3 class="text-[#0044cc] font-bold text-lg mb-4">Metas de Peso e Composição</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 cards-grid">${metasHtml}</div>
+            </div>
+            <div class="mb-8 print-section">
+                <h3 class="text-[#0044cc] font-bold text-lg mb-4">Bioimpedância e Cálculos Gerais</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 cards-grid">${bioHtml}</div>
+            </div>
+            <div class="mb-8 print-section">
+                <h3 class="text-[#0044cc] font-bold text-lg mb-4">Circunferências e Reservas</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 cards-grid">${circHtml}</div>
+            </div>
+            <div class="mb-8 print-section">
+                <h3 class="text-[#0044cc] font-bold text-lg mb-4">Gasto Energético Estimado</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 cards-grid">${gastoHtml}</div>
+            </div>
+            <div class="mb-8 flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm print-section">
+                <h3 class="text-[#0044cc] font-bold text-lg mb-6 w-full text-left">Mapa de Composição Corporal</h3>
+                <div id="body-map-container" class="relative w-full max-w-[500px] h-auto bg-white">
+                    <svg id="body-svg" viewBox="0 0 360 500" class="w-full h-full drop-shadow-lg">${svgHtml}</svg>
+                </div>
+            </div>
+            <div class="mb-8 print-section">
+                <h3 class="text-[#0044cc] font-bold text-lg mb-4">Checklist de Saúde</h3>
+                <div class="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">${checklistHtml}</div>
+            </div>
+            ${footerHtml}
+         </div>
+    `;
+
+    return `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Relatório</title>
+        <style>${REPORT_CSS}</style>
+      </head>
+      <body>
+        <div class="page">
+          <table>
+            <thead>
+              <tr><td>${headerHtml}</td></tr>
+            </thead>
+            <tbody>
+              <tr><td><div class="page-content">${contentHtml}</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </body>
+      </html>
+    `;
+};
+
+
+
+Bodymap
+import React from 'react';
+import { FullReport } from '../types';
+
+interface BodyMapProps {
+  report: FullReport;
+}
+
+const BodyMap: React.FC<BodyMapProps> = ({ report }) => {
+  const { results, patient } = report;
+  const isFemale = patient.sexo === 'F';
+
+  const find = (arr: any[], key: string) => {
+    const found = arr.find(i => i.title.toLowerCase().includes(key.toLowerCase()));
+    return found ? found.value.split(' ')[0] : '--';
+  };
+
+  const vals = {
+    musc: find(results.bio, 'Massa Muscular'),
+    gord: find(results.bio, 'Gordura Corporal'),
+    visc: results.bio.find(i => i.title.includes('Gordura Visceral'))?.value.replace('Nível ', '') || '--',
+    brac: find(results.circ, 'Braço'),
+    cint: find(results.circ, 'Cintura'),
+    abdo: find(results.circ, 'Abdominal'),
+    quad: find(results.circ, 'Quadril'),
+    coxa: find(results.circ, 'Coxa'),
+    pant: find(results.circ, 'Panturrilha')
+  };
+
+  const maleHead = "M100,20 C115,20 125,30 125,45 C125,60 115,70 100,70 C85,70 75,60 75,45 C75,30 85,20 100,20 Z";
+  const maleBody = "M100,75 L130,90 C145,100 155,110 160,150 L165,240 L145,250 L140,160 L130,260 L125,450 L105,450 L105,300 L95,300 L95,450 L75,450 L70,260 L60,160 L55,250 L35,240 L40,150 C45,110 55,100 70,90 L100,75 Z";
+  const femaleHead = "M100,25 C112,25 120,35 120,45 C120,55 112,65 100,65 C88,65 80,55 80,45 C80,35 88,25 100,25 Z";
+  const femaleBody = "M100,70 L125,85 C140,95 150,110 152,140 L158,230 L142,235 L138,150 L132,240 L128,450 L108,450 L105,320 L95,320 L92,450 L72,450 L68,240 L62,150 L58,235 L42,230 L48,140 C50,110 60,95 75,85 L100,70 Z";
+
+  const c = isFemale ? {
+    musc: {x1:105, y1:100, x2:130, y2:130}, 
+    gord: {x1:105, y1:200, x2:120, y2:210}, 
+    visc: {x1:105, y1:350, x2:180, y2:250}, 
+    brac: {x1:255, y1:130, x2:220, y2:140},
+    cint: {x1:255, y1:190, x2:200, y2:190},
+    abdo: {x1:255, y1:230, x2:200, y2:220}, 
+    quad: {x1:255, y1:280, x2:220, y2:260}, 
+    coxa: {x1:255, y1:350, x2:210, y2:320}, 
+    pant: {x1:255, y1:440, x2:210, y2:410}  
+  } : {
+    musc: {x1:105, y1:100, x2:125, y2:130}, 
+    gord: {x1:105, y1:200, x2:115, y2:200}, 
+    visc: {x1:105, y1:350, x2:180, y2:240}, 
+    brac: {x1:255, y1:130, x2:215, y2:140},
+    cint: {x1:255, y1:190, x2:190, y2:190},
+    abdo: {x1:255, y1:230, x2:190, y2:220}, 
+    quad: {x1:255, y1:280, x2:190, y2:250},
+    coxa: {x1:255, y1:350, x2:200, y2:310},
+    pant: {x1:255, y1:440, x2:205, y2:400}
+  };
+
+  const metrics: {
+    id: string;
+    label: string;
+    val: string;
+    color: string;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    align: 'start' | 'end' | 'middle' | 'inherit';
+    dash: boolean;
+  }[] = [
+    { id: 'musc', label: 'Massa Muscular', val: vals.musc, color: '#00a099', x1: c.musc.x1, y1: c.musc.y1, x2: c.musc.x2, y2: c.musc.y2, align: 'end', dash: false },
+    { id: 'gord', label: 'Gordura Corporal', val: vals.gord, color: '#fbc02d', x1: c.gord.x1, y1: c.gord.y1, x2: c.gord.x2, y2: c.gord.y2, align: 'end', dash: false },
+    { id: 'visc', label: 'Gordura Visceral', val: `Nível ${vals.visc}`, color: '#e74c3c', x1: c.visc.x1, y1: c.visc.y1, x2: c.visc.x2, y2: c.visc.y2, align: 'end', dash: true },
+    { id: 'brac', label: 'Braço', val: vals.brac, color: '#0044cc', x1: c.brac.x1, y1: c.brac.y1, x2: c.brac.x2, y2: c.brac.y2, align: 'start', dash: false },
+    { id: 'cint', label: 'Cintura', val: vals.cint, color: '#0044cc', x1: c.cint.x1, y1: c.cint.y1, x2: c.cint.x2, y2: c.cint.y2, align: 'start', dash: false },
+    { id: 'abdo', label: 'Abdominal', val: vals.abdo, color: '#0044cc', x1: c.abdo.x1, y1: c.abdo.y1, x2: c.abdo.x2, y2: c.abdo.y2, align: 'start', dash: false },
+    { id: 'quad', label: 'Quadril', val: vals.quad, color: '#0044cc', x1: c.quad.x1, y1: c.quad.y1, x2: c.quad.x2, y2: c.quad.y2, align: 'start', dash: false },
+    { id: 'coxa', label: 'Coxa', val: vals.coxa, color: '#0044cc', x1: c.coxa.x1, y1: c.coxa.y1, x2: c.coxa.x2, y2: c.coxa.y2, align: 'start', dash: false },
+    { id: 'pant', label: 'Panturrilha', val: vals.pant, color: '#0044cc', x1: c.pant.x1, y1: c.pant.y1, x2: c.pant.x2, y2: c.pant.y2, align: 'start', dash: false }
+  ];
+
+  return (
+    <div id="body-map-container" className="relative w-full max-w-[500px] h-[500px] bg-white">
+      <svg id="body-svg" viewBox="0 0 360 500" className="w-full h-full drop-shadow-lg">
+        <g transform="translate(80,0)">
+            <path d={isFemale ? femaleHead : maleHead} fill="#d1d5db" />
+            <path d={isFemale ? femaleBody : maleBody} fill="#d1d5db" />
+        </g>
+        {metrics.map(m => {
+            const textX = m.align === 'end' ? 100 : 260;
+            const offsetTitle = m.id === 'visc' ? 20 : -15;
+            const offsetVal = m.id === 'visc' ? 35 : -5;
+            return (
+                <g key={m.id} id={`group-${m.id}`}>
+                    <line 
+                        id={`line-${m.id}`} 
+                        x1={m.x1} y1={m.y1} 
+                        x2={m.x2} y2={m.y2}
+                        stroke="#000" 
+                        strokeWidth="1" 
+                        strokeDasharray={m.dash ? "4" : undefined} 
+                    />
+                    <circle id={`circle-body-${m.id}`} cx={m.x2} cy={m.y2} r="3" fill="#000" />
+                    <text 
+                        id={`lbl-${m.id}`} 
+                        x={textX} 
+                        y={m.y1 + offsetTitle}
+                        textAnchor={m.align} 
+                        fontSize="12" 
+                        fill="#000" 
+                        fontWeight="bold"
+                    >
+                        {m.label}
+                    </text>
+                    <text 
+                        id={`val-${m.id}`} 
+                        x={textX} 
+                        y={m.y1 + offsetVal}
+                        textAnchor={m.align} 
+                        fontSize="12" 
+                        fill={m.color} 
+                        fontWeight="bold"
+                    >
+                        {m.val}
+                    </text>
+                </g>
+            );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+export default BodyMap;
+
+
+
+

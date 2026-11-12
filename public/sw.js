@@ -26,6 +26,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
+  // Ignora requisições de desenvolvimento do Vite e domínios de dev
+  if (
+    event.request.url.includes('@vite') ||
+    event.request.url.includes('node_modules') ||
+    event.request.url.includes('?v=') ||
+    event.request.url.includes(':3000') ||
+    event.request.url.includes('ais-dev-') ||
+    event.request.url.includes('localhost')
+  ) {
+    return;
+  }
+
   // Ignora requisições de extensões ou esquemas não-http
   if (!event.request.url.startsWith('http')) return;
 

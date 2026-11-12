@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ReferralItem } from '../../types/patient';
-import { Printer, ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Share2, X, Loader2 } from 'lucide-react';
+import { shareOrDownloadPdf } from '../../utils/pdfExportUtils';
+import { VITTARE_LOGO_PNG } from '../../assets/vittareLogoBase64';
 
 interface ReferralPdfModalProps {
   isOpen: boolean;
@@ -19,6 +21,8 @@ export const ReferralPdfModal: React.FC<ReferralPdfModalProps> = ({
   patientName = 'JOÃO CECATO',
   dateStr = '11/11/2026'
 }) => {
+  const [isExporting, setIsExporting] = useState(false);
+
   if (!isOpen) return null;
 
   const effectiveDate = referral?.dateStr || dateStr || '11/11/2026';
@@ -61,102 +65,71 @@ export const ReferralPdfModal: React.FC<ReferralPdfModalProps> = ({
     );
   };
 
-  const handlePrint = () => {
+  const handleShareOrDownload = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     try {
-      const sheetElem = document.getElementById('referral-request-sheet');
-      if (!sheetElem) {
-        window.print();
-        return;
-      }
-
-      const isIframe = window.self !== window.top;
-      if (isIframe) {
-        const printWindow = window.open('', '_blank', 'width=950,height=1100');
-        if (printWindow) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>Encaminhamento Multidisciplinar - ${cleanPatientName}</title>
-                <script src="https://cdn.tailwindcss.com"></script>
-                <link rel="preconnect" href="https://fonts.googleapis.com">
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-                <style>
-                  @page {
-                    size: A4 portrait;
-                    margin: 6mm;
-                  }
-                  html, body {
-                    font-family: 'Inter', sans-serif;
-                    background: #fff;
-                    margin: 0; padding: 0;
-                    height: 100%;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                  }
-                  #referral-request-sheet {
-                    min-height: auto !important;
-                    height: auto !important;
-                    max-height: 282mm !important;
-                    padding: 4mm 6mm !important;
-                    margin: 0 auto !important;
-                    box-shadow: none !important;
-                    border: none !important;
-                    display: flex !important;
-                    flex-direction: column !important;
-                    justify-content: space-between !important;
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                  }
-                  .signature-box-container {
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                  }
-                  .no-print { display: none !important; }
-                </style>
-              </head>
-              <body>
-                ${sheetElem.outerHTML}
-                <script>
-                  window.onload = function() {
-                    setTimeout(function() {
-                      window.print();
-                      window.close();
-                    }, 600);
-                  };
-                </script>
-              </body>
-            </html>
-          `);
-          printWindow.document.close();
-          return;
-        }
-      }
-
-      window.print();
-    } catch (e) {
-      console.warn("Fallback de impressão acionado:", e);
-      window.print();
+      const sanitizedName = cleanPatientName.replace(/[^a-zA-Z0-9]/g, '_');
+      await shareOrDownloadPdf({
+        elementId: 'referral-request-sheet',
+        filename: `Encaminhamento_${sanitizedName}.pdf`,
+        title: 'Encaminhamento Multidisciplinar',
+        text: `Encaminhamento multidisciplinar oficial de ${cleanPatientName} emitido pelo Dr. João Paulo Cecato.`
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
 
+
+
   return (
     <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex flex-col items-center justify-start overflow-y-auto p-2 sm:p-4 select-none font-['Inter',sans-serif]">
-      {/* BARRA SUPERIOR DE AÇÕES (OCULTA NA IMPRESSÃO) */}
-      <div className="w-full max-w-full sm:max-w-[210mm] bg-[#14142a] border border-white/20 rounded-2xl p-3 sm:px-5 sm:py-3 mb-3 flex items-center justify-between shadow-2xl shrink-0 print:hidden">
-        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-200 min-w-0">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="truncate">Encaminhamento Multidisciplinar | Dr. João Paulo Cecato</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
+      {/* BARRA SUPERIOR DE AÇÕES MOBILE-FIRST (OCULTA NA IMPRESSÃO) */}
+      <div className="w-full max-w-full sm:max-w-[210mm] bg-[#14142a] border border-white/20 rounded-2xl p-2.5 sm:px-5 sm:py-3 mb-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-2xl shrink-0 print:hidden">
+        <div className="w-full sm:w-auto flex items-center justify-between gap-2 text-xs sm:text-sm font-semibold text-slate-200 min-w-0">
+          <div className="flex items-center gap-2 truncate">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="truncate">Encaminhamento Multidisciplinar</span>
+          </div>
           <button
             type="button"
-            onClick={handlePrint}
-            className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="sm:hidden p-1.5 rounded-lg bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 transition cursor-pointer"
           >
-            <Printer className="w-4 h-4" />
-            <span>Imprimir / Salvar PDF</span>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* BOTÃO ERGONÔMICO FULL-WIDTH: ENCAMINHAR AO WHATSAPP / SALVAR PDF (16PX) */}
+        <div className="w-full sm:w-auto sm:flex-1 sm:max-w-[440px] flex items-center justify-end gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleShareOrDownload}
+            disabled={isExporting}
+            className="w-full h-[48px] px-4 rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-[#0a0d12] text-[16px] font-extrabold flex items-center justify-center gap-2.5 transition active:scale-95 cursor-pointer shadow-md shadow-[#25D366]/20 disabled:opacity-60"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Gerando PDF...</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-5 h-5" />
+                <span>Encaminhar ao WhatsApp / Salvar PDF</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="hidden sm:flex h-[48px] w-[48px] items-center justify-center rounded-xl bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 transition cursor-pointer border border-white/10 shrink-0"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -195,10 +168,10 @@ export const ReferralPdfModal: React.FC<ReferralPdfModalProps> = ({
               </div>
             </div>
 
-            {/* Marca Vittáre Oficial */}
+            {/* Marca Vittáre Oficial (Base64 Síncrono sem dependência de rede) */}
             <div className="flex items-center justify-center p-1 bg-transparent rounded-lg shrink-0">
               <img 
-                src="https://i.ibb.co/JRkkVnRx/Vitt-re-CENTRO-INTEGRADO-EM-SA-DE-sem-fundo.png" 
+                src={VITTARE_LOGO_PNG} 
                 alt="Logo Vittáre" 
                 className="max-h-12 max-w-[130px] sm:max-w-[160px] w-auto object-contain mix-blend-multiply" 
               />
