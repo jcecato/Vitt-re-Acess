@@ -13,6 +13,7 @@ import { NavigationRail } from './components/layout/NavigationRail';
 
 // Modular Clinical Tabs
 import { DashboardTab } from './modules/dashboard/DashboardTab';
+import { NotesTab } from './modules/notes/NotesTab';
 import { EvolutionTab } from './modules/evolution/EvolutionTab';
 import { ConsultationsTab } from './modules/consultations/ConsultationsTab';
 import { MealGuideTab } from './modules/meal-guide/MealGuideTab';
@@ -124,7 +125,7 @@ function PatientAppContent() {
             </div>
           )}
 
-          {/* Barra de Navegação Horizontal com 13 Abas + Indicador de Atualizações Pendentes */}
+          {/* Barra de Navegação Horizontal com Abas + Indicador de Atualizações Pendentes */}
           <div className="shrink-0">
             <NavigationRail
               activeTab={activeTab}
@@ -145,6 +146,11 @@ function PatientAppContent() {
               onNavigateTab={handleSelectTab}
               onOpenPdf={handleOpenPdf}
             />
+          )}
+
+          {/* 1.b Anotações (Evolução Clínica em Acordeon por Data) */}
+          {activeTab === 'anotacoes' && (
+            <NotesTab patient={currentPatient} />
           )}
 
           {/* 2. Minha Agenda */}

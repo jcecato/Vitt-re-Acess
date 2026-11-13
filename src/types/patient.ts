@@ -183,6 +183,28 @@ export interface WeightHistoryPoint {
   fat: number;
 }
 
+export interface ClinicalEvolutionItem {
+  id: string;
+  title?: string;
+  dateStr: string;
+  resumoGeral?: string;
+  observacoes?: string;
+  achados?: string[];
+  planoDeAcao?: string[];
+  proximosPassos?: string[];
+  rawText?: string;
+  tags?: string[];
+  createdAt?: string | number;
+  updatedAt?: string | number;
+}
+
+export interface ClinicalSummaryInfo {
+  id?: string;
+  summary: string;
+  dateStr: string;
+  updatedAt?: string | number;
+}
+
 export interface PatientProfile {
   id: string;
   name: string;
@@ -217,6 +239,9 @@ export interface PatientProfile {
   weightHistory: WeightHistoryPoint[];
   professionalNotes: string;
   crmGeneralNotes: string;
+  clinicalEvolutions?: ClinicalEvolutionItem[];
+  clinicalSummary?: string;
+  clinicalSummaryInfo?: ClinicalSummaryInfo;
 
   lyaNotification: {
     active: boolean;

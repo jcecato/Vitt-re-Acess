@@ -1,9 +1,10 @@
-import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient, ExamBatch, PhysicalAssessmentItem, AssessmentComparisonMetric, ReferralItem } from '../types/patient';
+import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient, ExamBatch, PhysicalAssessmentItem, AssessmentComparisonMetric, ReferralItem, ClinicalEvolutionItem, ClinicalSummaryInfo } from '../types/patient';
 import { INITIAL_PATIENTS } from '../patients/defaultPatient';
 import { db, auth, isFirebaseConfigured } from '../config/firebase';
 import { 
   doc, 
   getDoc, 
+  getDocFromServer,
   setDoc, 
   onSnapshot, 
   collection, 
@@ -25,6 +26,9 @@ let lastReferralsError: string | null = null;
 let cachedSubExamBatches: ExamBatch[] = [];
 let cachedSubAssessments: PhysicalAssessmentItem[] = [];
 let lastAnthroError: string | null = null;
+let cachedSubEvolutions: ClinicalEvolutionItem[] = [];
+let cachedClinicalSummaryInfo: ClinicalSummaryInfo | null = null;
+let lastEvolutionsError: string | null = null;
 
 function parseAssessmentTimestampMs(value: unknown): number {
   if (value === null || value === undefined || value === '') return 0;
@@ -103,6 +107,245 @@ export function sortPhysicalAssessmentsDesc(items: PhysicalAssessmentItem[]): Ph
 
     return String(b.id || '').localeCompare(String(a.id || ''));
   });
+}
+
+function toCleanStringArray(val: unknown): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val
+      .map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (item && typeof item === 'object') {
+          return String((item as any).text || (item as any).label || (item as any).title || (item as any).name || '').trim();
+        }
+        return String(item ?? '').trim();
+      })
+      .filter(Boolean);
+  }
+  if (typeof val === 'string') {
+    return val
+      .split(/\r?\n|;/)
+      .map((line) => line.replace(/^(\d+[\.\)\-\s]+|[-•*]\s*)/, '').trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function parseStructuredSectionsFromRawText(rawText: string): {
+  resumoGeral?: string;
+  observacoes?: string;
+  achados?: string[];
+  planoDeAcao?: string[];
+  proximosPassos?: string[];
+} {
+  if (!rawText || typeof rawText !== 'string') return {};
+  const text = rawText.trim();
+  if (!text) return {};
+
+  const hasSectionHeaders = /resumo\s+geral|observa[çc][õo]es\s+pertinentes|plano\s+de\s+a[çc][ãa]o|pr[óo]ximos\s+passos/i.test(text);
+  if (!hasSectionHeaders) {
+    return { resumoGeral: text };
+  }
+
+  const lines = text.split(/\r?\n/);
+  let currentSection: 'resumo' | 'obs' | 'achados' | 'plano' | 'passos' = 'resumo';
+  const resumoLines: string[] = [];
+  const obsLines: string[] = [];
+  const achadosList: string[] = [];
+  const planoList: string[] = [];
+  const passosList: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (/^#*\s*resumo\s+geral\s*:?$/i.test(line)) {
+      currentSection = 'resumo';
+      continue;
+    }
+    if (/^#*\s*observa[çc][õo]es(\s+pertinentes)?\s*:?$/i.test(line)) {
+      currentSection = 'obs';
+      continue;
+    }
+    if (/^#*\s*(achados|alertas|pontos\s+de\s+aten[çc][ãa]o)\s*:?$/i.test(line)) {
+      currentSection = 'achados';
+      continue;
+    }
+    if (/^#*\s*plano\s+de\s+a[çc][ãa]o\s*:?$/i.test(line)) {
+      currentSection = 'plano';
+      continue;
+    }
+    if (/^#*\s*pr[óo]ximos\s+passos\s*:?$/i.test(line)) {
+      currentSection = 'passos';
+      continue;
+    }
+
+    const inlineResumo = line.match(/^resumo\s+geral\s*:\s*(.+)$/i);
+    if (inlineResumo) {
+      currentSection = 'resumo';
+      resumoLines.push(inlineResumo[1].trim());
+      continue;
+    }
+    const inlineObs = line.match(/^observa[çc][õo]es(\s+pertinentes)?\s*:\s*(.+)$/i);
+    if (inlineObs) {
+      currentSection = 'obs';
+      obsLines.push(inlineObs[2].trim());
+      continue;
+    }
+
+    if (currentSection === 'resumo') {
+      resumoLines.push(line);
+    } else if (currentSection === 'obs') {
+      if (/^[-•*]\s+/.test(line)) {
+        achadosList.push(line.replace(/^[-•*]\s+/, '').trim());
+      } else {
+        obsLines.push(line);
+      }
+    } else if (currentSection === 'achados') {
+      achadosList.push(line.replace(/^[-•*]\s+/, '').trim());
+    } else if (currentSection === 'plano') {
+      planoList.push(line.replace(/^(\d+[\.\)\-\s]+|[-•*]\s*)/, '').trim());
+    } else if (currentSection === 'passos') {
+      passosList.push(line.replace(/^(\d+[\.\)\-\s]+|[-•*]\s*)/, '').trim());
+    }
+  }
+
+  return {
+    resumoGeral: resumoLines.join(' ').trim() || undefined,
+    observacoes: obsLines.join(' ').trim() || undefined,
+    achados: achadosList.length > 0 ? achadosList : undefined,
+    planoDeAcao: planoList.length > 0 ? planoList : undefined,
+    proximosPassos: passosList.length > 0 ? passosList : undefined
+  };
+}
+
+export function normalizeClinicalEvolution(raw: any, idFallback: string): ClinicalEvolutionItem {
+  const createdMs = parseAssessmentTimestampMs(raw?.createdAt || raw?.timestamp || raw?.date);
+  const updatedMs = parseAssessmentTimestampMs(raw?.updatedAt);
+  const rawDate =
+    raw?.dateStr ||
+    raw?.date ||
+    raw?.data ||
+    (createdMs > 0 ? new Date(createdMs).toLocaleDateString('pt-BR') : '13/11/2026');
+
+  const cleanDate = String(rawDate).replace(/^Data:\s*/i, '').trim();
+  const formattedDate = cleanDate.includes('-') && /^\d{4}-\d{2}-\d{2}/.test(cleanDate)
+    ? cleanDate.slice(0, 10).split('-').reverse().join('/')
+    : cleanDate;
+
+  const rawTextBody =
+    typeof raw?.rawText === 'string'
+      ? raw.rawText
+      : typeof raw?.text === 'string'
+      ? raw.text
+      : typeof raw?.content === 'string'
+      ? raw.content
+      : typeof raw?.notes === 'string'
+      ? raw.notes
+      : typeof raw?.clinicalNotes === 'string'
+      ? raw.clinicalNotes
+      : '';
+
+  const parsedFromText = parseStructuredSectionsFromRawText(rawTextBody);
+
+  const resumoGeral =
+    (typeof (raw?.resumoGeral ?? raw?.resumo ?? raw?.summary ?? raw?.generalSummary) === 'string'
+      ? String(raw?.resumoGeral ?? raw?.resumo ?? raw?.summary ?? raw?.generalSummary).trim()
+      : '') ||
+    parsedFromText.resumoGeral ||
+    '';
+
+  const observacoes =
+    (typeof (raw?.observacoes ?? raw?.observacoesPertinentes ?? raw?.observations ?? raw?.pertinentObservations) === 'string'
+      ? String(raw?.observacoes ?? raw?.observacoesPertinentes ?? raw?.observations ?? raw?.pertinentObservations).trim()
+      : '') ||
+    parsedFromText.observacoes ||
+    '';
+
+  const explicitAchados = toCleanStringArray(
+    raw?.achados ?? raw?.findings ?? raw?.alertas ?? raw?.alerts ?? raw?.pontosDeAtencao
+  );
+  const achados = explicitAchados.length > 0 ? explicitAchados : (parsedFromText.achados || []);
+
+  const explicitPlano = toCleanStringArray(
+    raw?.planoDeAcao ?? raw?.plano_acao ?? raw?.actionPlan ?? raw?.actions ?? raw?.plano
+  );
+  const planoDeAcao = explicitPlano.length > 0 ? explicitPlano : (parsedFromText.planoDeAcao || []);
+
+  const explicitPassos = toCleanStringArray(
+    raw?.proximosPassos ?? raw?.proximos_passos ?? raw?.nextSteps ?? raw?.steps ?? raw?.passos
+  );
+  const proximosPassos = explicitPassos.length > 0 ? explicitPassos : (parsedFromText.proximosPassos || []);
+
+  const tags = toCleanStringArray(raw?.tags ?? raw?.tipos ?? raw?.recordTypes ?? raw?.tipoRegistro);
+
+  return {
+    id: String(raw?.id || idFallback),
+    title: String(raw?.title || raw?.titulo || 'Evolução Clínica').trim(),
+    dateStr: formattedDate,
+    resumoGeral: resumoGeral || undefined,
+    observacoes: observacoes || undefined,
+    achados,
+    planoDeAcao,
+    proximosPassos,
+    rawText: rawTextBody || undefined,
+    tags: tags.length > 0 ? tags : undefined,
+    createdAt: createdMs > 0 ? createdMs : undefined,
+    updatedAt: updatedMs > 0 ? updatedMs : undefined
+  };
+}
+
+export function sortClinicalEvolutionsDesc(items: ClinicalEvolutionItem[]): ClinicalEvolutionItem[] {
+  if (!Array.isArray(items) || items.length <= 1) return Array.isArray(items) ? [...items] : [];
+
+  return [...items].sort((a, b) => {
+    const dateA = parseAssessmentDateMs(a.dateStr) || parseAssessmentTimestampMs(a.createdAt) || parseAssessmentTimestampMs(a.updatedAt);
+    const dateB = parseAssessmentDateMs(b.dateStr) || parseAssessmentTimestampMs(b.createdAt) || parseAssessmentTimestampMs(b.updatedAt);
+
+    if (dateB !== dateA) {
+      return dateB - dateA;
+    }
+
+    const timeA = Math.max(parseAssessmentTimestampMs(a.updatedAt), parseAssessmentTimestampMs(a.createdAt));
+    const timeB = Math.max(parseAssessmentTimestampMs(b.updatedAt), parseAssessmentTimestampMs(b.createdAt));
+
+    if (timeB !== timeA) {
+      return timeB - timeA;
+    }
+
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+}
+
+export function normalizeClinicalSummary(raw: any, fallbackDate?: string): ClinicalSummaryInfo | null {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    return {
+      id: 'resumo_geral',
+      summary: trimmed,
+      dateStr: fallbackDate || new Date().toLocaleDateString('pt-BR')
+    };
+  }
+  const summaryText = String(
+    raw?.summary ?? raw?.resumoGeral ?? raw?.resumo ?? raw?.clinicalSummary ?? raw?.text ?? ''
+  ).trim();
+  if (!summaryText) return null;
+
+  const updatedMs = parseAssessmentTimestampMs(raw?.updatedAt || raw?.createdAt);
+  const rawDate = raw?.dateStr || raw?.date || raw?.data || (updatedMs > 0 ? new Date(updatedMs).toLocaleDateString('pt-BR') : (fallbackDate || ''));
+  const cleanDate = String(rawDate).replace(/^Data:\s*/i, '').trim();
+  const formattedDate = cleanDate.includes('-') && /^\d{4}-\d{2}-\d{2}/.test(cleanDate)
+    ? cleanDate.slice(0, 10).split('-').reverse().join('/')
+    : (cleanDate || fallbackDate || '');
+
+  return {
+    id: String(raw?.id || 'resumo_geral'),
+    summary: summaryText,
+    dateStr: formattedDate,
+    updatedAt: raw?.updatedAt || (updatedMs > 0 ? updatedMs : undefined)
+  };
 }
 
 /**
@@ -349,6 +592,54 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
     weightHistory: Array.isArray(raw.weightHistory) ? raw.weightHistory : (fallback.weightHistory || []),
     professionalNotes: typeof raw.professionalNotes === 'string' ? raw.professionalNotes : (fallback.professionalNotes || ''),
     crmGeneralNotes: typeof raw.crmGeneralNotes === 'string' ? raw.crmGeneralNotes : (fallback.crmGeneralNotes || ''),
+    clinicalEvolutions: (() => {
+      const rawEvs = Array.isArray(raw.clinicalEvolutions)
+        ? raw.clinicalEvolutions
+        : Array.isArray(raw.evolutions)
+        ? raw.evolutions
+        : Array.isArray(raw.anotacoes)
+        ? raw.anotacoes
+        : [];
+      if (rawEvs.length > 0) {
+        return sortClinicalEvolutionsDesc(
+          rawEvs.map((ev: any, idx: number) => normalizeClinicalEvolution(ev, ev?.id || `ev-${idx + 1}`))
+        );
+      }
+      if (cachedSubEvolutions.length > 0) {
+        return cachedSubEvolutions;
+      }
+      if (typeof raw.crmGeneralNotes === 'string' && raw.crmGeneralNotes.trim().length > 0) {
+        return [
+          normalizeClinicalEvolution(
+            {
+              id: 'ev-crm-general',
+              title: 'Evolução Clínica',
+              dateStr: raw.lastSyncTimestamp ? new Date(raw.lastSyncTimestamp).toLocaleDateString('pt-BR') : '13/11/2026',
+              rawText: raw.crmGeneralNotes
+            },
+            'ev-crm-general'
+          )
+        ];
+      }
+      return fallback.clinicalEvolutions || [];
+    })(),
+    clinicalSummary: typeof raw.clinicalSummary === 'string' && raw.clinicalSummary.trim()
+      ? raw.clinicalSummary.trim()
+      : (cachedClinicalSummaryInfo?.summary || fallback.clinicalSummary || ''),
+    clinicalSummaryInfo: (() => {
+      if (cachedClinicalSummaryInfo && cachedClinicalSummaryInfo.summary) {
+        return cachedClinicalSummaryInfo;
+      }
+      if (raw.clinicalSummaryInfo) {
+        const norm = normalizeClinicalSummary(raw.clinicalSummaryInfo);
+        if (norm) return norm;
+      }
+      if (typeof raw.clinicalSummary === 'string' && raw.clinicalSummary.trim()) {
+        const tsDate = raw.lastSyncTimestamp ? new Date(raw.lastSyncTimestamp).toLocaleDateString('pt-BR') : '';
+        return normalizeClinicalSummary(raw.clinicalSummary, raw.clinicalSummaryDate || tsDate) || undefined;
+      }
+      return fallback.clinicalSummaryInfo;
+    })(),
 
     lyaNotification: {
       active: Boolean(raw.lyaNotification?.active ?? fallback.lyaNotification.active),
@@ -911,6 +1202,8 @@ class CrmDataService {
     let unsubscribeAnthroFirestore: (() => void) | null = null;
     let unsubscribeMapFirestore: (() => void) | null = null;
     let unsubscribeAnamnesisFirestore: (() => void) | null = null;
+    let unsubscribeEvolutionsFirestore: (() => void) | null = null;
+    let unsubscribeEvolutionSummaryFirestore: (() => void) | null = null;
     let unsubscribeReferralsFirestore: (() => void) | null = null;
     let unsubscribeEmailFirestore: (() => void) | null = null;
 
@@ -939,6 +1232,9 @@ class CrmDataService {
                 // Preserva prescrições com ativos reais vindos da subcoleção oficial
                 const mergedProtocols = resolveAuthoritativeProtocols(remotePatient.protocols, currentP.protocols);
 
+                const resolvedSummaryInfo = cachedClinicalSummaryInfo || remotePatient.clinicalSummaryInfo || currentP.clinicalSummaryInfo;
+                const resolvedSummaryText = resolvedSummaryInfo?.summary || remotePatient.clinicalSummary || currentP.clinicalSummary;
+
                 const mergedPatient: PatientProfile = {
                   ...remotePatient,
                   protocols: mergedProtocols,
@@ -950,7 +1246,12 @@ class CrmDataService {
                     : ((currentP.examBatches && currentP.examBatches.length > 0) ? currentP.examBatches : remotePatient.examBatches),
                   referrals: hasLoadedSubReferrals
                     ? cachedSubReferrals
-                    : (remotePatient.referrals || [])
+                    : (remotePatient.referrals || []),
+                  clinicalEvolutions: cachedSubEvolutions.length > 0
+                    ? cachedSubEvolutions
+                    : (remotePatient.clinicalEvolutions || currentP.clinicalEvolutions || []),
+                  ...(resolvedSummaryText ? { clinicalSummary: resolvedSummaryText } : {}),
+                  ...(resolvedSummaryInfo ? { clinicalSummaryInfo: resolvedSummaryInfo } : {})
                 };
                 callback(mergedPatient);
               }
@@ -1230,7 +1531,82 @@ class CrmDataService {
             console.warn("Erro no listener da subcoleção metabolic_map:", mErr);
           }
 
-          // Escuta em tempo real na subcoleção /anamnesis (Sense App™ - Avaliação Integrativa)
+          // Escuta em tempo real na subcoleção /evolutions (Anotações por e-mail) e /evolution/resumo_geral (Resumo dos Registros)
+          try {
+            const evolutionsRef = collection(firestoreDb, 'patients', targetDocId, 'evolutions');
+            unsubscribeEvolutionsFirestore = onSnapshot(evolutionsRef, (snap) => {
+              if (!snap.empty) {
+                const summaryDoc = snap.docs.find(d => d.id === 'resumo_geral');
+                if (summaryDoc) {
+                  const normSummary = normalizeClinicalSummary({ ...summaryDoc.data(), id: summaryDoc.id });
+                  if (normSummary) {
+                    cachedClinicalSummaryInfo = normSummary;
+                  }
+                }
+
+                const regularDocs = snap.docs.filter(d => d.id !== 'resumo_geral');
+                const subEvs = sortClinicalEvolutionsDesc(
+                  regularDocs.map(docSnap => normalizeClinicalEvolution({ ...docSnap.data(), id: docSnap.id }, docSnap.id))
+                );
+                if (subEvs.length > 0) {
+                  cachedSubEvolutions = subEvs;
+                }
+                lastEvolutionsError = null;
+
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const updatedPatient: PatientProfile = {
+                  ...currentP,
+                  ...(subEvs.length > 0 ? { clinicalEvolutions: subEvs } : {}),
+                  ...(cachedClinicalSummaryInfo ? {
+                    clinicalSummary: cachedClinicalSummaryInfo.summary,
+                    clinicalSummaryInfo: cachedClinicalSummaryInfo
+                  } : {})
+                };
+                const all = this.getAllLocalPatients();
+                all[patientId] = updatedPatient;
+                all['paciente-template-01'] = updatedPatient;
+                all[targetDocId] = updatedPatient;
+                this.saveAllLocalPatients(all);
+                callback(updatedPatient);
+              }
+            }, (err) => {
+              lastEvolutionsError = err?.code || 'permission-denied';
+              console.info("🔒 [Vittáre Data] Subcoleção evolutions em modo seguro:", err.code);
+            });
+          } catch (evErr) {
+            console.warn("Erro no listener da subcoleção evolutions:", evErr);
+          }
+
+          try {
+            const evolutionSummaryRef = doc(firestoreDb, 'patients', targetDocId, 'evolution', 'resumo_geral');
+            unsubscribeEvolutionSummaryFirestore = onSnapshot(evolutionSummaryRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const normSummary = normalizeClinicalSummary({ ...docSnap.data(), id: docSnap.id });
+                if (normSummary) {
+                  cachedClinicalSummaryInfo = normSummary;
+                  lastEvolutionsError = null;
+
+                  const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                  const updatedPatient: PatientProfile = {
+                    ...currentP,
+                    clinicalSummary: normSummary.summary,
+                    clinicalSummaryInfo: normSummary
+                  };
+                  const all = this.getAllLocalPatients();
+                  all[patientId] = updatedPatient;
+                  all['paciente-template-01'] = updatedPatient;
+                  all[targetDocId] = updatedPatient;
+                  this.saveAllLocalPatients(all);
+                  callback(updatedPatient);
+                }
+              }
+            }, (err) => {
+              console.info("🔒 [Vittáre Data] Documento evolution/resumo_geral em modo seguro:", err.code);
+            });
+          } catch (sumErr) {
+            console.warn("Erro no listener de evolution/resumo_geral:", sumErr);
+          }
+
           try {
             const anamnesisRef = collection(firestoreDb, 'patients', targetDocId, 'anamnesis');
             unsubscribeAnamnesisFirestore = onSnapshot(anamnesisRef, (snap) => {
@@ -1239,9 +1615,21 @@ class CrmDataService {
                 const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
                 const notes = latestDoc?.crmGeneralNotes || latestDoc?.clinicalNotes || latestDoc?.notes || currentP.crmGeneralNotes;
 
+                const anamnesisEvs = snap.docs
+                  .filter(d => {
+                    const dt = d.data();
+                    return Boolean(dt.resumoGeral || dt.summary || dt.planoDeAcao || dt.proximosPassos || dt.observacoes || dt.crmGeneralNotes || dt.clinicalNotes || dt.notes);
+                  })
+                  .map(d => normalizeClinicalEvolution({ ...d.data(), id: d.id }, d.id));
+
+                const mergedEvs = cachedSubEvolutions.length > 0
+                  ? cachedSubEvolutions
+                  : sortClinicalEvolutionsDesc(anamnesisEvs);
+
                 const updatedPatient: PatientProfile = {
                   ...currentP,
-                  crmGeneralNotes: notes
+                  crmGeneralNotes: notes,
+                  ...(mergedEvs.length > 0 ? { clinicalEvolutions: mergedEvs } : {})
                 };
                 const all = this.getAllLocalPatients();
                 all[patientId] = updatedPatient;
@@ -1329,7 +1717,14 @@ class CrmDataService {
                       : ((currentP.examBatches && currentP.examBatches.length > 0) ? currentP.examBatches : remoteData.examBatches),
                     referrals: hasLoadedSubReferrals
                       ? cachedSubReferrals
-                      : (remoteData.referrals || [])
+                      : (remoteData.referrals || []),
+                    clinicalEvolutions: cachedSubEvolutions.length > 0
+                      ? cachedSubEvolutions
+                      : (remoteData.clinicalEvolutions || currentP.clinicalEvolutions || []),
+                    ...((cachedClinicalSummaryInfo || remoteData.clinicalSummaryInfo || currentP.clinicalSummaryInfo) ? {
+                      clinicalSummaryInfo: cachedClinicalSummaryInfo || remoteData.clinicalSummaryInfo || currentP.clinicalSummaryInfo,
+                      clinicalSummary: (cachedClinicalSummaryInfo || remoteData.clinicalSummaryInfo || currentP.clinicalSummaryInfo)?.summary || remoteData.clinicalSummary
+                    } : {})
                   };
                   callback(mergedData);
                 }
@@ -1369,6 +1764,12 @@ class CrmDataService {
       }
       if (unsubscribeAnamnesisFirestore) {
         unsubscribeAnamnesisFirestore();
+      }
+      if (unsubscribeEvolutionsFirestore) {
+        unsubscribeEvolutionsFirestore();
+      }
+      if (unsubscribeEvolutionSummaryFirestore) {
+        unsubscribeEvolutionSummaryFirestore();
       }
       if (unsubscribeReferralsFirestore) {
         unsubscribeReferralsFirestore();
@@ -1594,6 +1995,134 @@ class CrmDataService {
     }
 
     return cachedSubAssessments;
+  }
+
+  public getEvolutionsSyncError(): string | null {
+    return lastEvolutionsError;
+  }
+
+  public async refreshClinicalEvolutions(patientEmailOrId: string = 'jcecato@gmail.com'): Promise<ClinicalEvolutionItem[]> {
+    if (!isFirebaseConfigured() || !db) {
+      return cachedSubEvolutions;
+    }
+
+    const targetDocId = (patientEmailOrId && patientEmailOrId.includes('@'))
+      ? patientEmailOrId.toLowerCase().trim()
+      : (auth?.currentUser?.email?.toLowerCase().trim() ||
+         (typeof window !== 'undefined' ? localStorage.getItem('vittare_remembered_email')?.toLowerCase().trim() : null) ||
+         'jcecato@gmail.com');
+
+    try {
+      const colRef = collection(db, 'patients', targetDocId, 'evolutions');
+      let snap;
+      try {
+        snap = await getDocsFromServer(colRef);
+      } catch {
+        snap = await getDocs(colRef);
+      }
+
+      lastEvolutionsError = null;
+      let freshEvs: ClinicalEvolutionItem[] = [];
+
+      if (!snap.empty) {
+        const summaryDoc = snap.docs.find(d => d.id === 'resumo_geral');
+        if (summaryDoc) {
+          const normSum = normalizeClinicalSummary({ ...summaryDoc.data(), id: summaryDoc.id });
+          if (normSum) cachedClinicalSummaryInfo = normSum;
+        }
+        const regularDocs = snap.docs.filter(d => d.id !== 'resumo_geral');
+        freshEvs = sortClinicalEvolutionsDesc(
+          regularDocs.map(docSnap => normalizeClinicalEvolution({ ...docSnap.data(), id: docSnap.id }, docSnap.id))
+        );
+        if (freshEvs.length > 0) {
+          cachedSubEvolutions = freshEvs;
+        }
+      } else {
+        const anamRef = collection(db, 'patients', targetDocId, 'anamnesis');
+        let anamSnap;
+        try {
+          anamSnap = await getDocsFromServer(anamRef);
+        } catch {
+          anamSnap = await getDocs(anamRef);
+        }
+        if (!anamSnap.empty) {
+          freshEvs = sortClinicalEvolutionsDesc(
+            anamSnap.docs
+              .filter(d => {
+                const dt = d.data();
+                return Boolean(dt.resumoGeral || dt.summary || dt.planoDeAcao || dt.proximosPassos || dt.observacoes || dt.crmGeneralNotes || dt.clinicalNotes || dt.notes);
+              })
+              .map(d => normalizeClinicalEvolution({ ...d.data(), id: d.id }, d.id))
+          );
+          cachedSubEvolutions = freshEvs;
+        }
+      }
+
+      // Busca dedicada em patients/{email}/evolution/resumo_geral (prioritária)
+      try {
+        const summaryRef = doc(db, 'patients', targetDocId, 'evolution', 'resumo_geral');
+        let sumSnap;
+        try {
+          sumSnap = await getDocFromServer(summaryRef);
+        } catch {
+          sumSnap = await getDoc(summaryRef);
+        }
+        if (sumSnap.exists()) {
+          const normSum = normalizeClinicalSummary({ ...sumSnap.data(), id: sumSnap.id });
+          if (normSum) cachedClinicalSummaryInfo = normSum;
+        }
+      } catch (sumReadErr) {
+        console.info("🔒 [Vittáre Sync] Sem acesso direto a evolution/resumo_geral:", sumReadErr);
+      }
+
+      // Fallback pelo campo clinicalSummary no documento raiz patients/{email}
+      if (!cachedClinicalSummaryInfo) {
+        try {
+          const rootRef = doc(db, 'patients', targetDocId);
+          let rootSnap;
+          try {
+            rootSnap = await getDocFromServer(rootRef);
+          } catch {
+            rootSnap = await getDoc(rootRef);
+          }
+          if (rootSnap.exists()) {
+            const rootData = rootSnap.data();
+            if (typeof rootData?.clinicalSummary === 'string' && rootData.clinicalSummary.trim()) {
+              const fallbackDate = rootData.clinicalSummaryDate || (rootData.lastSyncTimestamp ? new Date(rootData.lastSyncTimestamp).toLocaleDateString('pt-BR') : '');
+              const normRootSum = normalizeClinicalSummary(rootData.clinicalSummary, fallbackDate);
+              if (normRootSum) cachedClinicalSummaryInfo = normRootSum;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const all = this.getAllLocalPatients();
+      const currentP = all[patientEmailOrId] || all[targetDocId] || INITIAL_PATIENTS['paciente-template-01'];
+      const updatedPatient: PatientProfile = {
+        ...currentP,
+        clinicalEvolutions: freshEvs.length > 0 ? freshEvs : (currentP.clinicalEvolutions || []),
+        ...(cachedClinicalSummaryInfo ? {
+          clinicalSummary: cachedClinicalSummaryInfo.summary,
+          clinicalSummaryInfo: cachedClinicalSummaryInfo
+        } : {})
+      };
+      all[patientEmailOrId] = updatedPatient;
+      all[targetDocId] = updatedPatient;
+      all['paciente-template-01'] = updatedPatient;
+      this.saveAllLocalPatients(all);
+      this.notifyListeners(patientEmailOrId, updatedPatient);
+      if (targetDocId !== patientEmailOrId) {
+        this.notifyListeners(targetDocId, updatedPatient);
+      }
+      return updatedPatient.clinicalEvolutions || [];
+    } catch (err: any) {
+      lastEvolutionsError = err?.code || 'permission-denied';
+      console.warn("⚠️ [Vittáre Sync] Erro ao atualizar subcoleção evolutions sob demanda:", err);
+    }
+
+    return cachedSubEvolutions;
   }
 
   public exportPatientJson(patientId: string): string {

@@ -63,6 +63,18 @@ service cloud.firestore {
         allow read: if true;
         allow write: if false;
       }
+
+      // Subcoleção dedicada de Resumo Geral da Evolução (CRM grava resumo_geral, Paciente lê)
+      match /evolution/{evolutionId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Evoluções Clínicas / Anotações (CRM grava, Paciente lê)
+      match /evolutions/{evolutionId} {
+        allow read: if true;
+        allow write: if false;
+      }
     }
   }
 }
