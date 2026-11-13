@@ -87,6 +87,7 @@ export interface PhysicalAssessmentItem {
   pdfUrl?: string;
   metrics?: PhysicalAssessmentMetrics;
   updatedAt?: string;
+  createdAt?: string | number;
 }
 
 export interface MealGuideItem {

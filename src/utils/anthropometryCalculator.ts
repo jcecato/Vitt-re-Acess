@@ -1,7 +1,8 @@
-import { PhysicalAssessmentMetrics, PatientProfile } from '../types/patient';
+import { PhysicalAssessmentMetrics, PhysicalAssessmentItem, PatientProfile } from '../types/patient';
 
 export type BarSpectrumMode = 'bilateral' | 'low-is-good' | 'high-is-good' | 'none';
 export type ClinicalZoneStatus = 'ideal' | 'atencao' | 'alerta' | 'neutral';
+export type EvolutionDirection = 'lower-better' | 'higher-better' | 'neutral';
 
 export interface SmartMetricCard {
   id: string;
@@ -13,6 +14,28 @@ export interface SmartMetricCard {
   zoneStatus: ClinicalZoneStatus;
   markerPercent: number | null;
   ageTag?: string;
+  rawValue?: number | null;
+  evolutionDirection?: EvolutionDirection;
+}
+
+export interface EvolutionMetricPoint {
+  date: string;
+  value: number;
+  valueDisplay: string;
+  shortLabel: string;
+}
+
+export interface EvolutionMetricSeries {
+  id: string;
+  title: string;
+  referenceText: string;
+  evolutionDirection: EvolutionDirection;
+  points: EvolutionMetricPoint[];
+}
+
+export interface EvolutionMetricGroup {
+  title: string;
+  items: EvolutionMetricSeries[];
 }
 
 export interface SmartChecklistItem {
@@ -397,7 +420,7 @@ const obterClassificacaoMusculo = (sexo: string, idade: number, valorAtual: numb
 
 export function calculateFullAnthropometry(
   rawMetrics: PhysicalAssessmentMetrics = {},
-  patient?: PatientProfile
+  patient?: Partial<PatientProfile>
 ): ComputedAnthropometryReport {
   const m = rawMetrics || {};
 
@@ -485,7 +508,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.pesoCorporal,
     barMode: 'bilateral',
     zoneStatus: pesoBar.status,
-    markerPercent: pesoBar.markerPct
+    markerPercent: pesoBar.markerPct,
+    rawValue: peso,
+    evolutionDirection: 'lower-better'
   };
 
   if (peso !== null) {
@@ -565,7 +590,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.imc,
     barMode: 'bilateral',
     zoneStatus: imcBar.status,
-    markerPercent: imcBar.markerPct
+    markerPercent: imcBar.markerPct,
+    rawValue: imc,
+    evolutionDirection: 'lower-better'
   };
 
   // 3. Massa Magra (FFMI)
@@ -584,7 +611,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.ffmi,
     barMode: 'high-is-good',
     zoneStatus: ffmiBar.status,
-    markerPercent: ffmiBar.markerPct
+    markerPercent: ffmiBar.markerPct,
+    rawValue: ffmi !== null ? parseFloat(ffmi.toFixed(1)) : null,
+    evolutionDirection: 'higher-better'
   };
 
   // 4. Gordura Corporal (% e kg)
@@ -643,7 +672,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.gorduraCorporal,
     barMode: 'bilateral',
     zoneStatus: fatBar.status,
-    markerPercent: fatBar.markerPct
+    markerPercent: fatBar.markerPct,
+    rawValue: gorduraPct,
+    evolutionDirection: 'lower-better'
   };
 
   // 5. Massa Muscular (% e kg)
@@ -680,7 +711,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.massaMuscular,
     barMode: 'high-is-good',
     zoneStatus: muscBar.status,
-    markerPercent: muscBar.markerPct
+    markerPercent: muscBar.markerPct,
+    rawValue: musculoPct,
+    evolutionDirection: 'higher-better'
   };
 
   // 6. Gordura Visceral
@@ -712,7 +745,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.gorduraVisceral,
     barMode: 'low-is-good',
     zoneStatus: viscBar.status,
-    markerPercent: viscBar.markerPct
+    markerPercent: viscBar.markerPct,
+    rawValue: visceral,
+    evolutionDirection: 'lower-better'
   };
 
   // 7. Peso Ósseo & Massa Livre de Gordura (MMLG)
@@ -741,7 +776,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.mmlg,
     barMode: 'high-is-good',
     zoneStatus: mmlgBar.status,
-    markerPercent: mmlgBar.markerPct
+    markerPercent: mmlgBar.markerPct,
+    rawValue: mmlg !== null && mmlg > 0 ? parseFloat(mmlg.toFixed(1)) : null,
+    evolutionDirection: 'higher-better'
   };
 
   const cardPesoOsseo: SmartMetricCard = {
@@ -752,7 +789,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.pesoOsseo,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: pesoOsseo !== null && pesoOsseo > 0 ? parseFloat(pesoOsseo.toFixed(1)) : null,
+    evolutionDirection: 'neutral'
   };
 
   // 8. Cintura, Abdominal, Quadril, Cintura-Quadril, Cintura-Estatura
@@ -791,7 +830,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.cintura,
     barMode: 'bilateral',
     zoneStatus: cintBar.status,
-    markerPercent: cintBar.markerPct
+    markerPercent: cintBar.markerPct,
+    rawValue: cintura,
+    evolutionDirection: 'lower-better'
   };
 
   const refAbd = abdominal !== null ? getRef('abdominal', sexo, abdominal) : null;
@@ -827,7 +868,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.abdominal,
     barMode: 'bilateral',
     zoneStatus: abdBar.status,
-    markerPercent: abdBar.markerPct
+    markerPercent: abdBar.markerPct,
+    rawValue: abdominal,
+    evolutionDirection: 'lower-better'
   };
 
   const cardQuadril: SmartMetricCard = {
@@ -838,7 +881,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.quadril,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: quadril,
+    evolutionDirection: 'neutral'
   };
 
   const cinturaEfetiva = cintura ?? abdominal;
@@ -878,7 +923,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.rcq,
     barMode: 'bilateral',
     zoneStatus: rcqBar.status,
-    markerPercent: rcqBar.markerPct
+    markerPercent: rcqBar.markerPct,
+    rawValue: rcq !== null ? parseFloat(rcq.toFixed(2)) : null,
+    evolutionDirection: 'lower-better'
   };
 
   const rce = cinturaEfetiva !== null && altura > 0 ? cinturaEfetiva / altura : null;
@@ -894,7 +941,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.rce,
     barMode: 'bilateral',
     zoneStatus: rceBar.status,
-    markerPercent: rceBar.markerPct
+    markerPercent: rceBar.markerPct,
+    rawValue: rce !== null ? parseFloat(rce.toFixed(2)) : null,
+    evolutionDirection: 'lower-better'
   };
 
   // Braço (MUAC) & Reserva Muscular Braço (CMB)
@@ -933,7 +982,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.braco,
     barMode: 'bilateral',
     zoneStatus: muacBar.status,
-    markerPercent: muacBar.markerPct
+    markerPercent: muacBar.markerPct,
+    rawValue: braco,
+    evolutionDirection: 'higher-better'
   };
 
   const cmb = braco !== null && dobraTri !== null ? parseFloat((braco - 0.314 * dobraTri).toFixed(1)) : null;
@@ -970,7 +1021,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.cmb,
     barMode: 'high-is-good',
     zoneStatus: cmbBar.status,
-    markerPercent: cmbBar.markerPct
+    markerPercent: cmbBar.markerPct,
+    rawValue: cmb,
+    evolutionDirection: 'higher-better'
   };
 
   // Dobra Tricipital
@@ -988,7 +1041,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.dobrasCutaneas,
     barMode: 'bilateral',
     zoneStatus: tsfBar.status,
-    markerPercent: tsfBar.markerPct
+    markerPercent: tsfBar.markerPct,
+    rawValue: dobraTri,
+    evolutionDirection: 'lower-better'
   };
 
   // Panturrilha
@@ -1044,7 +1099,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.panturrilha,
     barMode: 'bilateral',
     zoneStatus: pantBar.status,
-    markerPercent: pantBar.markerPct
+    markerPercent: pantBar.markerPct,
+    rawValue: panturrilha,
+    evolutionDirection: 'higher-better'
   };
 
   // Coxa Gordura/Músculo & Gordura Coxa
@@ -1107,7 +1164,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.compCoxa,
     barMode: 'high-is-good',
     zoneStatus: coxaCompBar.status,
-    markerPercent: coxaCompBar.markerPct
+    markerPercent: coxaCompBar.markerPct,
+    rawValue: pctMuscCoxa !== null ? Math.round(pctMuscCoxa) : null,
+    evolutionDirection: 'higher-better'
   };
 
   const dobraCoxaBar = dobraCoxa !== null
@@ -1122,7 +1181,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.dobrasCutaneas,
     barMode: 'bilateral',
     zoneStatus: dobraCoxaBar.status,
-    markerPercent: dobraCoxaBar.markerPct
+    markerPercent: dobraCoxaBar.markerPct,
+    rawValue: dobraCoxa,
+    evolutionDirection: 'lower-better'
   };
 
   const cardCoxa: SmartMetricCard = {
@@ -1133,7 +1194,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.perimetrosMembros,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: coxa,
+    evolutionDirection: 'higher-better'
   };
 
   const cardAntebraco: SmartMetricCard = {
@@ -1144,7 +1207,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.perimetrosMembros,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: antebraco,
+    evolutionDirection: 'higher-better'
   };
 
   const cardPunho: SmartMetricCard = {
@@ -1155,7 +1220,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.diametrosOsseos,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: punho,
+    evolutionDirection: 'neutral'
   };
 
   const cardFemur: SmartMetricCard = {
@@ -1166,7 +1233,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.diametrosOsseos,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: femur,
+    evolutionDirection: 'neutral'
   };
 
   const cardUmero: SmartMetricCard = {
@@ -1177,7 +1246,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.diametrosOsseos,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: umero,
+    evolutionDirection: 'neutral'
   };
 
   // 9. Taxa Energia Repouso (TMB) e Gasto de Energia Total (GET)
@@ -1194,7 +1265,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.tmb,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: tmb,
+    evolutionDirection: 'neutral'
   };
 
   const cardGET: SmartMetricCard = {
@@ -1205,7 +1278,9 @@ export function calculateFullAnthropometry(
     infoText: INFO_MODAL_TEXTS.get,
     barMode: 'none',
     zoneStatus: 'neutral',
-    markerPercent: null
+    markerPercent: null,
+    rawValue: get,
+    evolutionDirection: 'neutral'
   };
 
   return {
@@ -1272,3 +1347,69 @@ export function calculateFullAnthropometry(
     }
   };
 }
+
+/**
+ * Constrói todas as séries evolutivas (26 parâmetros completos da aba Visualizar)
+ * a partir do histórico real de avaliações do Firebase em ordem cronológica crescente.
+ */
+export function buildEvolutionGroupsFromAssessments(
+  assessmentsDesc: PhysicalAssessmentItem[],
+  patient?: Partial<PatientProfile>
+): EvolutionMetricGroup[] {
+  if (!Array.isArray(assessmentsDesc) || assessmentsDesc.length === 0) {
+    return [];
+  }
+
+  // assessmentsDesc vem do mais recente -> mais antigo; invertemos para mais antigo -> mais recente no gráfico
+  const chronological = [...assessmentsDesc].reverse();
+
+  // Template estrutural baseado na avaliação mais recente (ou perfil) para preservar grupos e referências
+  const templateReport = calculateFullAnthropometry(assessmentsDesc[0]?.metrics || {}, patient);
+  const seriesMap = new Map<string, EvolutionMetricSeries>();
+
+  const groups: EvolutionMetricGroup[] = templateReport.groups.map((grp) => ({
+    title: grp.title,
+    items: grp.items.map((card) => {
+      const series: EvolutionMetricSeries = {
+        id: card.id,
+        title: card.title,
+        referenceText: card.referenceText,
+        evolutionDirection: card.evolutionDirection || 'neutral',
+        points: []
+      };
+      seriesMap.set(card.id, series);
+      return series;
+    })
+  }));
+
+  chronological.forEach((assessment) => {
+    const cleanDate = (assessment.dateStr || '')
+      .replace(/^Data:\s*/i, '')
+      .trim();
+    const report = calculateFullAnthropometry(assessment.metrics || {}, patient);
+
+    report.groups.forEach((grp) => {
+      grp.items.forEach((card) => {
+        const targetSeries = seriesMap.get(card.id);
+        if (!targetSeries) return;
+
+        const val = card.rawValue;
+        if (val !== null && val !== undefined && Number.isFinite(val) && val > 0 && card.valueDisplay !== '-') {
+          const shortLabel = card.valueDisplay
+            .replace(/^Nível\s+/i, '')
+            .split(' ')[0];
+
+          targetSeries.points.push({
+            date: cleanDate,
+            value: val,
+            valueDisplay: card.valueDisplay,
+            shortLabel
+          });
+        }
+      });
+    });
+  });
+
+  return groups;
+}
+

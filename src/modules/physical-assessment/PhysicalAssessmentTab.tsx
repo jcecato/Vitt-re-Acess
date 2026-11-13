@@ -1,6 +1,12 @@
 import React from 'react';
-import { PatientProfile, AssessmentComparisonMetric, PhysicalAssessmentItem } from '../../types/patient';
-import { calculateFullAnthropometry, BarSpectrumMode, ClinicalZoneStatus } from '../../utils/anthropometryCalculator';
+import { PatientProfile, PhysicalAssessmentItem } from '../../types/patient';
+import {
+  calculateFullAnthropometry,
+  buildEvolutionGroupsFromAssessments,
+  BarSpectrumMode,
+  ClinicalZoneStatus
+} from '../../utils/anthropometryCalculator';
+import { sortPhysicalAssessmentsDesc } from '../../services/crmDataService';
 
 interface PhysicalAssessmentTabProps {
   patient: PatientProfile;
@@ -22,75 +28,16 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
   const [activeInfoCard, setActiveInfoCard] = React.useState<{ title: string; text: string } | null>(null);
   const [pendingAssessmentForGuide, setPendingAssessmentForGuide] = React.useState<PhysicalAssessmentItem | null>(null);
 
-  // Extração das datas das avaliações realizadas para sincronizar os pontos da curva
-  const dateInitial = patient.physicalAssessments?.[0]?.dateStr?.replace('Data: ', '') || '27/09/2026';
-  const dateRecent = patient.physicalAssessments?.[1]?.dateStr?.replace('Data: ', '')?.replace('Aguardando laudo', '28/10/2026') || '28/10/2026';
+  const sortedAssessments = React.useMemo(
+    () => sortPhysicalAssessmentsDesc(patient.physicalAssessments || []),
+    [patient.physicalAssessments]
+  );
 
-  // Métricas temporárias parametrizadas para comparação de avaliações feitas duas vezes
-  // Preparado de ponta a ponta: quando o CRM enviar a lista completa, ela substitui automaticamente
-  const defaultComparisons: AssessmentComparisonMetric[] = [
-    {
-      id: 'comp-peso-atual',
-      name: 'Peso',
-      reference: 'Meta clínica: 75,0 kg',
-      unit: 'kg',
-      higherIsBetter: false,
-      points: [
-        { date: dateInitial, value: 82.5, valueDisplay: '82,5 kg' },
-        { date: dateRecent, value: 78.8, valueDisplay: '78,8 kg' }
-      ]
-    },
-    {
-      id: 'comp-imc',
-      name: 'IMC',
-      reference: 'Ref. 18,5 – 24,9 kg/m²',
-      unit: 'kg/m²',
-      higherIsBetter: false,
-      points: [
-        { date: dateInitial, value: 27.2, valueDisplay: '27,2' },
-        { date: dateRecent, value: 25.8, valueDisplay: '25,8' }
-      ]
-    },
-    {
-      id: 'comp-gordura',
-      name: '% de Gordura',
-      reference: 'Meta clínica: < 20%',
-      unit: '%',
-      higherIsBetter: false,
-      points: [
-        { date: dateInitial, value: 26.5, valueDisplay: '26,5%' },
-        { date: dateRecent, value: 22.8, valueDisplay: '22,8%' }
-      ]
-    },
-    {
-      id: 'comp-massa-muscular',
-      name: '% de Massa Muscular',
-      reference: 'Meta clínica: > 35%',
-      unit: '%',
-      higherIsBetter: true,
-      points: [
-        { date: dateInitial, value: 34.2, valueDisplay: '34,2%' },
-        { date: dateRecent, value: 36.4, valueDisplay: '36,4%' }
-      ]
-    },
-    {
-      id: 'comp-circunferencia',
-      name: 'Circunferência Abdominal',
-      reference: 'Ref. < 94 cm',
-      unit: 'cm',
-      higherIsBetter: false,
-      points: [
-        { date: dateInitial, value: 94.0, valueDisplay: '94 cm' },
-        { date: dateRecent, value: 88.0, valueDisplay: '88 cm' }
-      ]
-    }
-  ];
-
-  // Se o CRM enviar patient.physicalAssessmentComparisons customizado, consome direto
-  const comparisons: AssessmentComparisonMetric[] =
-    patient.physicalAssessmentComparisons && patient.physicalAssessmentComparisons.length > 0
-      ? patient.physicalAssessmentComparisons
-      : [];
+  // Gera todas as séries evolutivas (todos os 26 parâmetros da aba Visualizar) direto do histórico do Firebase
+  const evolutionGroups = React.useMemo(
+    () => buildEvolutionGroupsFromAssessments(sortedAssessments, patient),
+    [sortedAssessments, patient]
+  );
 
   return (
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full">
@@ -113,7 +60,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
           )}
         </div>
 
-        {(!patient.physicalAssessments || patient.physicalAssessments.length === 0) ? (
+        {sortedAssessments.length === 0 ? (
           syncError === 'permission-denied' ? (
             <div className="bg-amber-500/10 border border-amber-400/40 rounded-2xl p-4 text-left space-y-2">
               <div className="flex items-center gap-2 text-amber-300 font-bold text-[16px]">
@@ -139,7 +86,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
           )
         ) : (
           <div className="space-y-4">
-            {patient.physicalAssessments.map((item, index) => {
+            {sortedAssessments.map((item, index) => {
             const isReady = item.status === 'laudo';
             const displayTitle = item.title 
               ? item.title.toUpperCase() 
@@ -202,230 +149,259 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
         )}
       </div>
 
-      {/* Seção 2: Comparativo no final com gráfico de curva e datas */}
-      {comparisons.filter((item) => item.points && item.points.length > 1).length > 0 && (
-      <div className="pt-2">
-        <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
-          Evolução das Avaliações Físicas
-        </div>
-        <div className="text-[18px] text-[#e0e0ed] leading-relaxed mb-3">
-          Comparativo entre avaliações com curva evolutiva por data.
-        </div>
+      {/* Seção 2: Evolução completa de todos os parâmetros avaliados (espelho da aba Visualizar) */}
+      {evolutionGroups.length > 0 && (
+        <div className="pt-2 space-y-5">
+          <div>
+            <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] mb-1">
+              Evolução das Avaliações Físicas
+            </div>
+            <div className="text-[18px] text-[#e0e0ed] leading-relaxed">
+              Comparativo por data de todos os indicadores da sua avaliação corporal.
+            </div>
+          </div>
 
-        <div className="space-y-4">
-          {comparisons
-            .filter((item) => item.points && item.points.length > 1)
-            .map((item) => {
-              // Ordenação cronológica dos pontos para cálculo seguro
-              const parsePtDate = (dStr: string): number => {
-                const match = dStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-                if (!match) return 0;
-                return new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10)).getTime();
-              };
+          {evolutionGroups.map((group, gIdx) => (
+            <div key={gIdx} className="space-y-3">
+              <div className="text-[14px] font-bold text-[#5eea8f] uppercase tracking-[0.06em] px-1">
+                {group.title}
+              </div>
 
-              const sortedPoints = [...item.points].sort((a, b) => parsePtDate(a.date) - parsePtDate(b.date));
-              const firstPoint = sortedPoints[0];
-              const lastPoint = sortedPoints[sortedPoints.length - 1];
+              <div className="space-y-4">
+                {group.items.map((item) => {
+                  const pts = item.points;
+                  const hasNoData = pts.length === 0;
+                  const hasSinglePoint = pts.length === 1;
+                  const hasCurve = pts.length >= 2;
 
-              // Cálculo automático da variação percentual
-              let pctChange = 0;
-              if (firstPoint && firstPoint.value > 0 && lastPoint) {
-                pctChange = ((lastPoint.value - firstPoint.value) / firstPoint.value) * 100;
-              }
+                  let badgeLabel = '-';
+                  let badgeArrow = '';
+                  let badgeColor = 'text-[#e0e0ed] bg-white/[0.05] border-white/15';
 
-              const absPct = Math.abs(pctChange);
-              const formattedPct = absPct.toFixed(1);
+                  if (hasCurve) {
+                    const firstPoint = pts[0];
+                    const lastPoint = pts[pts.length - 1];
+                    let pctChange = 0;
+                    if (firstPoint && firstPoint.value > 0 && lastPoint) {
+                      pctChange = ((lastPoint.value - firstPoint.value) / firstPoint.value) * 100;
+                    }
+                    const formattedPct = Math.abs(pctChange).toFixed(1);
+                    badgeLabel = `${formattedPct}%`;
 
-              // Avaliação de melhoria clínica:
-              // Para peso, gordura, IMC e cintura: redução é positiva
-              // Para massa muscular: aumento é positivo
-              const higherIsBetter = item.higherIsBetter === true;
-
-              let arrow = '↔';
-              let badgeColor = 'text-[#e0e0ed] bg-white/[0.05] border-white/10';
-
-              if (pctChange < -0.1) {
-                arrow = '↓';
-                badgeColor = !higherIsBetter
-                  ? 'text-[#5eea8f] bg-[#5eea8f]/10 border-[#5eea8f]/25'
-                  : 'text-[#e57373] bg-[#e57373]/10 border-[#e57373]/25';
-              } else if (pctChange > 0.1) {
-                arrow = '↑';
-                badgeColor = higherIsBetter
-                  ? 'text-[#5eea8f] bg-[#5eea8f]/10 border-[#5eea8f]/25'
-                  : 'text-[#f5a623] bg-[#f5a623]/10 border-[#f5a623]/25';
-              } else {
-                arrow = '↔';
-                badgeColor = 'text-[#e0e0ed] bg-white/[0.05] border-white/10';
-              }
-
-              return (
-                <div
-                  key={item.id}
-                  className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm"
-                >
-                  {/* Linha superior: Nome em 19px/218px, Ref em 17px abaixo e Badge calculada em 18px */}
-                  <div className="flex items-start justify-between gap-2 mb-3.5">
-                    <div className="flex flex-col min-w-0 pr-1">
-                      <strong 
-                        style={{ paddingLeft: '0px' }}
-                        className="text-white font-semibold text-[19px] leading-tight w-[218px] max-w-full break-words"
-                      >
-                        {item.name}
-                      </strong>
-                      {item.reference && (
-                        <span className="text-[#e0e0ed] text-[17px] font-normal leading-snug mt-1">
-                          {item.reference}
-                        </span>
-                      )}
-                    </div>
-
-                    <span className={`text-[18px] font-semibold border px-2.5 py-0.5 rounded-lg shrink-0 flex items-center gap-1.5 ${badgeColor}`}>
-                      <span className="text-[20px] leading-none font-bold">{arrow}</span>
-                      <span>{formattedPct}%</span>
-                    </span>
-                  </div>
-
-                  {/* Gráfico horizontal com curva SVG, gradiente suave e datas nos pontos */}
-                  {(() => {
-                    const values = sortedPoints.map((p) => p.value);
-                    const minVal = Math.min(...values);
-                    const maxVal = Math.max(...values);
-                    const isFlat = Math.abs(maxVal - minVal) < 0.001;
-
-                    // Coordenadas calculadas para visualização agradável e harmônica da curva
-                    const coords = sortedPoints.map((pt, i) => {
-                      const x = 50 + i * (220 / Math.max(1, sortedPoints.length - 1));
-                      let y = 30;
-                      if (!isFlat) {
-                        // Mapeia valor entre y=18 (pico superior) e y=40 (base inferior)
-                        y = 40 - ((pt.value - minVal) / (maxVal - minVal)) * 22;
+                    if (item.evolutionDirection === 'neutral') {
+                      if (pctChange < -0.1) badgeArrow = '↓';
+                      else if (pctChange > 0.1) badgeArrow = '↑';
+                      else badgeArrow = '↔';
+                      badgeColor = 'text-[#e0e0ed] bg-white/[0.05] border-white/15';
+                    } else {
+                      const higherIsBetter = item.evolutionDirection === 'higher-better';
+                      if (pctChange < -0.1) {
+                        badgeArrow = '↓';
+                        badgeColor = !higherIsBetter
+                          ? 'text-[#5eea8f] bg-[#5eea8f]/10 border-[#5eea8f]/25'
+                          : 'text-[#e57373] bg-[#e57373]/10 border-[#e57373]/25';
+                      } else if (pctChange > 0.1) {
+                        badgeArrow = '↑';
+                        badgeColor = higherIsBetter
+                          ? 'text-[#5eea8f] bg-[#5eea8f]/10 border-[#5eea8f]/25'
+                          : 'text-[#f5a623] bg-[#f5a623]/10 border-[#f5a623]/25';
+                      } else {
+                        badgeArrow = '↔';
+                        badgeColor = 'text-[#e0e0ed] bg-white/[0.05] border-white/10';
                       }
-                      return { x, y, pt };
-                    });
+                    }
+                  }
 
-                    // Curva Bezier suave conectando os pontos
-                    const start = coords[0];
-                    const end = coords[coords.length - 1];
-                    const cX1 = start.x + (end.x - start.x) * 0.5;
-                    const cY1 = start.y;
-                    const cX2 = start.x + (end.x - start.x) * 0.5;
-                    const cY2 = end.y;
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm"
+                    >
+                      {/* Cabeçalho do Card Evolutivo */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex flex-col min-w-0 pr-1">
+                          <strong
+                            style={{ paddingLeft: '0px' }}
+                            className="text-white font-semibold text-[19px] leading-tight w-[218px] max-w-full break-words"
+                          >
+                            {item.title}
+                          </strong>
+                          {item.referenceText && (
+                            <span className="text-[#e0e0ed] text-[17px] font-normal leading-snug mt-1">
+                              {item.referenceText}
+                            </span>
+                          )}
+                        </div>
 
-                    const curvePath = coords.length === 2
-                      ? `M ${start.x} ${start.y} C ${cX1} ${cY1}, ${cX2} ${cY2}, ${end.x} ${end.y}`
-                      : coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ');
+                        <span className={`text-[18px] font-semibold border px-2.5 py-0.5 rounded-lg shrink-0 flex items-center justify-center gap-1.5 min-w-[54px] ${badgeColor}`}>
+                          {badgeArrow && (
+                            <span className="text-[20px] leading-none font-bold">{badgeArrow}</span>
+                          )}
+                          <span>{badgeLabel}</span>
+                        </span>
+                      </div>
 
-                    const areaPath = `${curvePath} L ${end.x} 48 L ${start.x} 48 Z`;
+                      {/* Gráfico horizontal conforme disponibilidade de datas (0, 1 ou 2+ pontos) */}
+                      {hasNoData && (
+                        <div className="w-full h-12 px-1 mt-2 flex items-center justify-center relative">
+                          <svg viewBox="0 0 320 44" className="w-full h-full">
+                            <line x1="10" y1="22" x2="310" y2="22" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+                          </svg>
+                          <span className="absolute text-[14px] text-[#a5a4b8] bg-[#141726]/90 px-3 py-0.5 rounded-full border border-white/10">
+                            Sem medições registradas no histórico
+                          </span>
+                        </div>
+                      )}
 
-                    return (
-                      <div className="w-full h-16 px-1 mt-4 mb-1">
-                        <svg viewBox="0 0 320 64" className="w-full h-full overflow-visible">
-                          <defs>
-                            <linearGradient id={`grad-eval-${item.id}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#5eea8f" stopOpacity={isFlat ? '0.15' : '0.45'} />
-                              <stop offset="45%" stopColor="#5eea8f" stopOpacity={isFlat ? '0.06' : '0.22'} />
-                              <stop offset="85%" stopColor="#5eea8f" stopOpacity={isFlat ? '0.01' : '0.05'} />
-                              <stop offset="100%" stopColor="#5eea8f" stopOpacity="0.0" />
-                            </linearGradient>
-                            <filter id={`glow-eval-${item.id}`} x="-10%" y="-10%" width="120%" height="130%">
-                              <feDropShadow dx="0" dy="2" stdDeviation={isFlat ? '3' : '2.5'} floodColor="#5eea8f" floodOpacity={isFlat ? '0.45' : '0.3'} />
-                            </filter>
-                          </defs>
-
-                          {/* Linhas de referência horizontal sutis */}
-                          <line x1="10" y1="16" x2="310" y2="16" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
-                          <line x1="10" y1="44" x2="310" y2="44" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
-
-                          {/* Área com gradiente vertical translúcido */}
-                          <path d={areaPath} fill={`url(#grad-eval-${item.id})`} />
-
-                          {/* Feixe suave vertical descendo de cada ponto para o baseline */}
-                          {coords.map((c, i) => (
-                            <line
-                              key={`beam-${i}`}
-                              x1={c.x}
-                              y1={c.y + 2}
-                              x2={c.x}
-                              y2={46}
-                              stroke="#5eea8f"
-                              strokeWidth="1"
-                              strokeDasharray="2 3"
-                              strokeOpacity={0.25}
-                            />
-                          ))}
-
-                          {/* Halo emissivo inferior para garantir espessura e presença visual */}
-                          <path
-                            d={curvePath}
-                            fill="none"
-                            stroke="#5eea8f"
-                            strokeWidth={isFlat ? '4.5' : '4'}
-                            strokeOpacity={isFlat ? 0.35 : 0.2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-
-                          {/* Linha da curva principal com brilho e espessura destacada */}
-                          <path
-                            d={curvePath}
-                            fill="none"
-                            stroke="#5eea8f"
-                            strokeWidth={isFlat ? '3' : '2.5'}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            filter={`url(#glow-eval-${item.id})`}
-                          />
-
-                          {/* Bullet points com valores acima e datas abaixo */}
-                            {coords.map((c, i) => {
-                              const numericOnly = c.pt.valueDisplay
-                                ? c.pt.valueDisplay.split(' ')[0]
-                                : String(c.pt.value);
-
-                              return (
-                                <g key={i}>
-                                  {/* Halo exterior suave */}
-                                  <circle cx={c.x} cy={c.y} r="6.5" fill="#5eea8f" fillOpacity="0.2" />
-                                  {/* Bullet principal */}
-                                  <circle cx={c.x} cy={c.y} r="4" fill="#5eea8f" stroke="#14142a" strokeWidth="2" />
-                                  <circle cx={c.x} cy={c.y} r="1.5" fill="#ffffff" />
-
-                                  {/* Apenas o número acima do ponto com fonte nítida */}
-                                  <text
-                                    x={c.x}
-                                    y={c.y - 10}
-                                    fill="#ffffff"
-                                    fontSize="18"
-                                    fontWeight="bold"
-                                    textAnchor="middle"
-                                  >
-                                    {numericOnly}
-                                  </text>
-
-                                  {/* Data abaixo do gráfico em 14px legível */}
-                                  <text
-                                    x={c.x}
-                                    y="58"
-                                    fill="#e0e0ed"
-                                    fontSize="14"
-                                    fontWeight="normal"
-                                    textAnchor="middle"
-                                  >
-                                    {c.pt.date}
-                                  </text>
-                                </g>
-                              );
-                            })}
+                      {hasSinglePoint && (
+                        <div className="w-full h-[84px] px-1 mt-2 mb-1">
+                          <svg viewBox="0 0 320 84" className="w-full h-full ml-0 pt-0 overflow-visible">
+                            <line x1="10" y1="32" x2="310" y2="32" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                            <line x1="10" y1="60" x2="310" y2="60" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                            <line x1="160" y1="47" x2="160" y2="63" stroke="#5eea8f" strokeWidth="1" strokeDasharray="2 3" strokeOpacity={0.25} />
+                            <circle cx="160" cy="45" r="6.5" fill="#5eea8f" fillOpacity="0.2" />
+                            <circle cx="160" cy="45" r="4" fill="#5eea8f" stroke="#14142a" strokeWidth="2" />
+                            <circle cx="160" cy="45" r="1.5" fill="#ffffff" />
+                            <text x="160" y="34" fill="#ffffff" fontSize="18" fontWeight="bold" textAnchor="middle">
+                              {pts[0].shortLabel}
+                            </text>
+                            <text x="160" y="77" fill="#e0e0ed" fontSize="14" fontWeight="normal" textAnchor="middle">
+                              {pts[0].date}
+                            </text>
                           </svg>
                         </div>
-                      );
-                    })()}
-                  </div>
-                );
-              })}
+                      )}
+
+                      {hasCurve && (() => {
+                        const values = pts.map((p) => p.value);
+                        const minVal = Math.min(...values);
+                        const maxVal = Math.max(...values);
+                        const isFlat = Math.abs(maxVal - minVal) < 0.001;
+                        const svgWidth = Math.max(320, pts.length * 105);
+                        const padX = 50;
+
+                        const coords = pts.map((pt, i) => {
+                          const x = padX + i * ((svgWidth - padX * 2) / Math.max(1, pts.length - 1));
+                          let y = 45;
+                          if (!isFlat) {
+                            // Mapeia valor entre y=34 (pico superior, deixando 34px livres no topo para rótulo 18px) e y=56 (base)
+                            y = 56 - ((pt.value - minVal) / (maxVal - minVal)) * 22;
+                          }
+                          return { x, y, pt };
+                        });
+
+                        // Curva Bezier cúbica suave ligando todos os pontos cronológicos consecutivos
+                        let curvePath = `M ${coords[0].x} ${coords[0].y}`;
+                        for (let i = 0; i < coords.length - 1; i++) {
+                          const p0 = coords[i];
+                          const p1 = coords[i + 1];
+                          const midX = p0.x + (p1.x - p0.x) * 0.5;
+                          curvePath += ` C ${midX} ${p0.y}, ${midX} ${p1.y}, ${p1.x} ${p1.y}`;
+                        }
+
+                        const firstCoord = coords[0];
+                        const lastCoord = coords[coords.length - 1];
+                        const areaPath = `${curvePath} L ${lastCoord.x} 64 L ${firstCoord.x} 64 Z`;
+
+                        return (
+                          <div className={`w-full mt-2 mb-1 ${pts.length > 3 ? 'overflow-x-auto no-scrollbar' : 'overflow-visible'}`}>
+                            <div
+                              className="h-[84px] px-1"
+                              style={{ minWidth: pts.length > 3 ? `${svgWidth}px` : '100%' }}
+                            >
+                              <svg viewBox={`0 0 ${svgWidth} 84`} className="w-full h-full ml-0 pt-0 overflow-visible">
+                                <defs>
+                                  <linearGradient id={`grad-eval-${item.id}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#5eea8f" stopOpacity={isFlat ? '0.15' : '0.45'} />
+                                    <stop offset="45%" stopColor="#5eea8f" stopOpacity={isFlat ? '0.06' : '0.22'} />
+                                    <stop offset="85%" stopColor="#5eea8f" stopOpacity={isFlat ? '0.01' : '0.05'} />
+                                    <stop offset="100%" stopColor="#5eea8f" stopOpacity="0.0" />
+                                  </linearGradient>
+                                  <filter id={`glow-eval-${item.id}`} x="-10%" y="-10%" width="120%" height="130%">
+                                    <feDropShadow dx="0" dy="2" stdDeviation={isFlat ? '3' : '2.5'} floodColor="#5eea8f" floodOpacity={isFlat ? '0.45' : '0.3'} />
+                                  </filter>
+                                </defs>
+
+                                <line x1="10" y1="32" x2={svgWidth - 10} y2="32" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                                <line x1="10" y1="60" x2={svgWidth - 10} y2="60" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+
+                                <path d={areaPath} fill={`url(#grad-eval-${item.id})`} />
+
+                                {coords.map((c, i) => (
+                                  <line
+                                    key={`beam-${i}`}
+                                    x1={c.x}
+                                    y1={c.y + 2}
+                                    x2={c.x}
+                                    y2={63}
+                                    stroke="#5eea8f"
+                                    strokeWidth="1"
+                                    strokeDasharray="2 3"
+                                    strokeOpacity={0.25}
+                                  />
+                                ))}
+
+                                <path
+                                  d={curvePath}
+                                  fill="none"
+                                  stroke="#5eea8f"
+                                  strokeWidth={isFlat ? '4.5' : '4'}
+                                  strokeOpacity={isFlat ? 0.35 : 0.2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+
+                                <path
+                                  d={curvePath}
+                                  fill="none"
+                                  stroke="#5eea8f"
+                                  strokeWidth={isFlat ? '3' : '2.5'}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  filter={`url(#glow-eval-${item.id})`}
+                                />
+
+                                {coords.map((c, i) => (
+                                  <g key={i}>
+                                    <circle cx={c.x} cy={c.y} r="6.5" fill="#5eea8f" fillOpacity="0.2" />
+                                    <circle cx={c.x} cy={c.y} r="4" fill="#5eea8f" stroke="#14142a" strokeWidth="2" />
+                                    <circle cx={c.x} cy={c.y} r="1.5" fill="#ffffff" />
+
+                                    <text
+                                      x={c.x}
+                                      y={c.y - 11}
+                                      fill="#ffffff"
+                                      fontSize="18"
+                                      fontWeight="bold"
+                                      textAnchor="middle"
+                                    >
+                                      {c.pt.shortLabel}
+                                    </text>
+
+                                    <text
+                                      x={c.x}
+                                      y="77"
+                                      fill="#e0e0ed"
+                                      fontSize="14"
+                                      fontWeight="normal"
+                                      textAnchor="middle"
+                                    >
+                                      {c.pt.date}
+                                    </text>
+                                  </g>
+                                ))}
+                              </svg>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
       )}
 
       {/* Modal Orientativo pré-visualização ao clicar em Visualizar */}

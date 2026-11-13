@@ -26,6 +26,85 @@ let cachedSubExamBatches: ExamBatch[] = [];
 let cachedSubAssessments: PhysicalAssessmentItem[] = [];
 let lastAnthroError: string | null = null;
 
+function parseAssessmentTimestampMs(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'object' && value !== null) {
+    const maybeSeconds = (value as { seconds?: unknown }).seconds;
+    if (typeof maybeSeconds === 'number' && Number.isFinite(maybeSeconds)) {
+      return maybeSeconds * 1000;
+    }
+    const maybeToMillis = (value as { toMillis?: unknown }).toMillis;
+    if (typeof maybeToMillis === 'function') {
+      try {
+        const ms = (value as { toMillis: () => number }).toMillis();
+        return Number.isFinite(ms) ? ms : 0;
+      } catch {
+        return 0;
+      }
+    }
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const numeric = Number(trimmed);
+    if (!Number.isNaN(numeric) && /^\d+$/.test(trimmed)) {
+      return numeric;
+    }
+    const parsed = Date.parse(trimmed);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+export function parseAssessmentDateMs(dateStr?: string): number {
+  if (!dateStr || typeof dateStr !== 'string') return 0;
+  const clean = dateStr.replace(/^Data:\s*/i, '').trim();
+
+  // Formato brasileiro DD/MM/AAAA
+  const ptMatch = clean.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (ptMatch) {
+    const day = parseInt(ptMatch[1], 10);
+    const month = parseInt(ptMatch[2], 10) - 1;
+    const year = parseInt(ptMatch[3], 10);
+    const ts = new Date(year, month, day).getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+  }
+
+  // Fallback ISO AAAA-MM-DD
+  const isoMatch = clean.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const ts = new Date(year, month, day).getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+  }
+
+  return 0;
+}
+
+export function sortPhysicalAssessmentsDesc(items: PhysicalAssessmentItem[]): PhysicalAssessmentItem[] {
+  if (!Array.isArray(items) || items.length <= 1) return Array.isArray(items) ? [...items] : [];
+
+  return [...items].sort((a, b) => {
+    const dateA = parseAssessmentDateMs(a.dateStr) || parseAssessmentTimestampMs(a.createdAt) || parseAssessmentTimestampMs(a.updatedAt);
+    const dateB = parseAssessmentDateMs(b.dateStr) || parseAssessmentTimestampMs(b.createdAt) || parseAssessmentTimestampMs(b.updatedAt);
+
+    if (dateB !== dateA) {
+      return dateB - dateA;
+    }
+
+    const timeA = Math.max(parseAssessmentTimestampMs(a.updatedAt), parseAssessmentTimestampMs(a.createdAt));
+    const timeB = Math.max(parseAssessmentTimestampMs(b.updatedAt), parseAssessmentTimestampMs(b.createdAt));
+
+    if (timeB !== timeA) {
+      return timeB - timeA;
+    }
+
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+}
+
 /**
  * Parser de Gramática Clínica e Expressões Médicas:
  * Decompõe strings agregadas de prescrição do CRM (ex: "Formula: Chlorella (200 mg), Quitosana (50 mg)...")
@@ -321,7 +400,9 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
       return fallback.examBatches || [];
     })(),
     biomarkerComparisons: Array.isArray(raw.biomarkerComparisons) ? raw.biomarkerComparisons : (fallback.biomarkerComparisons || []),
-    physicalAssessments: Array.isArray(raw.physicalAssessments) ? raw.physicalAssessments : (fallback.physicalAssessments || []),
+    physicalAssessments: sortPhysicalAssessmentsDesc(
+      Array.isArray(raw.physicalAssessments) ? raw.physicalAssessments : (fallback.physicalAssessments || [])
+    ),
     physicalAssessmentComparisons: Array.isArray(raw.physicalAssessmentComparisons) ? raw.physicalAssessmentComparisons : (fallback.physicalAssessmentComparisons || []),
     mealGuides: (() => {
       const rawPlans = Array.isArray(raw.plans) ? raw.plans : (Array.isArray(raw.mealGuides) ? raw.mealGuides : []);
@@ -1064,10 +1145,11 @@ class CrmDataService {
             const anthroRef = collection(firestoreDb, 'patients', targetDocId, 'anthropometry');
             unsubscribeAnthroFirestore = onSnapshot(anthroRef, (snap) => {
               if (!snap.empty) {
-                const sortedDocs = [...snap.docs].sort((a, b) => b.id.localeCompare(a.id));
-                const subAssessments: PhysicalAssessmentItem[] = sortedDocs.map(docSnap => {
+                const rawAssessments: PhysicalAssessmentItem[] = snap.docs.map(docSnap => {
                   const data = docSnap.data();
-                  const rawDate = data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026');
+                  const createdMs = parseAssessmentTimestampMs(data.createdAt);
+                  const updatedMs = parseAssessmentTimestampMs(data.updatedAt);
+                  const rawDate = data.dateStr || (createdMs > 0 ? new Date(createdMs).toLocaleDateString('pt-BR') : '11/11/2026');
                   const formattedDate = rawDate.startsWith('Data:') ? rawDate : `Data: ${rawDate}`;
                   return {
                     id: docSnap.id,
@@ -1077,9 +1159,12 @@ class CrmDataService {
                     pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl),
                     pdfUrl: data.pdfUrl || '',
                     metrics: data.metrics || {},
-                    updatedAt: data.updatedAt || ''
+                    updatedAt: updatedMs > 0 ? String(updatedMs) : (data.updatedAt || ''),
+                    createdAt: createdMs > 0 ? createdMs : ''
                   };
                 });
+
+                const subAssessments = sortPhysicalAssessmentsDesc(rawAssessments);
 
                 cachedSubAssessments = subAssessments;
                 lastAnthroError = null;
@@ -1449,10 +1534,11 @@ class CrmDataService {
 
       lastAnthroError = null;
 
-      const sortedDocs = [...snap.docs].sort((a, b) => b.id.localeCompare(a.id));
-      const freshAssessments: PhysicalAssessmentItem[] = sortedDocs.map(docSnap => {
+      const rawAssessments: PhysicalAssessmentItem[] = snap.docs.map(docSnap => {
         const data = docSnap.data();
-        const rawDate = data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026');
+        const createdMs = parseAssessmentTimestampMs(data.createdAt);
+        const updatedMs = parseAssessmentTimestampMs(data.updatedAt);
+        const rawDate = data.dateStr || (createdMs > 0 ? new Date(createdMs).toLocaleDateString('pt-BR') : '11/11/2026');
         const formattedDate = rawDate.startsWith('Data:') ? rawDate : `Data: ${rawDate}`;
         return {
           id: docSnap.id,
@@ -1462,9 +1548,12 @@ class CrmDataService {
           pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl),
           pdfUrl: data.pdfUrl || '',
           metrics: data.metrics || {},
-          updatedAt: data.updatedAt || ''
+          updatedAt: updatedMs > 0 ? String(updatedMs) : (data.updatedAt || ''),
+          createdAt: createdMs > 0 ? createdMs : ''
         };
       });
+
+      const freshAssessments = sortPhysicalAssessmentsDesc(rawAssessments);
 
       cachedSubAssessments = freshAssessments;
 
