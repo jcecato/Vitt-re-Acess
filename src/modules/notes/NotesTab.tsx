@@ -1,57 +1,52 @@
-import React, { useState, useMemo } from 'react';
-import { PatientProfile, ClinicalEvolutionItem } from '../../types/patient';
-import { crmDataService, sortClinicalEvolutionsDesc, normalizeClinicalEvolution } from '../../services/crmDataService';
+import React, { useState, useMemo, useEffect } from 'react';
+import { PatientProfile, ClinicalEvolutionItem, ParsedEncounterTag, NumberedStepItem } from '../../types/patient';
+import {
+  crmDataService,
+  sortClinicalEvolutionsDesc,
+  isConsultationEncounterDoc,
+  normalizeParsedTags,
+  normalizeNumberedSteps
+} from '../../services/crmDataService';
 
 interface NotesTabProps {
   patient: PatientProfile;
 }
 
-const DEFAULT_SAMPLE_EVOLUTION: ClinicalEvolutionItem = {
-  id: 'ev-sample-01',
-  title: 'Registro',
-  dateStr: '12/11/2026',
-  resumoGeral:
-    'Plano dietoterápico focado na melhora do sistema digestivo, com investigação de achados laboratoriais e ajustes progressivos conforme resposta individual e resultados dos exames.',
-  observacoes:
-    'Exames disponíveis identificaram alterações que merecem atenção e investigação complementar.',
-  achados: ['Vitamina D3 reduzida', 'Homocisteína elevada'],
-  planoDeAcao: [
-    'Solicitação de novos exames laboratoriais para aprofundar a avaliação',
-    'Prescrição individualizada de suplementos conforme resultados (vitamina D3 e demais nutrientes)',
-    'Avaliação da inclusão de whey protein para adequação proteica',
-    'Ajustes progressivos na dieta conforme resposta individual'
-  ],
-  proximosPassos: [
-    'Novos exames laboratoriais',
-    'Análise dos resultados e prescrição',
-    'Reavaliação da conduta nutricional'
-  ]
-};
-
 export const NotesTab: React.FC<NotesTabProps> = ({ patient }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isHeaderInfoOpen, setIsHeaderInfoOpen] = useState(false);
+
+  const targetEmail = (patient.email && patient.email.includes('@'))
+    ? patient.email.trim().toLowerCase()
+    : (patient.id && patient.id.includes('@') ? patient.id.trim().toLowerCase() : 'jcecato@gmail.com');
+
+  useEffect(() => {
+    crmDataService.refreshClinicalEvolutions(targetEmail);
+  }, [targetEmail]);
 
   const evolutions = useMemo<ClinicalEvolutionItem[]>(() => {
-    const rawList = patient.clinicalEvolutions && patient.clinicalEvolutions.length > 0
-      ? patient.clinicalEvolutions
-      : (patient.crmGeneralNotes && patient.crmGeneralNotes.trim().length > 0
-          ? [
-              normalizeClinicalEvolution(
-                {
-                  id: 'ev-crm-notes',
-                  title: 'Registro',
-                  dateStr: patient.nextConsultationDate || '12/11/2026',
-                  rawText: patient.crmGeneralNotes
-                },
-                'ev-crm-notes'
-              )
-            ]
-          : [DEFAULT_SAMPLE_EVOLUTION]);
+    const rawList = Array.isArray(patient.clinicalEvolutions) ? patient.clinicalEvolutions : [];
+    const validRecords = rawList.filter((ev) => {
+      if (!ev || ev.id === 'resumo_geral') return false;
+      const legacySummary = (ev.resumoGeral || '').trim();
+      const nonDeclinioSummary = legacySummary && !/^decl[ií]nio\b/i.test(legacySummary) ? legacySummary : '';
+      const hasContent =
+        Boolean((ev.pertinentObservations || ev.observacoes || nonDeclinioSummary).trim()) ||
+        Boolean(
+          (ev.nextSteps && ev.nextSteps.length > 0) ||
+          (ev.numberedSteps && ev.numberedSteps.length > 0) ||
+          (ev.proximosPassos && ev.proximosPassos.length > 0) ||
+          (ev.planoDeAcao && ev.planoDeAcao.length > 0)
+        ) ||
+        Boolean(ev.parsedTags && ev.parsedTags.length > 0) ||
+        Boolean(ev.alertTags && ev.alertTags.length > 0) ||
+        Boolean(ev.achados && ev.achados.length > 0);
+      return isConsultationEncounterDoc(ev.id, ev) || hasContent;
+    });
+    return sortClinicalEvolutionsDesc(validRecords);
+  }, [patient.clinicalEvolutions]);
 
-    return sortClinicalEvolutionsDesc(rawList);
-  }, [patient.clinicalEvolutions, patient.crmGeneralNotes, patient.nextConsultationDate]);
-
-  // Controle de abertura do Acordeon por data/ID (inicia fechado por padrão ao abrir a aba)
+  // Controle de abertura do Acordeon por consulta (inicia fechado por padrão ao abrir a aba)
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
 
   const toggleAccordion = (id: string) => {
@@ -64,280 +59,358 @@ export const NotesTab: React.FC<NotesTabProps> = ({ patient }) => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const targetKey = patient.email || patient.id || 'jcecato@gmail.com';
-      await crmDataService.refreshClinicalEvolutions(targetKey);
+      await crmDataService.refreshClinicalEvolutions(targetEmail);
     } finally {
       setTimeout(() => setIsRefreshing(false), 350);
     }
   };
 
-  const formatDisplayDate = (dateStr: string): string => {
+  const formatDisplayDate = (dateStr?: string, isoDate?: string): string => {
     const cleaned = (dateStr || '').replace(/^Data:\s*/i, '').trim();
-    return cleaned || '12/11/2026';
+    if (cleaned) {
+      if (/^\d{4}-\d{2}-\d{2}/.test(cleaned)) {
+        return cleaned.slice(0, 10).split('-').reverse().join('/');
+      }
+      return cleaned;
+    }
+    if (isoDate && /^\d{4}-\d{2}-\d{2}/.test(isoDate)) {
+      return isoDate.slice(0, 10).split('-').reverse().join('/');
+    }
+    return '-';
   };
 
-  const resolveRecordTitle = (rawTitle?: string): string => {
+  const resolveEncounterTitle = (rawTitle?: string): string => {
     const t = (rawTitle || '').trim();
     if (!t || t.toLowerCase() === 'evolução clínica' || t.toLowerCase() === 'evolucao clinica') {
-      return 'Registro';
+      return 'Registro de Consulta';
     }
     return t;
   };
 
+  const renderModernArrowSvg = (symbol: '↔' | '↑' | '↓') => {
+    if (symbol === '↑') {
+      return (
+        <svg
+          className="w-[30px] h-[30px] shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 19V5" />
+          <path d="m6 11 6-6 6 6" />
+        </svg>
+      );
+    }
+    if (symbol === '↓') {
+      return (
+        <svg
+          className="w-[30px] h-[30px] shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 5v14" />
+          <path d="m18 13-6 6-6-6" />
+        </svg>
+      );
+    }
+    return (
+      <svg
+        className="w-[30px] h-[30px] shrink-0"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M4 12h16" />
+        <path d="m8 8-4 4 4 4" />
+        <path d="m16 8 4 4-4 4" />
+      </svg>
+    );
+  };
+
   return (
     <div className="space-y-3.5 select-none animate-fadeIn font-['Plus_Jakarta_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] w-full pb-4">
-      {/* Cabeçalho da Aba Anotações */}
+      {/* Cabeçalho da Aba Anotações (Exclusiva de Avaliação por Consulta - Sem %) */}
       <div className="flex items-center justify-between gap-2 pt-1 px-0.5">
-        <div>
+        <div className="flex items-center gap-2.5 min-w-0">
           <h1 className="font-serif text-[20px] font-semibold text-[#5eea8f] tracking-tight leading-tight">
             Anotações
           </h1>
-          <p className="text-[13.5px] text-[#8b98a6] mt-0.5">
-            Histórico estruturado do mais recente para o mais antigo
-          </p>
+          <button
+            type="button"
+            onClick={() => setIsHeaderInfoOpen(true)}
+            aria-label="Informações sobre Anotações"
+            title="Sobre Anotações"
+            className="w-[31px] h-[31px] rounded-full bg-[#0d1b36] hover:bg-[#162d59] border border-white/35 text-white flex items-center justify-center text-[16px] font-serif italic font-bold transition active:scale-95 cursor-pointer shrink-0 shadow-sm"
+          >
+            i
+          </button>
         </div>
 
         <button
           type="button"
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/15 text-[13px] font-semibold text-[#e8f5f0] transition-all cursor-pointer shrink-0"
+          className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/15 text-[13px] font-semibold text-[#e8f5f0] transition-all cursor-pointer shrink-0"
         >
           <i className={`ti ti-refresh text-[#5eea8f] text-sm ${isRefreshing ? 'animate-spin' : ''}`}></i>
           <span>Atualizar</span>
         </button>
       </div>
 
-      {/* Lista de Acordeons de Registro por Data */}
-      <div className="space-y-3">
-        {evolutions.map((ev) => {
-          const isOpen = !!openIds[ev.id];
-          const cleanDate = formatDisplayDate(ev.dateStr);
-          const recordTitle = resolveRecordTitle(ev.title);
+      {/* Lista de Acordeons de Consultas */}
+      {evolutions.length === 0 ? (
+        <div className="rounded-[18px] border border-[#2dd4bf]/20 bg-gradient-to-br from-[#0a1f1a] to-[#0f2e26] p-6 text-center shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+          <div className="w-11 h-11 rounded-xl bg-[#2dd4bf]/15 border border-[#2dd4bf]/25 flex items-center justify-center text-[#2dd4bf] mx-auto mb-3">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+          </div>
+          <div className="text-[17px] font-semibold text-[#e8f5f0] mb-1">
+            Nenhum registro de consulta publicado
+          </div>
+          <p className="text-[14px] text-[#8b98a6] leading-relaxed max-w-[300px] mx-auto">
+            As observações pertinentes e os próximos passos de cada atendimento aparecerão aqui após a sincronização do seu acompanhamento.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {evolutions.map((ev) => {
+            const isOpen = !!openIds[ev.id];
+            const cleanDate = formatDisplayDate(ev.dateStr, ev.date);
+            const recordTitle = resolveEncounterTitle(ev.title);
+            const legacySummary = (ev.resumoGeral || '').trim();
+            const safeLegacyObs = legacySummary && !/^decl[ií]nio\b/i.test(legacySummary) ? legacySummary : '';
+            const observationsText = (ev.pertinentObservations || ev.observacoes || safeLegacyObs).trim();
+            const tags: ParsedEncounterTag[] = ev.parsedTags && ev.parsedTags.length > 0
+              ? normalizeParsedTags(ev.parsedTags, ev.alertTags || ev.achados)
+              : normalizeParsedTags(undefined, ev.alertTags || ev.achados);
+            const steps: NumberedStepItem[] = ev.numberedSteps && ev.numberedSteps.length > 0
+              ? ev.numberedSteps
+              : normalizeNumberedSteps(
+                  undefined,
+                  (ev.nextSteps && ev.nextSteps.length > 0)
+                    ? ev.nextSteps
+                    : (ev.predictability && ev.predictability.length > 0
+                        ? ev.predictability
+                        : (ev.proximosPassos && ev.proximosPassos.length > 0 ? ev.proximosPassos : ev.planoDeAcao))
+                );
 
-          return (
-            <div
-              key={ev.id}
-              className="rounded-[18px] overflow-hidden border border-[#2dd4bf]/20 bg-gradient-to-br from-[#0a1f1a] to-[#0f2e26] shadow-[0_8px_24px_rgba(0,0,0,0.35)] transition-all duration-200"
-            >
-              {/* Barra do Acordeon: Registro + Data: xx/xx/xxxx */}
-              <button
-                type="button"
-                onClick={() => toggleAccordion(ev.id)}
-                className="w-full flex items-center justify-between gap-3 px-3 py-3 text-left hover:bg-white/[0.02] transition-colors cursor-pointer"
+            return (
+              <div
+                key={ev.id}
+                className="rounded-[18px] overflow-hidden border border-[#2dd4bf]/20 bg-gradient-to-br from-[#0a1f1a] to-[#0f2e26] shadow-[0_8px_24px_rgba(0,0,0,0.35)] transition-all duration-200"
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-[#2dd4bf]/15 border border-[#2dd4bf]/25 flex items-center justify-center text-[#2dd4bf] shrink-0">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
+                {/* Cabeçalho do Acordeon: doc.title (19px) + Data: doc.dateStr (15.5px) */}
+                <button
+                  type="button"
+                  onClick={() => toggleAccordion(ev.id)}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-3.5 min-h-[60px] text-left hover:bg-white/[0.02] transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-[#2dd4bf]/15 border border-[#2dd4bf]/25 flex items-center justify-center text-[#2dd4bf] shrink-0">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="text-[19px] font-semibold text-[#e8f5f0] tracking-[-0.3px] leading-snug">
+                        {recordTitle}
+                      </div>
+                      <div className="text-[15.5px] text-[#6fa89a] font-medium mt-0.5">
+                        Data: {cleanDate}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center shrink-0">
+                    <svg
+                      className={`w-6 h-6 text-[#e0e0ed] transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#5eea8f]' : ''}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
                     </svg>
                   </div>
+                </button>
 
-                  <div className="min-w-0">
-                    <div className="text-[19px] font-semibold text-[#e8f5f0] tracking-[-0.3px] truncate">
-                      {recordTitle}
-                    </div>
-                    <div className="text-[15.5px] text-[#6fa89a] font-medium mt-0.5">
-                      Data: {cleanDate}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center shrink-0">
-                  <svg
-                    className={`w-6 h-6 text-[#e0e0ed] transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#5eea8f]' : ''}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </div>
-              </button>
-
-              {/* Conteúdo Expandido do Acordeon (4 Seções Visuais Padronizadas) */}
-              {isOpen && (
-                <div className="px-2 pb-4 pt-3 border-t border-white/[0.06] space-y-8 animate-fadeIn">
-                  {/* 1. RESUMO GERAL */}
-                  {(ev.resumoGeral || (!ev.observacoes && (!ev.planoDeAcao || ev.planoDeAcao.length === 0))) && (
-                    <div className="section">
-                      <div className="flex items-center gap-2 mb-2 text-[17px]">
-                        <div className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center shrink-0 bg-[#2dd4bf]/15 text-[#2dd4bf]">
-                          <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                            <line x1="16" y1="13" x2="8" y2="13" />
-                            <line x1="16" y1="17" x2="8" y2="17" />
-                          </svg>
-                        </div>
-                        <span className="text-[17px] border-[#ffffff] text-[#ffffff] uppercase tracking-[0.8px] font-semibold">
-                          Resumo Geral
-                        </span>
-                      </div>
-
-                      <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] px-2.5 py-2.5 text-[18px] text-justify text-[#e8f5f0] leading-[1.55]">
-                        {ev.resumoGeral || 'Registro clínico sincronizado.'}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 2. OBSERVAÇÕES PERTINENTES */}
-                  {(ev.observacoes || (ev.achados && ev.achados.length > 0)) && (
-                    <div className="section">
-                      <div className="flex items-center gap-2 mb-2 text-[17px]">
-                        <div className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center shrink-0 bg-[#fbbf24]/15 text-[#fbbf24]">
-                          <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10" />
-                            <line x1="12" y1="8" x2="12" y2="12" />
-                            <line x1="12" y1="16" x2="12.01" y2="16" />
-                          </svg>
-                        </div>
-                        <span className="text-[17px] border-[#ffffff] text-[#ffffff] uppercase tracking-[0.8px] font-semibold">
-                          Observações Pertinentes
-                        </span>
-                      </div>
-
-                      <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] px-2.5 py-2.5 text-[18px] text-justify text-[#e8f5f0] leading-[1.55]">
-                        {ev.observacoes && <div>{ev.observacoes}</div>}
-
-                        {ev.achados && ev.achados.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {ev.achados.map((finding, fIdx) => (
-                              <span
-                                key={`${ev.id}-finding-${fIdx}`}
-                                className="text-[14px] px-[12px] py-[5px] rounded-[20px] font-medium bg-[#fbbf24]/[0.12] border border-[#fbbf24]/25 text-[#fbbf24]"
-                              >
-                                {finding}
-                              </span>
-                            ))}
+                {/* Conteúdo Expandido: Exclusivamente 2 Blocos Internos */}
+                {isOpen && (
+                  <div className="px-2 pb-4 pt-3 border-t border-white/[0.06] space-y-8 animate-fadeIn">
+                    {/* BLOCO 1 — OBSERVAÇÕES PERTINENTES */}
+                    {(observationsText || tags.length > 0) && (
+                      <div className="section">
+                        <div className="flex items-center gap-2 mb-2 text-[17px]">
+                          <div className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center shrink-0 bg-[#fbbf24]/15 text-[#fbbf24]">
+                            <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="8" x2="12" y2="12" />
+                              <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. PLANO DE AÇÃO */}
-                  {ev.planoDeAcao && ev.planoDeAcao.length > 0 && (
-                    <div className="section">
-                      <div className="flex items-center gap-2 mb-2 text-[17px]">
-                        <div className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center shrink-0 bg-[#10b981]/15 text-[#10b981]">
-                          <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="9 11 12 14 22 4" />
-                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                          </svg>
+                          <span className="text-[17px] text-[#ffffff] uppercase tracking-[0.8px] font-semibold">
+                            Observações Pertinentes
+                          </span>
                         </div>
-                        <span className="text-[17px] border-[#ffffff] text-[#ffffff] uppercase tracking-[0.8px] font-semibold">
-                          Plano de Ação
-                        </span>
-                      </div>
 
-                      <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] px-2.5 pt-2.5 pb-[12px] mb-0 text-[18px] text-[#e8f5f0] leading-[1.55]">
-                        {ev.planoDeAcao.map((item, pIdx) => {
-                          const isFirst = pIdx === 0;
-                          const isLast = pIdx === ev.planoDeAcao!.length - 1;
-                          return (
+                        <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] px-2.5 py-2.5 text-[18px] text-[#e8f5f0] leading-[1.55]">
+                          {observationsText && (
+                            <div className="text-justify">
+                              {observationsText}
+                            </div>
+                          )}
+
+                          {tags.length > 0 && (
+                            <div className={observationsText ? 'mt-3 pt-2.5 border-t border-white/[0.06]' : ''}>
+                              <div className="flex flex-wrap gap-2">
+                                {tags.map((tag, tIdx) => {
+                                  const isGreen = tag.color === 'green' || tag.symbol === '↔';
+                                  const displayText = tag.raw && tag.raw.trim().length > 0
+                                    ? tag.raw
+                                    : `${tag.label} ${tag.symbol} ${tag.status}`.trim();
+
+                                  const arrowMatch = displayText.match(/^(.*?)\s*([↑↓↔])\s*(.*)$/);
+                                  const beforeArrow = arrowMatch ? arrowMatch[1].trim() : displayText;
+                                  const afterArrow = arrowMatch ? arrowMatch[3].trim() : '';
+                                  const arrowSymbol: '↔' | '↑' | '↓' = arrowMatch
+                                    ? (arrowMatch[2] as '↔' | '↑' | '↓')
+                                    : (tag.symbol || (isGreen ? '↔' : '↑'));
+
+                                  return (
+                                    <span
+                                      key={`${ev.id}-tag-${tIdx}`}
+                                      className={`inline-flex items-center gap-1.5 px-3 py-[3px] rounded-[11px] font-medium border ${
+                                        isGreen
+                                          ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300'
+                                          : 'bg-rose-500/15 border-rose-400/35 text-rose-300'
+                                      }`}
+                                    >
+                                      <span className="inline-flex items-center gap-1.5 text-[17.5px] leading-snug">
+                                        {beforeArrow && <span>{beforeArrow}</span>}
+                                        {renderModernArrowSvg(arrowSymbol)}
+                                        {afterArrow && <span>{afterArrow}</span>}
+                                      </span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* BLOCO 2 — PREVISIBILIDADE / PRÓXIMOS PASSOS */}
+                    {steps.length > 0 && (
+                      <div className="section">
+                        <div className="flex items-center gap-2 mb-2 text-[17px]">
+                          <div className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center shrink-0 bg-[#6366f1]/15 text-[#818cf8]">
+                            <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                            </svg>
+                          </div>
+                          <span className="text-[17px] text-[#ffffff] uppercase tracking-[0.8px] font-semibold">
+                            Previsibilidade / Próximos Passos
+                          </span>
+                        </div>
+
+                        <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] p-1.5 text-[18px] text-[#e8f5f0] leading-[1.55] flex flex-col gap-1.5">
+                          {steps.map((step, sIdx) => (
                             <div
-                              key={`${ev.id}-plan-${pIdx}`}
-                              className={`flex items-start gap-2 text-[18px] text-[#e8f5f0] leading-[1.45] ${
-                                isFirst ? 'pt-0' : 'pt-2.5'
-                              } ${isLast ? 'pb-0 border-b-0' : 'pb-2.5 border-b border-white/[0.05]'}`}
+                              key={`${ev.id}-step-${sIdx}`}
+                              className="flex items-center gap-2 px-2 py-2 bg-[#6366f1]/[0.06] border border-[#6366f1]/15 rounded-[9px]"
                             >
-                              <div className="w-[6px] h-[6px] rounded-full bg-[#10b981] mt-[10px] shrink-0" />
-                              <div className="flex-1 min-w-0 text-justify">{item}</div>
+                              <div className="text-[13px] font-bold text-[#818cf8] bg-[#6366f1]/15 px-[7px] py-[2px] rounded-[6px] shrink-0 tabular-nums">
+                                {step.number || String(sIdx + 1).padStart(2, '0')}
+                              </div>
+                              <div className="flex-1 min-w-0 text-[18px] text-justify text-[#e8f5f0] leading-[1.4]">
+                                {step.text}
+                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 4. PRÓXIMOS PASSOS */}
-                  {ev.proximosPassos && ev.proximosPassos.length > 0 && (
-                    <div className="section">
-                      <div className="flex items-center gap-2 mb-2 text-[17px]">
-                        <div className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center shrink-0 bg-[#6366f1]/15 text-[#818cf8]">
-                          <svg className="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                          </svg>
+                          ))}
                         </div>
-                        <span className="text-[17px] border-[#ffffff] text-[#ffffff] uppercase tracking-[0.8px] font-semibold">
-                          Próximos Passos
-                        </span>
                       </div>
+                    )}
 
-                      <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] p-1.5 text-[18px] text-[#e8f5f0] leading-[1.55] flex flex-col gap-1.5">
-                        {ev.proximosPassos.map((step, sIdx) => (
-                          <div
-                            key={`${ev.id}-step-${sIdx}`}
-                            className="flex items-center gap-2 px-2 py-2 bg-[#6366f1]/[0.06] border border-[#6366f1]/15 rounded-[9px]"
-                          >
-                            <div className="text-[13px] font-bold text-[#818cf8] bg-[#6366f1]/15 px-[7px] py-[2px] rounded-[6px] shrink-0">
-                              {String(sIdx + 1).padStart(2, '0')}
-                            </div>
-                            <div className="flex-1 min-w-0 text-[18px] text-justify text-[#e8f5f0] leading-[1.4]">
-                              {step}
-                            </div>
-                          </div>
-                        ))}
+                    {!observationsText && tags.length === 0 && steps.length === 0 && (
+                      <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] px-2.5 py-2.5 text-[16px] text-[#94a3b8]">
+                        Registro de consulta sincronizado sem observações adicionais.
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Espaço vertical de 1cm (38px) seguido pelo Resumo dos Registros */}
-      {(() => {
-        const summaryInfo = patient.clinicalSummaryInfo;
-        const summaryText = (summaryInfo?.summary || patient.clinicalSummary || '').trim();
-        const rawSummaryDate = (summaryInfo?.dateStr || '').replace(/^Data:\s*/i, '').trim();
-        const summaryDate = rawSummaryDate || (summaryText ? formatDisplayDate(evolutions[0]?.dateStr || '') : '-');
-
-        return (
-          <div className="!mt-[38px]">
-            <div className="rounded-[18px] overflow-hidden border border-[#2dd4bf]/20 bg-gradient-to-br from-[#0a1f1a] to-[#0f2e26] shadow-[0_8px_24px_rgba(0,0,0,0.35)] px-3 py-3.5">
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-9 h-9 rounded-xl bg-[#2dd4bf]/15 border border-[#2dd4bf]/25 flex items-center justify-center text-[#2dd4bf] shrink-0">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                  </svg>
-                </div>
-
-                <div className="min-w-0">
-                  <h2 className="text-[19px] font-semibold text-[#ffffff] tracking-[-0.3px] leading-tight">
-                    Resumo dos Registros
-                  </h2>
-                  <div className="text-[15.5px] text-[#6fa89a] font-medium mt-0.5">
-                    Data: {summaryDate}
+                    )}
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white/[0.03] border border-white/[0.06] rounded-[12px] px-2.5 py-2.5 text-[18px] text-justify text-[#e8f5f0] leading-[1.55]">
-                {summaryText ? (
-                  summaryText
-                ) : (
-                  <span className="text-[#8b98a6] text-[16px]">
-                    Aguardando a publicação do Resumo Geral pelo acompanhamento clínico.
-                  </span>
                 )}
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal Informativo do cabeçalho "i" */}
+      {isHeaderInfoOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsHeaderInfoOpen(false)}
+        >
+          <div
+            className="w-full max-w-[400px] bg-[#0d1b36] border border-white/30 rounded-2xl p-5 shadow-2xl space-y-3 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/15">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-6 h-6 rounded-full bg-white/15 border border-white/35 text-white flex items-center justify-center text-[13px] font-serif italic font-bold shrink-0">
+                  i
+                </span>
+                <h4 className="text-[18px] font-bold text-white leading-snug truncate">
+                  Anotações
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHeaderInfoOpen(false)}
+                className="text-white/80 hover:text-white p-1 text-xl cursor-pointer shrink-0"
+                title="Fechar"
+              >
+                <i className="ti ti-x"></i>
+              </button>
+            </div>
+            <p className="text-[18px] not-italic font-normal text-white leading-relaxed">
+              Registros das consultas realizadas do mais recente para o mais antigo.
+            </p>
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsHeaderInfoOpen(false)}
+                className="h-[38px] px-5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/30 text-[15px] font-semibold cursor-pointer active:scale-95 transition"
+              >
+                Entendi
+              </button>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 };

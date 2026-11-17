@@ -1,1022 +1,765 @@
-import React, { useState, useEffect } from 'react';
-import { PatientProfile } from '../../types/patient';
-import { X, CheckCircle2, Calendar, Activity, ChevronDown, Sparkles, CloudCheck, Cloud } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { PatientProfile, CheckinQuestionItem, CheckinQuestionOption } from '../../types/patient';
+import { X, CheckCircle2, Calendar, Activity, CloudCheck, RefreshCw } from 'lucide-react';
 import { db, isFirebaseConfigured } from '../../config/firebase';
 import { collection, doc, setDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { crmDataService } from '../../services/crmDataService';
 
 interface EvolutionTabProps {
   patient: PatientProfile;
 }
 
-export type AnswerValue = 0 | 1 | 2 | 'nse';
-
-export interface QuestionItem {
+interface DynamicCheckinDoc {
   id: string;
-  text: string;
-}
-
-export interface AxisDefinition {
-  id: string;
-  number: number;
-  name: string;
-  questions: QuestionItem[];
-}
-
-export const CHECKIN_AXES: AxisDefinition[] = [
-  {
-    id: 'cognitiva',
-    number: 1,
-    name: 'Saúde Cognitiva',
-    questions: [
-      { id: 'cog_1', text: 'Lembrei de fatos recentes?' },
-      { id: 'cog_2', text: 'Recordei informações importantes?' },
-      { id: 'cog_3', text: 'Mantive a atenção nas minhas atividades?' },
-      { id: 'cog_4', text: 'Resolvi situações do dia a dia com facilidade?' }
-    ]
-  },
-  {
-    id: 'emocional',
-    number: 2,
-    name: 'Equilíbrio Emocional',
-    questions: [
-      { id: 'emo_1', text: 'Senti-me bem emocionalmente?' },
-      { id: 'emo_2', text: 'Consegui lidar com preocupações?' },
-      { id: 'emo_3', text: 'Senti prazer nas atividades habituais?' },
-      { id: 'emo_4', text: 'Senti-me tranquilo(a) na maior parte do tempo?' }
-    ]
-  },
-  {
-    id: 'digestivo',
-    number: 3,
-    name: 'Conforto Digestivo e Intestinal',
-    questions: [
-      { id: 'dig_1', text: 'Tive digestão confortável?' },
-      { id: 'dig_2', text: 'Fiquei sem inchaço abdominal?' },
-      { id: 'dig_3', text: 'Tive pouco ou nenhum incômodo com gases?' },
-      { id: 'dig_4', text: 'Evacuei com regularidade e facilidade?' }
-    ]
-  },
-  {
-    id: 'forca',
-    number: 4,
-    name: 'Força, Mobilidade e Autonomia',
-    questions: [
-      { id: 'for_1', text: 'Tive força para minhas atividades?' },
-      { id: 'for_2', text: 'Caminhei com segurança?' },
-      { id: 'for_3', text: 'Levantei-me com facilidade?' },
-      { id: 'for_4', text: 'Realizei minhas tarefas com autonomia?' }
-    ]
-  },
-  {
-    id: 'sono',
-    number: 5,
-    name: 'Sono, Energia e Recuperação',
-    questions: [
-      { id: 'son_1', text: 'Adormeci com facilidade?' },
-      { id: 'son_2', text: 'Tive noites de sono tranquilas?' },
-      { id: 'son_3', text: 'Acordei descansado(a)?' },
-      { id: 'son_4', text: 'Tive disposição durante o dia?' }
-    ]
-  },
-  {
-    id: 'apetite',
-    number: 6,
-    name: 'Apetite e Alimentação',
-    questions: [
-      { id: 'ape_1', text: 'Tive apetite habitual?' },
-      { id: 'ape_2', text: 'Fiz minhas refeições regularmente?' },
-      { id: 'ape_3', text: 'Comi o suficiente nas refeições?' },
-      { id: 'ape_4', text: 'Mastiguei e engoli sem dificuldade?' }
-    ]
-  },
-  {
-    id: 'hidratacao',
-    number: 7,
-    name: 'Hidratação',
-    questions: [
-      { id: 'hid_1', text: 'Bebi líquidos ao longo do dia?' },
-      { id: 'hid_2', text: 'Bebi líquidos entre as refeições?' },
-      { id: 'hid_3', text: 'Mantive o consumo de líquidos nos dias mais quentes?' },
-      { id: 'hid_4', text: 'Passei o dia sem sede excessiva?' }
-    ]
-  },
-  {
-    id: 'dor',
-    number: 8,
-    name: 'Desconforto e Dor',
-    questions: [
-      { id: 'dor_1', text: 'Passei o dia com pouco ou nenhum desconforto?' },
-      { id: 'dor_2', text: 'Movimentei-me sem dores limitantes?' },
-      { id: 'dor_3', text: 'Dormi sem interrupções causadas por dor?' },
-      { id: 'dor_4', text: 'Realizei minhas tarefas sem limitações por dor?' }
-    ]
-  }
-];
-
-export const SCALE_OPTIONS = [
-  { value: 0 as const, label: 'Nunca', ref: '0 dias' },
-  { value: 1 as const, label: 'Às vezes', ref: '1 a 7 dias' },
-  { value: 2 as const, label: 'Frequente', ref: '8 a 15 dias' },
-];
-
-export interface CheckInRecord {
-  id: string;
-  patientEmail?: string;
-  patientName?: string;
-  createdAt?: string;
+  mode: 'dynamic_tags';
+  answers: Record<string, string>;
+  questionLabels: Record<string, string>;
+  createdAt: string;
   dateStr: string;
-  periodLabel: string;
-  dayLabel: string;
-  ivp: number;
-  deltaPoints?: number;
-  axisScores: { [axisId: string]: number };
-  clinicalFeedback?: string;
-  answers?: { [questionId: string]: AnswerValue };
+  patientEmail: string;
+  patientName: string;
 }
 
-// Histórico de avaliações: inicia limpo em produção
-const SEED_CHECKINS: CheckInRecord[] = [];
+const DEFAULT_STANDARD_OPTIONS: CheckinQuestionOption[] = [
+  { key: 'declinio', label: 'Declínio', deltaPercent: -25 },
+  { key: 'estavel', label: 'Estável', deltaPercent: 0 },
+  { key: 'em_melhora', label: 'Em melhora', deltaPercent: 25 },
+  { key: 'recuperado_100', label: 'Recuperado — 100%', deltaPercent: 100 }
+];
 
 export const EvolutionTab: React.FC<EvolutionTabProps> = ({ patient }) => {
   const targetPatientEmail = (patient.email && patient.email.includes('@'))
     ? patient.email.trim().toLowerCase()
     : (patient.id && patient.id.includes('@') ? patient.id.trim().toLowerCase() : 'jcecato@gmail.com');
 
-  const storageKey = `vittare_checkins_v3_${targetPatientEmail}`;
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [allDynamicCheckins, setAllDynamicCheckins] = useState<DynamicCheckinDoc[]>([]);
+  const [latestDynamicCheckin, setLatestDynamicCheckin] = useState<DynamicCheckinDoc | null>(null);
+  const [latestAnyCheckinDate, setLatestAnyCheckinDate] = useState<string | null>(null);
+  const [submittedConfirmation, setSubmittedConfirmation] = useState<boolean>(false);
 
-  const [checkIns, setCheckIns] = useState<CheckInRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return [];
-  });
+  // Modal dinâmico de Check-in
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Sincronização em tempo real com o Cloud Firestore na subcoleção /patients/{email}/checkins
+  // Sincronização inicial dos dados longitudinais (evolution/resumo_geral)
+  useEffect(() => {
+    crmDataService.refreshClinicalEvolutions(targetPatientEmail);
+  }, [targetPatientEmail]);
+
+  // Listener em tempo real da subcoleção /patients/{email}/checkins
   useEffect(() => {
     if (!isFirebaseConfigured() || !db) return;
-    const firestore = db;
 
     try {
-      const colRef = collection(firestore, 'patients', targetPatientEmail, 'checkins');
-      const q = query(colRef, orderBy('createdAt', 'asc'));
+      const colRef = collection(db, 'patients', targetPatientEmail, 'checkins');
+      const q = query(colRef, orderBy('createdAt', 'desc'));
 
-      const unsubscribe = onSnapshot(q, async (snapshot) => {
-        if (!snapshot.empty) {
-          const remoteRecords: CheckInRecord[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as CheckInRecord;
-            remoteRecords.push({
-              ...data,
-              id: docSnap.id
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setIsCloudSynced(true);
+        const dynamicDocsDesc: DynamicCheckinDoc[] = [];
+        let firstDateStr: string | null = null;
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (!firstDateStr && typeof data?.dateStr === 'string' && data.dateStr.trim().length > 0) {
+            firstDateStr = data.dateStr.trim();
+          }
+          if (data?.answers && typeof data.answers === 'object') {
+            dynamicDocsDesc.push({
+              id: docSnap.id,
+              mode: data.mode || 'dynamic_tags',
+              answers: data.answers,
+              questionLabels: data.questionLabels || {},
+              createdAt: data.createdAt || new Date().toISOString(),
+              dateStr: data.dateStr || '',
+              patientEmail: data.patientEmail || targetPatientEmail,
+              patientName: data.patientName || patient.name || 'Paciente'
             });
-          });
-          setCheckIns(remoteRecords);
-          setIsCloudSynced(true);
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(remoteRecords));
-          } catch {
-            // ignore
           }
-        } else {
-          // Migração automática de check-ins locais existentes (ex: teste com IVP 55) para a nuvem
-          const savedLocal = localStorage.getItem(storageKey);
-          if (savedLocal) {
-            try {
-              const parsed = JSON.parse(savedLocal);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                for (const item of parsed) {
-                  const recordToUpload: CheckInRecord = {
-                    ...item,
-                    patientEmail: targetPatientEmail,
-                    patientName: patient.name || 'João Cecato',
-                    createdAt: item.createdAt || new Date().toISOString()
-                  };
-                  const docRef = doc(firestore, 'patients', targetPatientEmail, 'checkins', item.id);
-                  await setDoc(docRef, recordToUpload);
-                }
-                setIsCloudSynced(true);
-              }
-            } catch (migErr) {
-              console.warn('Erro ao migrar check-ins locais para Firestore:', migErr);
-            }
-          }
+        });
+
+        // Ordem cronológica (mais antigo -> mais recente) para construir as colunas 1º CHECK-IN, 2º CHECK-IN...
+        const chronological = [...dynamicDocsDesc].reverse();
+        setAllDynamicCheckins(chronological);
+        setLatestDynamicCheckin(dynamicDocsDesc[0] || null);
+        setLatestAnyCheckinDate(firstDateStr);
+
+        // Se todos os check-ins foram deletados no Firebase para recomeçar, limpa confirmação local
+        if (dynamicDocsDesc.length === 0) {
+          setSubmittedConfirmation(false);
         }
       }, (err) => {
-        console.warn('Listener da subcoleção checkins do Firestore:', err);
+        console.info('🔒 [Vittáre Check-in] Subcoleção checkins em modo seguro:', err?.code);
       });
 
       return () => unsubscribe();
     } catch (e) {
       console.warn('Falha ao inicializar listener de checkins:', e);
     }
-  }, [targetPatientEmail, storageKey, patient.name]);
+  }, [targetPatientEmail, patient.name]);
 
-  // Modal 9:16 do Questionário
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [answers, setAnswers] = useState<{ [qId: string]: AnswerValue }>({});
-  const [currentAxisIndex, setCurrentAxisIndex] = useState<number>(0);
-  const [isScrolled, setIsScrolled] = useState<boolean>(false);
-  const [activeAxis, setActiveAxis] = useState<AxisDefinition>(CHECKIN_AXES[0]);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const wellbeing = patient.wellbeingData;
+  const activeQuestions: CheckinQuestionItem[] = useMemo(
+    () => wellbeing?.activeCheckinQuestions || [],
+    [wellbeing?.activeCheckinQuestions]
+  );
 
-  useEffect(() => {
-    if (isModalOpen) {
-      setIsScrolled(false);
-      setActiveAxis(CHECKIN_AXES[0]);
-      setSubmitError(null);
+  // Constrói colunas e matriz longitudinal combinando /evolution/resumo_geral e os documentos reais de /checkins
+  const { encounters, needsMatrix, overallEvolution } = useMemo(() => {
+    const baseEncounters = [...(wellbeing?.encounters || [])];
+    const baseMatrix = (wellbeing?.needsMatrix || []).map((row) => ({
+      ...row,
+      cumulativeByEncounter: { ...(row.cumulativeByEncounter || {}) },
+      valuesByEncounter: { ...(row.valuesByEncounter || {}) }
+    }));
+
+    // Se não há check-ins na coleção /checkins, retorna exatamente o estado base (ou o que veio de resumo_geral)
+    if (allDynamicCheckins.length === 0) {
+      return {
+        encounters: baseEncounters,
+        needsMatrix: baseMatrix,
+        overallEvolution: wellbeing?.overallEvolution
+      };
     }
-  }, [isModalOpen]);
 
-  const handleModalScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const container = e.currentTarget;
-    const scrollTop = container.scrollTop;
-    setIsScrolled(scrollTop > 25);
+    // Filtra check-ins de /checkins que ainda não estão consolidados como colunas em baseEncounters
+    const existingIds = new Set(baseEncounters.map((e) => e.id));
+    const pendingCheckins = allDynamicCheckins.filter((chk) => !existingIds.has(chk.id));
 
-    const axisSections = container.querySelectorAll<HTMLElement>('[data-axis-id]');
-    const containerRect = container.getBoundingClientRect();
+    if (pendingCheckins.length === 0) {
+      return {
+        encounters: baseEncounters,
+        needsMatrix: baseMatrix,
+        overallEvolution: wellbeing?.overallEvolution
+      };
+    }
 
-    let matchedAxis = CHECKIN_AXES[0];
-    axisSections.forEach((el) => {
-      const rect = el.getBoundingClientRect();
-      if (rect.top - containerRect.top <= 85) {
-        const axisId = el.getAttribute('data-axis-id');
-        const found = CHECKIN_AXES.find(a => a.id === axisId);
-        if (found) {
-          matchedAxis = found;
-        }
-      }
+    const mergedEncounters = [...baseEncounters];
+    pendingCheckins.forEach((chk, idx) => {
+      const checkNumber = idx + 1;
+      const shortDate = chk.dateStr ? chk.dateStr.slice(0, 5) : undefined;
+      mergedEncounters.push({
+        id: chk.id,
+        label: `${checkNumber}º CHECK-IN`,
+        shortDateBr: shortDate,
+        date: chk.createdAt
+      });
     });
 
-    setActiveAxis(matchedAxis);
-  };
+    // Mapa de opções por tagId para obter o deltaPercent exato configurado no CRM
+    const optionsByTag: Record<string, CheckinQuestionOption[]> = {};
+    activeQuestions.forEach((q) => {
+      optionsByTag[q.tagId] = q.options && q.options.length > 0 ? q.options : DEFAULT_STANDARD_OPTIONS;
+    });
 
-  // Acordeon Exclusivo: no máximo 1 avaliação aberta por vez (iniciam todas fechadas)
-  const [openCheckInId, setOpenCheckInId] = useState<string | null>(null);
+    const updatedMatrix = baseMatrix.map((row) => {
+      let runningPct = row.awaitingFirstEvaluation ? 0 : (row.accumulatedPercent ?? 0);
+      let evaluated = !row.awaitingFirstEvaluation;
+      let latestStatusKey = '';
+      const cumByEnc = { ...row.cumulativeByEncounter };
+      const valByEnc = { ...row.valuesByEncounter };
 
-  const handleToggleCheckIn = (id: string, e?: React.MouseEvent<HTMLElement>) => {
-    const isOpening = openCheckInId !== id;
-    setOpenCheckInId(isOpening ? id : null);
+      pendingCheckins.forEach((chk) => {
+        const answerKey = chk.answers?.[row.tagId];
+        if (!answerKey) {
+          cumByEnc[chk.id] = evaluated ? runningPct : null;
+          return;
+        }
 
-    if (isOpening) {
-      // Auto-scroll suave para o topo do card aberto, garantindo visão completa sem esforço
-      const targetEl = e?.currentTarget;
-      setTimeout(() => {
-        targetEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 60);
-    }
-  };
+        const opts = optionsByTag[row.tagId] || DEFAULT_STANDARD_OPTIONS;
+        const matchedOpt = opts.find((o) => o.key === answerKey);
+        const delta =
+          typeof matchedOpt?.deltaPercent === 'number'
+            ? matchedOpt.deltaPercent
+            : answerKey === 'declinio'
+            ? -15
+            : answerKey === 'em_melhora'
+            ? 25
+            : answerKey === 'recuperado_100'
+            ? 100
+            : 0;
 
-  // Cálculo determinístico e seguro para PWA da janela de 14 dias anteriores até a data atual
-  const [periodInfo, setPeriodInfo] = useState(() => {
-    const now = new Date();
-    const endDay = String(now.getDate()).padStart(2, '0');
-    const endMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const endYear = now.getFullYear();
-    const endDateStr = `${endDay}/${endMonth}/${endYear}`;
+        if (answerKey === 'recuperado_100') {
+          runningPct = 100;
+        } else {
+          runningPct = Math.max(-100, Math.min(100, runningPct + delta));
+        }
 
-    const pastDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-    const startDay = String(pastDate.getDate()).padStart(2, '0');
-    const startMonth = String(pastDate.getMonth() + 1).padStart(2, '0');
-    const startYear = pastDate.getFullYear();
+        evaluated = true;
+        latestStatusKey = answerKey;
+        cumByEnc[chk.id] = runningPct;
+        valByEnc[chk.id] = {
+          status: answerKey,
+          deltaPercent: delta,
+          cumulativePercent: runningPct
+        };
+      });
+
+      const resolvedStatusLabel = !evaluated
+        ? 'Aguardando 1º Check-in'
+        : runningPct >= 100 || latestStatusKey === 'recuperado_100'
+        ? 'Recuperado — 100%'
+        : runningPct > 0
+        ? 'Em melhora'
+        : runningPct < 0
+        ? 'Declínio'
+        : 'Estável';
+
+      return {
+        ...row,
+        cumulativeByEncounter: cumByEnc,
+        valuesByEncounter: valByEnc,
+        awaitingFirstEvaluation: !evaluated,
+        accumulatedPercent: runningPct,
+        statusLabel: resolvedStatusLabel
+      };
+    });
+
+    const evaluatedRows = updatedMatrix.filter((r) => !r.awaitingFirstEvaluation);
+    const avgPct =
+      evaluatedRows.length > 0
+        ? Math.round(
+            evaluatedRows.reduce((acc, r) => acc + (r.accumulatedPercent || 0), 0) / evaluatedRows.length
+          )
+        : 0;
+    const displayScore =
+      evaluatedRows.length > 0
+        ? Math.max(0, Math.min(100, avgPct >= 0 ? avgPct : 50 + avgPct / 2))
+        : 0;
+    const overallStatusLabel =
+      avgPct >= 100
+        ? 'Recuperado — 100%'
+        : avgPct > 0
+        ? 'Em melhora'
+        : avgPct < 0
+        ? 'Declínio'
+        : 'Estável';
 
     return {
-      endDateStr,
-      startDateStr: `${startDay}/${startMonth}/${startYear}`,
-      periodLabel: `${startDay}/${startMonth} a ${endDay}/${endMonth}/${endYear}`
+      encounters: mergedEncounters,
+      needsMatrix: updatedMatrix,
+      overallEvolution: {
+        averagePercent: avgPct,
+        displayScore,
+        statusLabel: overallStatusLabel
+      }
     };
-  });
+  }, [wellbeing?.encounters, wellbeing?.needsMatrix, wellbeing?.overallEvolution, allDynamicCheckins, activeQuestions]);
 
-  // Atualiza com segurança em PWA quando a aba retoma foco ou visibilidade após dias em background
-  useEffect(() => {
-    const updateDates = () => {
-      const now = new Date();
-      const endDay = String(now.getDate()).padStart(2, '0');
-      const endMonth = String(now.getMonth() + 1).padStart(2, '0');
-      const endYear = now.getFullYear();
-      const pastDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-      const startDay = String(pastDate.getDate()).padStart(2, '0');
-      const startMonth = String(pastDate.getMonth() + 1).padStart(2, '0');
-      const startYear = pastDate.getFullYear();
+  // Detecta se há um check-in registrado na coleção /checkins
+  const isAwaitingCrmSync = useMemo(() => {
+    if (allDynamicCheckins.length === 0) return false;
+    if (submittedConfirmation) return true;
+    if (!latestDynamicCheckin?.createdAt) return false;
+    if (!wellbeing?.updatedAt) return true;
+    const chkTime = Date.parse(latestDynamicCheckin.createdAt);
+    const wbTime = typeof wellbeing.updatedAt === 'number'
+      ? wellbeing.updatedAt
+      : Date.parse(String(wellbeing.updatedAt));
+    if (Number.isNaN(chkTime) || Number.isNaN(wbTime)) return false;
+    return chkTime > wbTime;
+  }, [allDynamicCheckins.length, submittedConfirmation, latestDynamicCheckin, wellbeing?.updatedAt]);
 
-      setPeriodInfo({
-        endDateStr: `${endDay}/${endMonth}/${endYear}`,
-        startDateStr: `${startDay}/${startMonth}/${startYear}`,
-        periodLabel: `${startDay}/${startMonth} a ${endDay}/${endMonth}/${endYear}`
-      });
-    };
-
-    window.addEventListener('focus', updateDates);
-    document.addEventListener('visibilitychange', updateDates);
-    return () => {
-      window.removeEventListener('focus', updateDates);
-      document.removeEventListener('visibilitychange', updateDates);
-    };
+  const todayBr = useMemo(() => {
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
+    return `${d}/${m}/${y}`;
   }, []);
 
-  // Salva no storage local persistente
-  useEffect(() => {
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
     try {
-      localStorage.setItem(storageKey, JSON.stringify(checkIns));
-    } catch {
-      // ignore
+      await crmDataService.refreshClinicalEvolutions(targetPatientEmail);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 350);
     }
-  }, [checkIns, storageKey]);
+  };
 
-  // Último check-in realizado
-  const latestCheckIn = checkIns.length > 0 ? checkIns[checkIns.length - 1] : null;
+  const handleOpenModal = () => {
+    setAnswers({});
+    setSubmitError(null);
+    setIsModalOpen(true);
+  };
 
-  // Cálculo de variação em relação ao registro anterior
-  const previousCheckIn = checkIns.length > 1 ? checkIns[checkIns.length - 2] : null;
-  const currentDelta = latestCheckIn && previousCheckIn 
-    ? latestCheckIn.ivp - previousCheckIn.ivp 
-    : (latestCheckIn?.deltaPoints ?? 0);
-
-  // Manipulador de resposta de pergunta
-  const handleSelectAnswer = (qId: string, val: AnswerValue) => {
+  const handleSelectOption = (tagId: string, optionKey: string) => {
     setAnswers(prev => ({
       ...prev,
-      [qId]: prev[qId] === val ? (null as unknown as AnswerValue) : val
+      [tagId]: optionKey
     }));
+    if (submitError) setSubmitError(null);
   };
 
-  // Cálculo matemático determinístico por eixo e IVP geral conforme especificação clínica:
-  // - Cada eixo contém quatro perguntas, pontuação individual de 0 a 2 e pontuação máxima de 8 pontos.
-  // - Pontuação do eixo = (Soma das respostas válidas / (Número de respostas válidas * 2)) * 100
-  // - 4 respostas válidas: calcular normalmente.
-  // - 3 respostas válidas: calcular com base nas três respostas.
-  // - 2 ou menos respostas válidas: não calcular o eixo.
-  // - "Não consegui avaliar" ('nse') não recebe pontuação e não entra no cálculo.
-  // - IVP geral = (E1 + E2 + E3 + E4 + E5 + E6 + E7 + E8) / 8
-  // - Critério: o índice geral somente será calculado quando os oito eixos apresentarem pontuação válida.
-  const calculateCheckInScores = () => {
-    const axisResults: {
-      axisId: string;
-      axisName: string;
-      validCount: number;
-      score: number | null;
-      isCalculable: boolean;
-    }[] = [];
-
-    for (const axis of CHECKIN_AXES) {
-      const validAnswers: number[] = [];
-      for (const q of axis.questions) {
-        const ans = answers[q.id];
-        if (typeof ans === 'number' && (ans === 0 || ans === 1 || ans === 2)) {
-          validAnswers.push(ans);
-        }
-      }
-
-      const validCount = validAnswers.length;
-
-      if (validCount >= 3) {
-        const sum = validAnswers.reduce((a, b) => a + b, 0);
-        const score = Math.round((sum / (validCount * 2)) * 100);
-        axisResults.push({
-          axisId: axis.id,
-          axisName: axis.name,
-          validCount,
-          score,
-          isCalculable: true
-        });
-      } else {
-        axisResults.push({
-          axisId: axis.id,
-          axisName: axis.name,
-          validCount,
-          score: null,
-          isCalculable: false
-        });
-      }
+  const handleSubmitDynamicCheckin = async () => {
+    if (activeQuestions.length === 0) {
+      setSubmitError('Nenhuma pergunta de acompanhamento disponível para envio no momento.');
+      return;
     }
 
-    const invalidAxes = axisResults.filter(r => !r.isCalculable);
-    const canCalculateIvp = invalidAxes.length === 0;
-
-    let ivp: number | null = null;
-    if (canCalculateIvp) {
-      const sumAllAxes = axisResults.reduce((acc, r) => acc + (r.score ?? 0), 0);
-      ivp = Math.round(sumAllAxes / 8);
-    }
-
-    return {
-      axisResults,
-      invalidAxes,
-      canCalculateIvp,
-      ivp
-    };
-  };
-
-  const currentScores = calculateCheckInScores();
-
-  // Envio e Cálculo do Novo Check-in
-  const handleSubmitCheckIn = async () => {
-    const { axisResults, invalidAxes, canCalculateIvp, ivp } = calculateCheckInScores();
-
-    if (!canCalculateIvp || ivp === null) {
+    const unanswered = activeQuestions.filter(q => !answers[q.tagId]);
+    if (unanswered.length > 0) {
       setSubmitError(
-        `O Índice de Vitalidade Percebida (IVP) somente é calculado quando os oito eixos apresentarem pontuação válida (mínimo de 3 respostas válidas por eixo). ${
-          invalidAxes.length === 1
-            ? `O eixo "${invalidAxes[0].axisName}" possui apenas ${invalidAxes[0].validCount} resposta(s) válida(s).`
-            : `Os seguintes ${invalidAxes.length} eixos possuem 2 ou menos respostas válidas: ${invalidAxes.map(a => a.axisName).join(', ')}.`
-        }`
+        unanswered.length === 1
+          ? `Por favor, responda sobre "${unanswered[0].label}" antes de enviar.`
+          : `Faltam ${unanswered.length} respostas para concluir seu check-in.`
       );
       return;
     }
 
+    setIsSubmitting(true);
     setSubmitError(null);
 
-    const axisScoresResult: { [axisId: string]: number } = {};
-    axisResults.forEach(r => {
-      axisScoresResult[r.axisId] = r.score ?? 0;
+    const questionLabels: Record<string, string> = {};
+    activeQuestions.forEach(q => {
+      questionLabels[q.tagId] = q.label;
     });
 
-    const delta = latestCheckIn ? (ivp - latestCheckIn.ivp) : 0;
-    const feedbackStr = getAiFeedback();
-
-    const newRecord: CheckInRecord = {
-      id: `chk_${Date.now()}`,
-      patientEmail: targetPatientEmail,
-      patientName: patient.name || 'João Cecato',
+    const checkinId = `chk_${Date.now()}`;
+    const payload: DynamicCheckinDoc = {
+      id: checkinId,
+      mode: 'dynamic_tags',
+      answers: { ...answers },
+      questionLabels,
       createdAt: new Date().toISOString(),
-      dateStr: periodInfo.endDateStr,
-      periodLabel: periodInfo.periodLabel,
-      dayLabel: `D${60 + (checkIns.length - 4) * 15}`,
-      ivp: ivp,
-      deltaPoints: delta,
-      axisScores: axisScoresResult,
-      clinicalFeedback: feedbackStr,
-      answers: { ...answers }
+      dateStr: todayBr,
+      patientEmail: targetPatientEmail,
+      patientName: patient.name || 'Paciente'
     };
 
-    // Atualização otimista imediata na interface do paciente
-    setCheckIns(prev => [...prev, newRecord]);
-    setIsModalOpen(false);
-
-    // Gravação oficial na subcoleção do Cloud Firestore (/patients/{email}/checkins)
-    const firestore = db;
-    if (isFirebaseConfigured() && firestore) {
-      try {
-        const checkinRef = doc(firestore, 'patients', targetPatientEmail, 'checkins', newRecord.id);
-        await setDoc(checkinRef, newRecord);
+    try {
+      if (isFirebaseConfigured() && db) {
+        const checkinRef = doc(db, 'patients', targetPatientEmail, 'checkins', checkinId);
+        await setDoc(checkinRef, payload);
         setIsCloudSynced(true);
-      } catch (cloudErr) {
-        console.warn('Erro ao salvar check-in no Firestore:', cloudErr);
       }
+      setLatestDynamicCheckin(payload);
+      setSubmittedConfirmation(true);
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Erro ao salvar check-in dinâmico:', err);
+      setSubmitError('Não foi possível enviar suas respostas agora. Verifique sua conexão e tente novamente.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Gerador de Comentário da IA conforme as regras da Seção 6
-  const getAiFeedback = () => {
-    if (checkIns.length === 0) {
-      return 'Inicie seu acompanhamento realizando sua primeira avaliação periódica de bem-estar no cartão acima.';
+  const getOptionStyles = (key: string, isSelected: boolean): string => {
+    if (!isSelected) {
+      return 'bg-white/[0.04] hover:bg-white/[0.08] border-white/20 text-[#e8eef5]';
     }
-    if (checkIns.length === 1) {
-      return 'Este é o seu primeiro registro. Ele marca o ponto de partida do nosso acompanhamento. Vamos observar suas percepções ao longo das próximas semanas, respeitando seu ritmo.';
+    switch (key) {
+      case 'declinio':
+        return 'bg-rose-500/20 border-rose-400 text-rose-200 shadow-md shadow-rose-500/15';
+      case 'estavel':
+        return 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-md shadow-amber-500/15';
+      case 'em_melhora':
+        return 'bg-emerald-500/20 border-emerald-400 text-emerald-200 shadow-md shadow-emerald-500/15';
+      case 'recuperado_100':
+        return 'bg-[#5eea8f]/25 border-[#5eea8f] text-[#5eea8f] shadow-md shadow-[#5eea8f]/20';
+      default:
+        return 'bg-[#5eea8f]/20 border-[#5eea8f] text-[#5eea8f]';
     }
-    if (currentDelta > 0) {
-      return `Sua pontuação apresentou uma variação positiva de +${currentDelta} pontos neste período. Vamos preservar o que está funcionando e continuar atentos às suas necessidades.`;
-    }
-    if (currentDelta < 0) {
-      return `Seu índice apresentou uma variação de −${Math.abs(currentDelta)} pontos neste período. Esse registro nos ajuda a identificar os aspectos que merecem mais atenção e ajustar o acompanhamento às suas necessidades.`;
-    }
-    return 'A constância também merece reconhecimento. Sua pontuação permaneceu estável neste período. Seguiremos acompanhando suas percepções e preservando os resultados alcançados.';
   };
 
-  // Contagem de perguntas respondidas
-  const totalQuestions = 32;
-  const answeredCount = Object.values(answers).filter(v => v !== null && v !== undefined).length;
+  const getStatusBadgeClasses = (percent: number, label?: string): string => {
+    const lower = (label || '').toLowerCase();
+    if (percent > 0 || /melhora|recuperad|ótimo|evolu/i.test(lower)) {
+      return 'bg-[#10b981]/15 border-[#10b981]/35 text-[#10b981]';
+    }
+    if (percent < 0 || /decl[ií]nio|piora|aten[çc][ãa]o/i.test(lower)) {
+      return 'bg-[#f43f5e]/15 border-[#f43f5e]/35 text-[#f43f5e]';
+    }
+    return 'bg-[#fbbf24]/15 border-[#fbbf24]/35 text-[#fbbf24]';
+  };
+
+  const getProgressBarColorClass = (percent: number): string => {
+    if (percent > 0) return 'bg-gradient-to-r from-[#059669] via-[#10b981] to-[#5eea8f]';
+    if (percent < 0) return 'bg-gradient-to-r from-[#be123c] to-[#f43f5e]';
+    return 'bg-gradient-to-r from-[#d97706] to-[#fbbf24]';
+  };
+
+  const getPercentTextColor = (percent: number): string => {
+    if (percent > 0) return 'text-[#10b981]';
+    if (percent < 0) return 'text-[#f43f5e]';
+    return 'text-[#fbbf24]';
+  };
+
+  const formatSignedPercent = (val: number): string => {
+    if (val > 0) return `+${val}%`;
+    return `${val}%`;
+  };
+
+  const answeredCount = activeQuestions.filter(q => Boolean(answers[q.tagId])).length;
 
   return (
     <div className="space-y-4 select-none animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif] w-full pb-4">
-      
       {/* Cabeçalho da Aba */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 pt-1">
         <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
           Meu Bem Estar
         </div>
-        {isCloudSynced && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#5eea8f]/10 border border-[#5eea8f]/30 text-[#5eea8f] text-[12.5px] font-semibold animate-fadeIn">
-            <CloudCheck className="w-4 h-4 text-[#5eea8f]" />
-            <span>Nuvem Conectada</span>
-          </div>
-        )}
+
+        <div className="flex items-center gap-2 shrink-0">
+          {isCloudSynced && (
+            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#5eea8f]/10 border border-[#5eea8f]/25 text-[#5eea8f] text-[11.5px] font-semibold">
+              <CloudCheck className="w-3.5 h-3.5 text-[#5eea8f]" />
+              <span className="hidden xs:inline">Nuvem</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/15 text-[12.5px] font-semibold text-[#e8f5f0] transition-all cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#5eea8f] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Atualizar</span>
+          </button>
+        </div>
       </div>
 
-      {/* Cartão "Realizar Agora" */}
+      {/* Cartão "REALIZAR AGORA" para iniciar Check-in Dinâmico */}
       <div className="bg-gradient-to-br from-[#1c1838] via-[#121124] to-[#0d0d16] border border-[#7c6af7]/35 rounded-2xl p-4 shadow-md space-y-3">
         <div className="flex items-start gap-3">
           <span className="w-11 h-11 rounded-xl bg-[#5eea8f]/15 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] shrink-0 mt-0.5">
-            <Calendar className="w-6 h-6 animate-pulse" />
+            <Calendar className="w-6 h-6" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[17px] sm:text-[18px] font-bold text-[#5eea8f] uppercase tracking-wide flex items-center flex-wrap gap-2">
               <span>REALIZAR AGORA</span>
-              <span className="px-2.5 py-0.5 rounded-lg bg-[#5eea8f]/20 border border-[#5eea8f]/40 text-white text-[16px] font-bold tracking-normal shadow-sm">
-                {periodInfo.endDateStr}
+              <span className="px-2.5 py-0.5 rounded-lg bg-[#5eea8f]/20 border border-[#5eea8f]/40 text-white text-[15px] font-bold tracking-normal tabular-nums">
+                {todayBr}
               </span>
             </div>
-            <div className="text-[18px] text-[#cfd3dc] mt-1 font-medium">
-              Período: {periodInfo.periodLabel}
+            <div className="text-[14.5px] text-[#cfd3dc] mt-1 font-medium leading-snug">
+              Referente ao período desde o último registro
             </div>
+            {activeQuestions.length > 0 && (
+              <div className="text-[12.5px] text-[#8b98a6] mt-0.5">
+                {activeQuestions.length} {activeQuestions.length === 1 ? 'sintoma ativo para avaliação' : 'sintomas ativos para avaliação'}
+                {latestAnyCheckinDate ? ` • Último envio: ${latestAnyCheckinDate}` : ''}
+              </div>
+            )}
           </div>
         </div>
 
+        {isAwaitingCrmSync && (
+          <div className="p-3 rounded-xl bg-[#10b981]/10 border border-[#10b981]/35 flex items-start gap-2.5 text-left animate-fadeIn">
+            <CheckCircle2 className="w-5 h-5 text-[#10b981] shrink-0 mt-0.5" />
+            <div className="text-[13.5px] text-[#d1fae5] leading-snug">
+              <strong className="font-semibold text-white">Check-in registrado com sucesso!</strong> Suas respostas foram salvas e serão consolidadas na matriz de evolução pelo acompanhamento clínico.
+            </div>
+          </div>
+        )}
+
         <button
-          onClick={() => {
-            setAnswers({});
-            setIsModalOpen(true);
-          }}
-          className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#0f7a3a] to-[#108c43] hover:from-[#139247] hover:to-[#0f7a3a] border border-[#5eea8f]/40 text-white font-bold text-[18px] shadow-md active:scale-95 transition cursor-pointer flex items-center justify-center"
+          type="button"
+          onClick={handleOpenModal}
+          className="w-full min-h-[48px] py-2.5 rounded-xl bg-gradient-to-r from-[#0f7a3a] to-[#108c43] hover:from-[#139247] hover:to-[#0f7a3a] border border-[#5eea8f]/40 text-white font-bold text-[17px] shadow-md active:scale-95 transition cursor-pointer flex items-center justify-center"
         >
-          <span>Iniciar</span>
+          <span>{isAwaitingCrmSync ? 'Responder Novamente' : 'Iniciar Check-in'}</span>
         </button>
       </div>
 
-      {/* Linha Divisória mais Grossa conforme solicitado */}
-      <div className="border-t-2 border-white/20 my-2"></div>
+      {/* Divisória */}
+      <div className="border-t border-white/15 my-2"></div>
 
-      {/* ============================================================== */}
-      {/* AVALIAÇÕES EM ACORDEON EXCLUSIVO (Iniciam todas fechadas)     */}
-      {/* ============================================================== */}
-      {checkIns.length === 0 ? (
-        <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-6 text-center shadow-sm">
-          <div className="w-12 h-12 rounded-full bg-[#5eea8f]/10 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] mx-auto mb-2.5">
-            <Activity className="w-6 h-6" />
+      {/* ===================================================================== */}
+      {/* TABELA LONGITUDINAL DE EVOLUÇÃO EM COLUNAS (%)                        */}
+      {/* ===================================================================== */}
+      <div className="bg-[#0d101b] border border-white/15 rounded-2xl overflow-hidden shadow-md">
+        <div className="px-3.5 py-3 border-b border-white/10 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Activity className="w-5 h-5 text-[#5eea8f] shrink-0" />
+            <h2 className="text-[16.5px] font-bold text-white leading-tight">
+              Evolução Longitudinal (%)
+            </h2>
           </div>
-          <div className="text-[18px] font-semibold text-white mb-1">
-            Nenhum check-in anterior realizado
-          </div>
-          <p className="text-[14px] text-[#a5a4b8] leading-relaxed max-w-[280px] mx-auto">
-            Toque em "Iniciar" no card acima para realizar a sua primeira avaliação periódica de bem-estar.
-          </p>
+          {encounters.length > 0 && (
+            <span className="text-[11.5px] text-[#8b98a6] whitespace-nowrap shrink-0">
+              {encounters.length} {encounters.length === 1 ? 'marco' : 'marcos'}
+            </span>
+          )}
         </div>
-      ) : (
-        <div className="space-y-4">
-          {checkIns.slice().reverse().map((item) => {
-          const isOpen = openCheckInId === item.id;
-          const checkInIndex = checkIns.findIndex(c => c.id === item.id);
-          const checkInNumber = checkInIndex >= 0 ? checkInIndex + 1 : 1;
 
-          return (
-            <div 
-              key={item.id} 
-              id={`checkin-card-${item.id}`}
-              className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl overflow-hidden shadow-sm transition"
-            >
-              {/* Cabeçalho do Acordeon com Ícone, N° CHECK-IN, DATA e Seta Baixo */}
-              <button
-                type="button"
-                onClick={(e) => handleToggleCheckIn(item.id, e)}
-                className="w-full flex items-center justify-between p-3.5 text-left cursor-pointer hover:bg-white/[0.04] transition active:scale-[0.99]"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-10 h-10 rounded-xl bg-[#5eea8f]/15 border border-[#5eea8f]/30 flex items-center justify-center text-[#5eea8f] shrink-0">
-                    <Activity className="w-6 h-6 animate-pulse" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-[17px] font-bold text-white tracking-wide truncate uppercase">
-                      {checkInNumber}° Check-In
-                    </div>
-                    <div className="text-[18px] text-[#cfd3dc] truncate">
-                      Data: {item.dateStr}
-                    </div>
-                  </div>
-                </div>
+        {needsMatrix.length === 0 ? (
+          <div className="p-6 text-center">
+            <div className="text-[15.5px] font-semibold text-[#e8eef5] mb-1">
+              Matriz de evolução em preparação
+            </div>
+            <p className="text-[13.5px] text-[#8b98a6] leading-relaxed max-w-[300px] mx-auto">
+              Assim que suas necessidades clínicas forem registradas no acompanhamento e os check-ins forem sincronizados, os percentuais aparecerão nesta tabela.
+            </p>
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto no-scrollbar">
+            <table className="w-full border-collapse text-left tabular-nums">
+              <thead>
+                <tr className="border-b border-white/10 bg-[#0d101b]">
+                  <th
+                    scope="col"
+                    className="sticky left-0 z-20 bg-[#0d101b] px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wider text-[#94a3b8] min-w-[116px] max-w-[134px] border-r border-white/10"
+                  >
+                    Sintoma
+                  </th>
 
-                {/* Centralizado / Resumo: Índice e Seta para Baixo tamanho médio */}
-                <div className="flex items-center gap-2.5 shrink-0 ml-2">
-                  <span className="text-[16px] font-bold text-[#5eea8f] tabular-nums bg-[#5eea8f]/10 border border-[#5eea8f]/20 px-2.5 py-0.5 rounded-lg">
-                    {item.ivp}/100
-                  </span>
-                  <ChevronDown 
-                    className={`w-6 h-6 text-[#e0e0ed] transition-transform duration-200 ${
-                      isOpen ? 'rotate-180 text-[#5eea8f]' : ''
-                    }`} 
-                  />
-                </div>
-              </button>
+                  {encounters.map((enc) => (
+                    <th
+                      key={enc.id}
+                      scope="col"
+                      className="px-2.5 py-2.5 text-center min-w-[84px] whitespace-nowrap"
+                    >
+                      <div className="text-[12px] font-bold text-[#e8eef5] leading-tight">
+                        {enc.label}
+                      </div>
+                      {enc.shortDateBr && (
+                        <div className="text-[11px] font-medium text-[#8b98a6] mt-0.5">
+                          {enc.shortDateBr}
+                        </div>
+                      )}
+                    </th>
+                  ))}
 
-              {/* Conteúdo do Acordeon com as Barras Horizontais (Inicia fechado) */}
-              {isOpen && (
-                <div className="p-4 pt-2 border-t border-white/[0.08] bg-black/20 space-y-4 animate-fadeIn">
-                  
-                  {/* Índice Geral de Vitalidade Percebida daquela Avaliação */}
-                  <div className="pb-3 border-b border-white/[0.06]">
-                    <div className="text-[18px] text-[#e8e8f0] font-semibold">
-                      Índice de Vitalidade Percebida
-                    </div>
-                    <div className="flex items-baseline gap-1 mt-1">
-                      <span className="text-[28px] font-bold text-[#5eea8f] tabular-nums leading-none">
-                        {item.ivp}
-                      </span>
-                      <span className="text-[18px] font-semibold text-[#e0e0ed]">/100</span>
-                    </div>
+                  <th
+                    scope="col"
+                    className="sticky right-0 z-20 bg-[#0d101b] px-3 py-2.5 text-right text-[11.5px] font-bold uppercase tracking-wider text-[#5eea8f] min-w-[104px] max-w-[124px] border-l border-white/10"
+                  >
+                    ATUAL
+                  </th>
+                </tr>
+              </thead>
 
-                    <div className="h-3 bg-white/[0.08] rounded-full mt-2.5 overflow-hidden">
-                      <div
-                        style={{ width: `${Math.min(100, Math.max(0, item.ivp))}%` }}
-                        className="h-full bg-gradient-to-r from-[#0f7a3a] via-[#5eea8f] to-[#5eea8f] rounded-full transition-all duration-500"
-                      />
-                    </div>
-                    <div className="text-[18px] text-[#a5a4b8] mt-2 font-normal leading-relaxed">
-                      Média ponderada dos oito eixos de funcionalidade nesta data.
-                    </div>
-                  </div>
+              <tbody className="divide-y divide-white/[0.07]">
+                {needsMatrix.map((row) => {
+                  const pct = row.accumulatedPercent ?? 0;
 
-                  {/* Barras Horizontais dos 8 Eixos */}
-                  <div className="space-y-3">
-                    <div className="text-[20px] font-bold text-white tracking-wide">
-                      Por Eixo
-                    </div>
+                  return (
+                    <tr key={row.tagId} className="hover:bg-white/[0.02] transition-colors">
+                      {/* 1ª Coluna (Fixa à Esquerda) */}
+                      <td className="sticky left-0 z-10 bg-[#0d101b] px-3 py-3 text-[13px] font-semibold text-[#e8eef5] leading-snug min-w-[116px] max-w-[134px] border-r border-white/10 align-middle">
+                        {row.label}
+                      </td>
 
-                    {CHECKIN_AXES.map(axis => {
-                      const score = item.axisScores[axis.id] ?? 70;
-                      return (
-                        <div key={axis.id} className="space-y-1.5">
-                          <div className="flex items-center justify-between text-[18px]">
-                            <span className="text-[#e8e8f0] font-medium text-[18px]">{axis.name}</span>
-                            <span className="text-white font-bold tabular-nums text-[18px]">
-                              {score > 0 ? `${score}/100` : 'Não avaliado'}
+                      {/* Colunas Intermediárias (Encontros) */}
+                      {encounters.map((enc) => {
+                        const val = row.cumulativeByEncounter?.[enc.id];
+                        const encInfo = row.valuesByEncounter?.[enc.id];
+                        const isBaseStart =
+                          enc.id === row.startEncounterId &&
+                          (encInfo?.status === 'registro' || (!encInfo?.status && val === 0));
+
+                        return (
+                          <td
+                            key={`${row.tagId}-${enc.id}`}
+                            className="px-2.5 py-3 text-center whitespace-nowrap align-middle"
+                          >
+                            {val === null || val === undefined ? (
+                              <span className="text-[14px] text-[#64748b] font-medium">—</span>
+                            ) : isBaseStart ? (
+                              <span className="inline-block px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/15 text-[#cbd5e1] text-[11px] font-semibold">
+                                Base (0%)
+                              </span>
+                            ) : (
+                              <span className={`text-[13.5px] font-bold ${getPercentTextColor(val)}`}>
+                                {formatSignedPercent(val)}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+
+                      {/* Última Coluna (Fixa à Direita — ATUAL) */}
+                      <td className="sticky right-0 z-10 bg-[#0d101b] px-3 py-3 text-right min-w-[104px] max-w-[124px] border-l border-white/10 align-middle">
+                        {row.awaitingFirstEvaluation ? (
+                          <span className="inline-block px-2 py-1 rounded-md bg-white/[0.06] border border-white/15 text-[#cbd5e1] text-[10.5px] font-medium leading-tight text-center">
+                            Aguardando 1º Check-in
+                          </span>
+                        ) : (
+                          <div className="flex flex-col items-end">
+                            <span className={`text-[14px] font-bold leading-tight ${getPercentTextColor(pct)}`}>
+                              {formatSignedPercent(pct)}
+                            </span>
+                            <span
+                              className={`text-[11px] font-medium leading-tight mt-0.5 ${getPercentTextColor(pct)}`}
+                            >
+                              {row.statusLabel}
                             </span>
                           </div>
-                          
-                          {/* Barra Horizontal do Eixo */}
-                          <div className="h-2.5 bg-white/[0.08] rounded-full overflow-hidden">
-                            <div
-                              style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
-                              className="h-full bg-[#5eea8f] rounded-full transition-all duration-500"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Botão de Rodapé para Recolher Avaliação (evita scroll de volta) */}
-                  <div className="pt-3 flex justify-center border-t border-white/[0.04]">
-                    <button
-                      type="button"
-                      onClick={() => setOpenCheckInId(null)}
-                      className="px-5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-white text-[18px] font-semibold flex items-center gap-2 transition cursor-pointer active:scale-95"
-                    >
-                      <ChevronDown className="w-5 h-5 rotate-180 text-[#5eea8f]" />
-                      <span>Recolher Check-In</span>
-                    </button>
-                  </div>
-
-                </div>
-              )}
-            </div>
-          );
-        })}
-        </div>
-      )}
-
-      {/* ============================================================== */}
-      {/* CURVA DE VITALIDADE E FUNCIONALIDADES PERCEBIDAS (Fiel à Imagem 3) */}
-      {/* ============================================================== */}
-      {checkIns.length > 0 && (
-      <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-4 shadow-sm">
-        
-        {/* Cabeçalho do Gráfico */}
-        <div className="flex items-center gap-2.5">
-          {/* Ícone fiel à imagem 3: linha ascendente com barras verticais */}
-          <svg 
-            className="w-7 h-7 text-[#5eea8f] shrink-0" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2.5" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="15" width="3" height="6" fill="#5eea8f" stroke="none" opacity="0.6" rx="0.5" />
-            <rect x="9" y="11" width="3" height="10" fill="#5eea8f" stroke="none" opacity="0.8" rx="0.5" />
-            <rect x="15" y="7" width="3" height="14" fill="#5eea8f" stroke="none" opacity="1" rx="0.5" />
-            <path d="M3 15l6-6 6 3 6-7" stroke="#5eea8f" strokeWidth="2.5" />
-            <path d="M17 5h4v4" stroke="#5eea8f" strokeWidth="2.5" />
-          </svg>
-          <div>
-            <div className="text-[20px] font-bold text-white leading-tight">
-              Curva de Vitalidade e<br />Funcionalidades Percebidas
-            </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Pontuação referente ao registro anterior centralizada com estilo button sem função */}
-        <div className="mt-4 text-center space-y-1.5 flex flex-col items-center">
-          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-xl bg-[#5eea8f]/15 border border-[#5eea8f]/35 shadow-sm text-center">
-            <span className="text-[25px] font-bold text-[#5eea8f] tabular-nums leading-none">
-              {currentDelta !== undefined ? (currentDelta >= 0 ? `+${currentDelta} pontos` : `${currentDelta} pontos`) : '+0 pontos'}
+      {/* ===================================================================== */}
+      {/* CARD DE RODAPÉ — EVOLUÇÃO GERAL DOS SINTOMAS                          */}
+      {/* ===================================================================== */}
+      {overallEvolution && (
+        <div className="bg-[#0d101b] border border-white/15 rounded-2xl p-4 shadow-md space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[16px] font-bold text-white leading-tight">
+              Evolução Geral dos Sintomas
+            </h3>
+            <span
+              className={`px-2.5 py-1 rounded-lg border text-[12px] font-semibold whitespace-nowrap ${getStatusBadgeClasses(
+                overallEvolution.averagePercent,
+                overallEvolution.statusLabel
+              )}`}
+            >
+              {overallEvolution.statusLabel}
             </span>
           </div>
-          <div className="text-[19px] text-[#cfd3dc] font-medium text-center">
-            Referente ao registro anterior
+
+          <div className="flex items-baseline justify-between gap-2">
+            <div className={`text-[30px] font-extrabold leading-none tabular-nums ${getPercentTextColor(overallEvolution.averagePercent)}`}>
+              {formatSignedPercent(overallEvolution.averagePercent)}
+            </div>
+            <div className="text-[13px] text-[#94a3b8] font-semibold tabular-nums">
+              Índice visual: <span className="text-white">{Math.round(overallEvolution.displayScore)}</span>/100
+            </div>
+          </div>
+
+          <div className="h-3 bg-white/[0.08] rounded-full overflow-hidden">
+            <div
+              style={{
+                width: `${Math.min(100, Math.max(0, overallEvolution.displayScore))}%`
+              }}
+              className={`h-full rounded-full transition-all duration-500 ${getProgressBarColorClass(
+                overallEvolution.averagePercent
+              )}`}
+            />
           </div>
         </div>
-
-        {/* Gráfico SVG com Linha e Pontos Conectados (rolagem lateral automática se houver mais de 8 avaliações) */}
-        <div className="w-full overflow-x-auto no-scrollbar py-2">
-          {(() => {
-            const count = checkIns.length;
-            const minVal = 55;
-            const maxVal = 85;
-
-            // Se count <= 8, largura normal de 330px ocupando 100%. Se > 8, expande para rolagem lateral suave
-            const isScrollable = count > 8;
-            const chartWidth = isScrollable ? count * 44 : 330;
-            const startX = 16; // Ponto 1° movido para a esquerda aproveitando o espaço da borda
-            const endX = chartWidth - 16;
-            const stepX = (endX - startX) / Math.max(1, count - 1);
-
-            const points = checkIns.map((item, idx) => {
-              const x = startX + idx * stepX;
-              const clamped = Math.max(minVal, Math.min(maxVal, item.ivp));
-              const y = 82 - ((clamped - minVal) / (maxVal - minVal)) * 60;
-              return { 
-                x, 
-                y, 
-                val: item.ivp, 
-                label: `${idx + 1}°` 
-              };
-            });
-
-            const polyPath = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-            const areaPath = `${polyPath} L ${points[points.length - 1].x.toFixed(1)} 86 L ${points[0].x.toFixed(1)} 86 Z`;
-
-            return (
-              <svg 
-                viewBox={`0 0 ${chartWidth} 105`} 
-                style={{ 
-                  minWidth: isScrollable ? `${chartWidth}px` : '100%',
-                  width: isScrollable ? `${chartWidth}px` : '100%' 
-                }}
-                className="h-36 overflow-visible"
-              >
-                <defs>
-                  <linearGradient id="vitalityGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#5eea8f" stopOpacity="0.45" />
-                    <stop offset="100%" stopColor="#5eea8f" stopOpacity="0.02" />
-                  </linearGradient>
-                </defs>
-
-                {/* Linhas de Grade Tracejadas */}
-                <line x1="8" y1="22" x2={chartWidth - 8} y2="22" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
-                <line x1="8" y1="52" x2={chartWidth - 8} y2="52" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
-                <line x1="8" y1="82" x2={chartWidth - 8} y2="82" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
-
-                <path d={areaPath} fill="url(#vitalityGradient)" />
-                <path d={polyPath} fill="none" stroke="#5eea8f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                
-                {points.map((p, idx) => (
-                  <g key={idx}>
-                    {/* Círculo do Ponto */}
-                    <circle cx={p.x} cy={p.y} r="5" fill="#0d0d16" stroke="#5eea8f" strokeWidth="2.5" />
-                    <circle cx={p.x} cy={p.y} r="2" fill="#5eea8f" />
-                    
-                    {/* Valor do Ponto com font-size 16px */}
-                    <text x={p.x} y={p.y - 9} fill="#ffffff" fontSize="16" textAnchor="middle" fontWeight="bold">
-                      {p.val}
-                    </text>
-                    
-                    {/* Rótulo do Check-in (1°, 2°, 3°...) com font-size 16px */}
-                    <text x={p.x} y="100" fill="#e0e0ed" fontSize="16" textAnchor="middle" fontWeight="600">
-                      {p.label}
-                    </text>
-                  </g>
-                ))}
-              </svg>
-            );
-          })()}
-        </div>
-      </div>
       )}
 
-      {/* ============================================================== */}
-      {/* COMENTÁRIO AUTOMÁTICO DA IA (Seção 6 e 7)                       */}
-      {/* ============================================================== */}
-      <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-4 shadow-sm space-y-2">
-        <div className="flex items-center gap-2.5 mb-1">
-          <Sparkles className="w-5 h-5 text-[#e5a93c] shrink-0" />
-          <div className="text-[20px] font-bold text-white">
-            Reconhecimento da Vitalidade
-          </div>
-        </div>
-        <div className="text-[20px] text-[#cfd3dc] leading-relaxed font-normal">
-          {getAiFeedback()}
-        </div>
-        <div className="text-[18px] text-[#e0e0ed] mt-3 pt-2.5 border-t border-white/[0.06] leading-snug">
-          Instrumento de percepção de saúde e funcionalidade autorreferida da clínica Vittáre.
-        </div>
-      </div>
-
-      {/* ============================================================== */}
-      {/* MODAL 9:16 QUESTIONÁRIO COMPLETO COM OS 8 EIXOS               */}
-      {/* ============================================================== */}
+      {/* ===================================================================== */}
+      {/* MODAL DE CHECK-IN DINÂMICO (activeCheckinQuestions)                  */}
+      {/* ===================================================================== */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 animate-fadeIn">
-          <div 
-            className="w-full max-w-[420px] h-[92vh] max-h-[820px] rounded-3xl bg-[#0f1424] border border-[#2b3558] flex flex-col overflow-hidden shadow-2xl font-['Plus_Jakarta_Sans',sans-serif]"
-          >
-            {/* Cabeçalho do Modal com Fundo Azul Marinho Escuro:
-                Ao scrollar, substitui "Acompanhamento da Vitalidade" pelo nome do Eixo Atual (ex: SAÚDE COGNITIVA) 
-                fixo no topo mais alto, dinamicamente conforme os eixos passam */}
-            <div className="p-3.5 sm:p-4 bg-[#141b30] border-b border-white/10 flex items-center justify-between shrink-0 min-h-[68px] transition-all duration-200">
-              {!isScrolled ? (
-                <div className="animate-fadeIn">
-                  <div className="text-[18px] font-bold text-white leading-tight">
-                    Acompanhamento da Vitalidade
-                  </div>
-                  <div className="text-[15px] text-[#5eea8f] font-medium mt-0.5">
-                    Período: 19/10 a 02/11 · Últimos 14 dias
-                  </div>
+          <div className="w-full max-w-[420px] max-h-[92vh] rounded-3xl bg-[#0f1424] border border-[#2b3558] flex flex-col overflow-hidden shadow-2xl font-['Plus_Jakarta_Sans',sans-serif]">
+            {/* Cabeçalho do Modal */}
+            <div className="p-4 bg-[#141b30] border-b border-white/10 flex items-center justify-between shrink-0">
+              <div className="min-w-0">
+                <div className="text-[18px] font-bold text-white leading-tight">
+                  Check-in de Sintomas
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 animate-fadeIn">
-                  <span className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#0f1424] border border-[#5eea8f]/40 shadow-md text-[#5eea8f] font-extrabold text-[16px] sm:text-[17px] uppercase tracking-wider">
-                    {activeAxis.name}
-                  </span>
+                <div className="text-[13px] text-[#5eea8f] font-medium mt-0.5 tabular-nums">
+                  {activeQuestions.length > 0
+                    ? `${answeredCount} de ${activeQuestions.length} respondidas`
+                    : 'Acompanhamento Clínico'}
                 </div>
-              )}
+              </div>
 
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/15 text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 ml-2"
+                className="w-11 h-11 rounded-full bg-white/10 hover:bg-white/15 text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 ml-2"
                 title="Fechar questionário"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Corpo do Questionário (Scrollável com 9:16) */}
-            <div 
-              ref={scrollContainerRef}
-              onScroll={handleModalScroll}
-              className="grow overflow-y-auto px-2.5 py-4 sm:px-3.5 space-y-6 no-scrollbar"
-            >
-              
-              {/* Orientação ao Paciente */}
-              <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-xl p-3 text-[17px] sm:text-[18px] text-justify text-[#cfd3dc] leading-relaxed">
-                Considere os <strong>últimos 14 dias</strong>. Responda pensando no período como um todo, e não apenas em como você está se sentindo neste momento.
+            {/* Corpo do Modal */}
+            <div className="grow overflow-y-auto px-3 py-4 space-y-4 no-scrollbar">
+              {/* Subtítulo exibido UMA única vez no topo */}
+              <div className="bg-white/[0.04] border border-white/15 rounded-xl px-3.5 py-2.5 text-[15px] font-medium text-[#cfd3dc] text-center">
+                Referente ao período desde o último registro
               </div>
 
-              {/* Lista dos 8 Eixos com espaçamento ampliado entre eixos */}
-              {CHECKIN_AXES.map((axis) => (
-                <div 
-                  key={axis.id} 
-                  data-axis-id={axis.id}
-                  className="space-y-4 mb-10 pb-4 border-b border-white/[0.06] last:border-b-0 last:mb-2 last:pb-0"
-                >
-                  
-                  {/* Cabeçalho do Eixo no fluxo inicial: não sticky para não gerar cabeçalho duplo, subindo naturalmente ao scrollar */}
-                  <div className="text-center py-2.5 px-3 mb-4">
-                    <span className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#141b30] border border-[#5eea8f]/35 shadow-md text-[#5eea8f] font-extrabold text-[17px] uppercase tracking-wider">
-                      {axis.name}
-                    </span>
+              {activeQuestions.length === 0 ? (
+                <div className="bg-[#13192c] border border-white/15 rounded-2xl p-5 text-center space-y-2.5">
+                  <div className="text-[16px] font-semibold text-white">
+                    Nenhuma pergunta ativa publicada
                   </div>
-
-                  {/* As 4 perguntas do eixo com espaço e respiro entre os divs */}
-                  <div className="space-y-4">
-                    {axis.questions.map((q, qIdx) => {
-                      const sel = answers[q.id];
-                      return (
-                        <div 
-                          key={q.id}
-                          className="bg-[#13192c] border-[1px] border-white/50 rounded-2xl px-2 py-3 sm:p-3 shadow-sm space-y-3"
-                        >
-                          {/* Enunciado da Pergunta com numeração normal (1., 2., 3...), tipografia 19px, hifenação silábica */}
-                          <div 
-                            style={{ 
-                              width: '100%', 
-                              paddingLeft: '4px', 
-                              marginLeft: '0px',
-                              hyphens: 'auto',
-                              WebkitHyphens: 'auto',
-                              wordBreak: 'normal',
-                              overflowWrap: 'break-word'
-                            }}
-                            lang="pt-BR"
-                            className="text-[19px] font-medium text-white leading-snug"
-                          >
-                            <span className="text-[#5eea8f] font-bold mr-1.5">{qIdx + 1}.</span>
-                            {q.text}
-                          </div>
-
-                          {/* Botões Segmentados 0, 1 e 2 em 3 Colunas com área interna expandida */}
-                          <div className="grid grid-cols-3 gap-1 sm:gap-2">
-                            {SCALE_OPTIONS.map(opt => {
-                              const isSelected = sel === opt.value;
-                              return (
-                                <button
-                                  key={opt.value}
-                                  type="button"
-                                  onClick={() => {
-                                    handleSelectAnswer(q.id, opt.value);
-                                    if (submitError) setSubmitError(null);
-                                  }}
-                                  className={`py-2 px-1 sm:px-2 rounded-2xl border transition-all cursor-pointer select-none flex flex-col items-center justify-center text-center min-h-[114px] ${
-                                    isSelected
-                                      ? 'bg-[#4c66e8] border-[#4c66e8] text-white shadow-lg shadow-[#4c66e8]/30 scale-[1.02]'
-                                      : 'bg-white/[0.04] hover:bg-white/[0.08] border-[1px] border-white/50 text-white'
-                                  }`}
-                                >
-                                  <div className="text-[26px] font-extrabold leading-none mb-1 text-white">
-                                    {opt.value}
-                                  </div>
-                                  <div className="text-[18px] sm:text-[19px] font-bold leading-tight text-white tracking-tight">
-                                    {opt.label}
-                                  </div>
-                                  <div className={`text-[17px] sm:text-[18px] leading-tight font-medium mt-1 ${isSelected ? 'text-[#eef4f8]' : 'text-[#a5a4b8]'}`}>
-                                    {opt.ref}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Opção Adicional "Não consegui avaliar" sem pontuação */}
-                          <div className="text-center pt-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleSelectAnswer(q.id, 'nse');
-                                if (submitError) setSubmitError(null);
-                              }}
-                              className={`text-[16px] italic px-3 py-1.5 rounded-xl transition cursor-pointer text-[#ededed] ${
-                                sel === 'nse'
-                                  ? 'bg-[#3b4766] not-italic font-medium text-white shadow-sm'
-                                  : 'hover:text-white underline'
-                              }`}
-                            >
-                              Não consegui avaliar
-                            </button>
-                          </div>
-
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              {/* Status do Cálculo do IVP conforme Regras Clínicas */}
-              {currentScores.canCalculateIvp ? (
-                <div className="mb-3 p-3 rounded-xl bg-[#5eea8f]/10 border border-[#5eea8f]/30 text-center animate-fadeIn">
-                  <div className="text-[16px] font-bold text-[#5eea8f]">
-                    Todos os 8 eixos calculáveis
-                  </div>
-                  <div className="text-[14px] text-white mt-0.5">
-                    Índice de Vitalidade Percebida (IVP): <strong className="text-[18px] text-[#5eea8f]">{currentScores.ivp}</strong> / 100
-                  </div>
+                  <p className="text-[13.5px] text-[#94a3b8] leading-relaxed">
+                    As perguntas personalizadas do seu check-in aparecerão aqui automaticamente assim que forem liberadas pelo seu nutricionista.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="mt-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/10 hover:bg-white/15 text-white text-[14px] font-semibold transition cursor-pointer"
+                  >
+                    Fechar
+                  </button>
                 </div>
               ) : (
-                <div className="mb-3 p-3 rounded-xl bg-white/[0.03] border border-white/10 text-center text-[13.5px] text-[#cfd3dc]">
-                  <div className="font-semibold text-[#5eea8f]">
-                    {8 - currentScores.invalidAxes.length} de 8 eixos calculáveis
-                  </div>
-                  <div className="text-[12.5px] text-[#a5a4b8] mt-0.5">
-                    O IVP geral será calculado quando os 8 eixos tiverem ao menos 3 respostas válidas.
+                <div className="space-y-4">
+                  {activeQuestions.map((q, qIdx) => {
+                    const options = q.options && q.options.length > 0 ? q.options : DEFAULT_STANDARD_OPTIONS;
+                    const selectedKey = answers[q.tagId];
+
+                    return (
+                      <div
+                        key={q.id || q.tagId}
+                        className="bg-[#13192c] border border-white/20 rounded-2xl p-3.5 shadow-sm space-y-3"
+                      >
+                        <div>
+                          <div className="text-[12px] font-semibold uppercase tracking-wider text-[#5eea8f] mb-1">
+                            {String(qIdx + 1).padStart(2, '0')} · {q.label}
+                          </div>
+                          <div className="text-[16.5px] font-semibold text-white leading-snug">
+                            {q.questionText}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.map((opt) => {
+                            const isSelected = selectedKey === opt.key;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => handleSelectOption(q.tagId, opt.key)}
+                                className={`min-h-[52px] px-2.5 py-2 rounded-xl border text-[13.5px] font-bold leading-tight text-center transition-all cursor-pointer active:scale-[0.98] flex items-center justify-center ${getOptionStyles(
+                                  opt.key,
+                                  isSelected
+                                )}`}
+                              >
+                                <span>{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {submitError && (
+                    <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-400/40 text-rose-200 text-[13.5px] leading-snug text-center">
+                      {submitError}
+                    </div>
+                  )}
+
+                  <div className="pt-1 pb-2">
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={handleSubmitDynamicCheckin}
+                      className="w-full min-h-[50px] py-3 px-4 rounded-2xl bg-gradient-to-r from-[#0f7a3a] via-[#129446] to-[#0f7a3a] hover:from-[#139247] hover:to-[#108c43] disabled:opacity-60 border border-[#5eea8f]/50 text-white font-bold text-[16.5px] flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-5 h-5 text-white shrink-0" />
+                      <span>{isSubmitting ? 'Enviando...' : 'Enviar Check-in'}</span>
+                    </button>
                   </div>
                 </div>
               )}
-
-              {submitError && (
-                <div className="mb-3 p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-[13.5px] leading-relaxed text-center animate-fadeIn">
-                  {submitError}
-                </div>
-              )}
-
-              {/* Botão de Envio dentro do Modal com espaço aumentado entre palavras */}
-              <div className="pt-2 pb-4">
-                <button
-                  type="button"
-                  onClick={handleSubmitCheckIn}
-                  className="w-full min-h-[50px] py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#0f7a3a] via-[#129446] to-[#0f7a3a] hover:from-[#139247] hover:to-[#108c43] border border-[#5eea8f]/50 text-white font-bold text-[17px] tracking-[0.25em] flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition cursor-pointer"
-                >
-                  <CheckCircle2 className="w-5 h-5 text-white" />
-                  <span>ENVIAR&nbsp;&nbsp;&nbsp;PROGRESSO</span>
-                </button>
-                <div className="text-center text-[12px] text-[#e0e0ed] mt-2">
-                  Seus dados serão calculados e integrados à sua Curva de Vitalidade instantaneamente.
-                </div>
-              </div>
-
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 };

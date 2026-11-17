@@ -183,10 +183,32 @@ export interface WeightHistoryPoint {
   fat: number;
 }
 
+export interface ParsedEncounterTag {
+  raw: string;
+  label: string;
+  symbol: '↔' | '↑' | '↓';
+  status: string;
+  color: 'green' | 'red';
+}
+
+export interface NumberedStepItem {
+  number: string;
+  text: string;
+}
+
 export interface ClinicalEvolutionItem {
   id: string;
+  encounterId?: string;
+  recordType?: string;
   title?: string;
+  date?: string;
   dateStr: string;
+  pertinentObservations?: string;
+  alertTags?: string[];
+  parsedTags?: ParsedEncounterTag[];
+  nextSteps?: string[];
+  predictability?: string[];
+  numberedSteps?: NumberedStepItem[];
   resumoGeral?: string;
   observacoes?: string;
   achados?: string[];
@@ -202,6 +224,58 @@ export interface ClinicalSummaryInfo {
   id?: string;
   summary: string;
   dateStr: string;
+  updatedAt?: string | number;
+}
+
+export interface CheckinQuestionOption {
+  key: 'declinio' | 'estavel' | 'em_melhora' | 'recuperado_100' | string;
+  label: string;
+  deltaPercent?: number;
+}
+
+export interface CheckinQuestionItem {
+  id: string;
+  tagId: string;
+  label: string;
+  questionText: string;
+  options?: CheckinQuestionOption[];
+}
+
+export interface LongitudinalEncounterCol {
+  id: string;
+  label: string;
+  shortDateBr?: string;
+  date?: string;
+}
+
+export interface LongitudinalEncounterValue {
+  status?: string;
+  deltaPercent?: number;
+  cumulativePercent?: number;
+}
+
+export interface LongitudinalNeedRow {
+  tagId: string;
+  label: string;
+  startEncounterId?: string;
+  cumulativeByEncounter: Record<string, number | null>;
+  valuesByEncounter?: Record<string, LongitudinalEncounterValue>;
+  awaitingFirstEvaluation?: boolean;
+  accumulatedPercent: number;
+  statusLabel: string;
+}
+
+export interface OverallEvolutionSummary {
+  averagePercent: number;
+  displayScore: number;
+  statusLabel: string;
+}
+
+export interface WellbeingLongitudinalData {
+  activeCheckinQuestions: CheckinQuestionItem[];
+  encounters: LongitudinalEncounterCol[];
+  needsMatrix: LongitudinalNeedRow[];
+  overallEvolution?: OverallEvolutionSummary;
   updatedAt?: string | number;
 }
 
@@ -242,6 +316,7 @@ export interface PatientProfile {
   clinicalEvolutions?: ClinicalEvolutionItem[];
   clinicalSummary?: string;
   clinicalSummaryInfo?: ClinicalSummaryInfo;
+  wellbeingData?: WellbeingLongitudinalData;
 
   lyaNotification: {
     active: boolean;

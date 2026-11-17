@@ -1,4 +1,22 @@
-import { PatientProfile, ProtocolItem, ProtocolFormula, ActiveIngredient, ExamBatch, PhysicalAssessmentItem, AssessmentComparisonMetric, ReferralItem, ClinicalEvolutionItem, ClinicalSummaryInfo } from '../types/patient';
+import {
+  PatientProfile,
+  ProtocolItem,
+  ProtocolFormula,
+  ActiveIngredient,
+  ExamBatch,
+  PhysicalAssessmentItem,
+  AssessmentComparisonMetric,
+  ReferralItem,
+  ClinicalEvolutionItem,
+  ClinicalSummaryInfo,
+  ParsedEncounterTag,
+  NumberedStepItem,
+  WellbeingLongitudinalData,
+  CheckinQuestionItem,
+  LongitudinalEncounterCol,
+  LongitudinalNeedRow,
+  OverallEvolutionSummary
+} from '../types/patient';
 import { INITIAL_PATIENTS } from '../patients/defaultPatient';
 import { db, auth, isFirebaseConfigured } from '../config/firebase';
 import { 
@@ -16,7 +34,7 @@ import {
   type DocumentSnapshot 
 } from 'firebase/firestore';
 
-const STORAGE_KEY = 'vittare_patients_store_v16';
+const STORAGE_KEY = 'vittare_patients_store_v18';
 
 // Cache persistente em memória das subcoleções oficiais para blindagem contra sobrescrita pelo doc raiz
 let cachedSubPrescriptions: ProtocolItem[] = [];
@@ -27,7 +45,11 @@ let cachedSubExamBatches: ExamBatch[] = [];
 let cachedSubAssessments: PhysicalAssessmentItem[] = [];
 let lastAnthroError: string | null = null;
 let cachedSubEvolutions: ClinicalEvolutionItem[] = [];
+let cachedRootConsultationRecords: ClinicalEvolutionItem[] = [];
+let cachedResumoConsultationRecords: ClinicalEvolutionItem[] = [];
+let hasLoadedSubEvolution: boolean = false;
 let cachedClinicalSummaryInfo: ClinicalSummaryInfo | null = null;
+let cachedWellbeingData: WellbeingLongitudinalData | null = null;
 let lastEvolutionsError: string | null = null;
 
 function parseAssessmentTimestampMs(value: unknown): number {
@@ -219,14 +241,198 @@ function parseStructuredSectionsFromRawText(rawText: string): {
   };
 }
 
+export function isConsultationEncounterDoc(docId: string, data?: any): boolean {
+  if (!docId && !data) return false;
+  if (docId === 'resumo_geral') return false;
+  const startsWithEncounter = String(docId || '').startsWith('encounter_');
+  const isConsultationRecord = data?.recordType === 'consultation_record';
+  if (startsWithEncounter || isConsultationRecord) {
+    const hasObservations = typeof data?.pertinentObservations === 'string' && data.pertinentObservations.trim().length > 0;
+    const hasLegacyObs = typeof data?.observacoes === 'string' && data.observacoes.trim().length > 0;
+    const hasNextSteps = Array.isArray(data?.nextSteps) && data.nextSteps.length > 0;
+    const hasNumberedSteps = Array.isArray(data?.numberedSteps) && data.numberedSteps.length > 0;
+    const hasLegacySteps = Array.isArray(data?.proximosPassos) && data.proximosPassos.length > 0;
+    if (data && typeof data === 'object' && ('pertinentObservations' in data || 'nextSteps' in data || 'numberedSteps' in data)) {
+      return hasObservations || hasLegacyObs || hasNextSteps || hasNumberedSteps || hasLegacySteps || isConsultationRecord;
+    }
+    return true;
+  }
+  // Suporte ao modelo antigo na coleção evolution / Evolution (documentos que não são resumo_geral e possuem conteúdo clínico)
+  if (data && typeof data === 'object') {
+    return Boolean(
+      data.pertinentObservations ||
+      data.observacoes ||
+      data.observacoesPertinentes ||
+      data.nextSteps ||
+      data.proximosPassos ||
+      data.planoDeAcao ||
+      data.resumoGeral ||
+      data.summary ||
+      data.notes ||
+      data.clinicalNotes ||
+      data.rawText ||
+      data.text ||
+      data.title ||
+      data.titulo
+    );
+  }
+  return false;
+}
+
+export function normalizeConsultationRecordsList(rawList: any): ClinicalEvolutionItem[] {
+  if (!Array.isArray(rawList) || rawList.length === 0) return [];
+  const normalized = rawList
+    .filter((item: any) => item && typeof item === 'object')
+    .map((item: any, idx: number) =>
+      normalizeClinicalEvolution(
+        {
+          ...item,
+          recordType: item.recordType || 'consultation_record'
+        },
+        item.id || `encounter_rec_${idx + 1}`
+      )
+    );
+  return sortClinicalEvolutionsDesc(normalized);
+}
+
+export function resolveAuthoritativeConsultationRecords(
+  rootRecords?: ClinicalEvolutionItem[],
+  resumoRecords?: ClinicalEvolutionItem[],
+  subRecords?: ClinicalEvolutionItem[]
+): ClinicalEvolutionItem[] {
+  if (Array.isArray(rootRecords) && rootRecords.length > 0) return rootRecords;
+  if (cachedRootConsultationRecords.length > 0) return cachedRootConsultationRecords;
+  if (Array.isArray(resumoRecords) && resumoRecords.length > 0) return resumoRecords;
+  if (cachedResumoConsultationRecords.length > 0) return cachedResumoConsultationRecords;
+  if (Array.isArray(subRecords) && subRecords.length > 0) return subRecords;
+  if (cachedSubEvolutions.length > 0) return cachedSubEvolutions;
+  return [];
+}
+
+export function normalizeParsedTags(rawParsedTags: any, rawAlertTags?: any): ParsedEncounterTag[] {
+  const result: ParsedEncounterTag[] = [];
+
+  if (Array.isArray(rawParsedTags) && rawParsedTags.length > 0) {
+    for (const item of rawParsedTags) {
+      if (!item || typeof item !== 'object') continue;
+      const rawStr = String(item.raw || '').trim();
+      const label = String(item.label || rawStr || '').trim();
+      if (!label) continue;
+
+      const rawSymbol = String(item.symbol || '').trim();
+      let symbol: '↔' | '↑' | '↓' = '↔';
+      if (rawSymbol === '↑' || rawStr.includes('↑')) symbol = '↑';
+      else if (rawSymbol === '↓' || rawStr.includes('↓')) symbol = '↓';
+      else if (rawSymbol === '↔' || rawStr.includes('↔')) symbol = '↔';
+      else if (item.color === 'red') symbol = '↑';
+
+      const color: 'green' | 'red' =
+        item.color === 'green' || item.color === 'red'
+          ? item.color
+          : (symbol === '↔' ? 'green' : 'red');
+
+      const status = String(
+        item.status || (color === 'green' ? 'Normal / Melhora' : symbol === '↓' ? 'Queda' : 'Aumento')
+      ).trim();
+
+      result.push({
+        raw: rawStr || `${label} ${symbol} ${status}`.trim(),
+        label,
+        symbol,
+        status,
+        color
+      });
+    }
+  } else {
+    const strTags = toCleanStringArray(rawAlertTags);
+    for (const tagStr of strTags) {
+      let symbol: '↔' | '↑' | '↓' = '↔';
+      let color: 'green' | 'red' = 'green';
+      let label = tagStr;
+      let status = 'Normal / Melhora';
+
+      if (tagStr.includes('↑')) {
+        symbol = '↑';
+        color = 'red';
+        const parts = tagStr.split('↑').map(s => s.trim());
+        label = parts[0] || tagStr;
+        status = parts[1] || 'Aumento';
+      } else if (tagStr.includes('↓')) {
+        symbol = '↓';
+        color = 'red';
+        const parts = tagStr.split('↓').map(s => s.trim());
+        label = parts[0] || tagStr;
+        status = parts[1] || 'Queda';
+      } else if (tagStr.includes('↔')) {
+        symbol = '↔';
+        color = 'green';
+        const parts = tagStr.split('↔').map(s => s.trim());
+        label = parts[0] || tagStr;
+        status = parts[1] || 'Estável';
+      } else {
+        const lower = tagStr.toLowerCase();
+        if (/elevad|alto|aument|alterad|aten[çc][ãa]o|piora|decl[ií]nio/.test(lower)) {
+          symbol = '↑';
+          color = 'red';
+          status = 'Aumento';
+        } else if (/reduzid|baix|queda|defici[êe]ncia/.test(lower)) {
+          symbol = '↓';
+          color = 'red';
+          status = 'Queda';
+        }
+      }
+
+      result.push({
+        raw: tagStr,
+        label,
+        symbol,
+        status,
+        color
+      });
+    }
+  }
+
+  // Ordenar sempre mantendo tags verdes (↔) primeiro e vermelhas (↑ / ↓) depois
+  const greens = result.filter(t => t.color === 'green');
+  const reds = result.filter(t => t.color !== 'green');
+  return [...greens, ...reds];
+}
+
+export function normalizeNumberedSteps(rawNumbered: any, rawSteps?: any): NumberedStepItem[] {
+  if (Array.isArray(rawNumbered) && rawNumbered.length > 0) {
+    const mapped = rawNumbered
+      .map((item: any, idx: number) => {
+        if (typeof item === 'string') {
+          return {
+            number: String(idx + 1).padStart(2, '0'),
+            text: item.trim()
+          };
+        }
+        return {
+          number: String(item?.number || String(idx + 1).padStart(2, '0')).trim(),
+          text: String(item?.text || item?.label || item?.title || '').trim()
+        };
+      })
+      .filter((s: NumberedStepItem) => s.text.length > 0);
+    if (mapped.length > 0) return mapped;
+  }
+
+  const list = toCleanStringArray(rawSteps);
+  return list.map((text, idx) => ({
+    number: String(idx + 1).padStart(2, '0'),
+    text
+  }));
+}
+
 export function normalizeClinicalEvolution(raw: any, idFallback: string): ClinicalEvolutionItem {
-  const createdMs = parseAssessmentTimestampMs(raw?.createdAt || raw?.timestamp || raw?.date);
+  const dateIso = typeof raw?.date === 'string' && raw.date.trim() ? raw.date.trim() : undefined;
+  const createdMs = parseAssessmentTimestampMs(raw?.createdAt || raw?.timestamp || dateIso);
   const updatedMs = parseAssessmentTimestampMs(raw?.updatedAt);
   const rawDate =
     raw?.dateStr ||
     raw?.date ||
     raw?.data ||
-    (createdMs > 0 ? new Date(createdMs).toLocaleDateString('pt-BR') : '13/11/2026');
+    (createdMs > 0 ? new Date(createdMs).toLocaleDateString('pt-BR') : '16/11/2026');
 
   const cleanDate = String(rawDate).replace(/^Data:\s*/i, '').trim();
   const formattedDate = cleanDate.includes('-') && /^\d{4}-\d{2}-\d{2}/.test(cleanDate)
@@ -255,39 +461,54 @@ export function normalizeClinicalEvolution(raw: any, idFallback: string): Clinic
     parsedFromText.resumoGeral ||
     '';
 
-  const observacoes =
-    (typeof (raw?.observacoes ?? raw?.observacoesPertinentes ?? raw?.observations ?? raw?.pertinentObservations) === 'string'
-      ? String(raw?.observacoes ?? raw?.observacoesPertinentes ?? raw?.observations ?? raw?.pertinentObservations).trim()
+  const pertinentObservations =
+    (typeof (raw?.pertinentObservations ?? raw?.observacoesPertinentes ?? raw?.observacoes ?? raw?.observations) === 'string'
+      ? String(raw?.pertinentObservations ?? raw?.observacoesPertinentes ?? raw?.observacoes ?? raw?.observations).trim()
       : '') ||
     parsedFromText.observacoes ||
     '';
 
-  const explicitAchados = toCleanStringArray(
-    raw?.achados ?? raw?.findings ?? raw?.alertas ?? raw?.alerts ?? raw?.pontosDeAtencao
+  const explicitAlertTags = toCleanStringArray(
+    raw?.alertTags ?? raw?.achados ?? raw?.findings ?? raw?.alertas ?? raw?.alerts ?? raw?.pontosDeAtencao
   );
-  const achados = explicitAchados.length > 0 ? explicitAchados : (parsedFromText.achados || []);
+  const alertTags = explicitAlertTags.length > 0 ? explicitAlertTags : (parsedFromText.achados || []);
+  const parsedTags = normalizeParsedTags(raw?.parsedTags, alertTags);
 
+  const explicitNextSteps = toCleanStringArray(
+    raw?.nextSteps ?? raw?.predictability ?? raw?.proximosPassos ?? raw?.proximos_passos ?? raw?.steps ?? raw?.passos
+  );
   const explicitPlano = toCleanStringArray(
     raw?.planoDeAcao ?? raw?.plano_acao ?? raw?.actionPlan ?? raw?.actions ?? raw?.plano
   );
-  const planoDeAcao = explicitPlano.length > 0 ? explicitPlano : (parsedFromText.planoDeAcao || []);
+  const fallbackSteps =
+    explicitNextSteps.length > 0
+      ? explicitNextSteps
+      : (parsedFromText.proximosPassos && parsedFromText.proximosPassos.length > 0
+          ? parsedFromText.proximosPassos
+          : (explicitPlano.length > 0 ? explicitPlano : (parsedFromText.planoDeAcao || [])));
 
-  const explicitPassos = toCleanStringArray(
-    raw?.proximosPassos ?? raw?.proximos_passos ?? raw?.nextSteps ?? raw?.steps ?? raw?.passos
-  );
-  const proximosPassos = explicitPassos.length > 0 ? explicitPassos : (parsedFromText.proximosPassos || []);
+  const numberedSteps = normalizeNumberedSteps(raw?.numberedSteps, fallbackSteps);
 
   const tags = toCleanStringArray(raw?.tags ?? raw?.tipos ?? raw?.recordTypes ?? raw?.tipoRegistro);
 
   return {
     id: String(raw?.id || idFallback),
-    title: String(raw?.title || raw?.titulo || 'Evolução Clínica').trim(),
+    encounterId: raw?.encounterId ? String(raw.encounterId) : undefined,
+    recordType: raw?.recordType ? String(raw.recordType) : undefined,
+    title: String(raw?.title || raw?.titulo || 'Registro de Consulta').trim(),
+    date: dateIso,
     dateStr: formattedDate,
+    pertinentObservations: pertinentObservations || undefined,
+    alertTags,
+    parsedTags,
+    nextSteps: explicitNextSteps.length > 0 ? explicitNextSteps : numberedSteps.map(s => s.text),
+    predictability: toCleanStringArray(raw?.predictability),
+    numberedSteps,
     resumoGeral: resumoGeral || undefined,
-    observacoes: observacoes || undefined,
-    achados,
-    planoDeAcao,
-    proximosPassos,
+    observacoes: pertinentObservations || undefined,
+    achados: alertTags,
+    planoDeAcao: explicitPlano,
+    proximosPassos: explicitNextSteps,
     rawText: rawTextBody || undefined,
     tags: tags.length > 0 ? tags : undefined,
     createdAt: createdMs > 0 ? createdMs : undefined,
@@ -299,22 +520,250 @@ export function sortClinicalEvolutionsDesc(items: ClinicalEvolutionItem[]): Clin
   if (!Array.isArray(items) || items.length <= 1) return Array.isArray(items) ? [...items] : [];
 
   return [...items].sort((a, b) => {
-    const dateA = parseAssessmentDateMs(a.dateStr) || parseAssessmentTimestampMs(a.createdAt) || parseAssessmentTimestampMs(a.updatedAt);
-    const dateB = parseAssessmentDateMs(b.dateStr) || parseAssessmentTimestampMs(b.createdAt) || parseAssessmentTimestampMs(b.updatedAt);
-
-    if (dateB !== dateA) {
-      return dateB - dateA;
-    }
-
-    const timeA = Math.max(parseAssessmentTimestampMs(a.updatedAt), parseAssessmentTimestampMs(a.createdAt));
-    const timeB = Math.max(parseAssessmentTimestampMs(b.updatedAt), parseAssessmentTimestampMs(b.createdAt));
+    const timeA =
+      parseAssessmentTimestampMs(a.date) ||
+      parseAssessmentTimestampMs(a.updatedAt) ||
+      parseAssessmentDateMs(a.dateStr) ||
+      parseAssessmentTimestampMs(a.createdAt);
+    const timeB =
+      parseAssessmentTimestampMs(b.date) ||
+      parseAssessmentTimestampMs(b.updatedAt) ||
+      parseAssessmentDateMs(b.dateStr) ||
+      parseAssessmentTimestampMs(b.createdAt);
 
     if (timeB !== timeA) {
       return timeB - timeA;
     }
 
+    const updatedA = Math.max(parseAssessmentTimestampMs(a.updatedAt), parseAssessmentTimestampMs(a.createdAt));
+    const updatedB = Math.max(parseAssessmentTimestampMs(b.updatedAt), parseAssessmentTimestampMs(b.createdAt));
+
+    if (updatedB !== updatedA) {
+      return updatedB - updatedA;
+    }
+
     return String(b.id || '').localeCompare(String(a.id || ''));
   });
+}
+
+export function extractConsultationRecordsFromResumoGeral(resumoData?: any): ClinicalEvolutionItem[] {
+  if (!resumoData || typeof resumoData !== 'object') return [];
+
+  if (Array.isArray(resumoData.consultationRecords) && resumoData.consultationRecords.length > 0) {
+    return normalizeConsultationRecordsList(resumoData.consultationRecords);
+  }
+  if (Array.isArray(resumoData.records) && resumoData.records.length > 0) {
+    return normalizeConsultationRecordsList(resumoData.records);
+  }
+  if (Array.isArray(resumoData.evolutions) && resumoData.evolutions.length > 0) {
+    return normalizeConsultationRecordsList(resumoData.evolutions);
+  }
+
+  // Caso o documento /evolution/resumo_geral contenha diretamente os campos de uma anotação de consulta
+  const rawSummary = String(resumoData.summary || resumoData.resumoGeral || '').trim();
+  const isLegacyDeclinioOnly = /^decl[ií]nio\b/i.test(rawSummary);
+  const hasDirectObservations = Boolean(
+    (resumoData.pertinentObservations || resumoData.observacoes || resumoData.observacoesPertinentes || (!isLegacyDeclinioOnly ? rawSummary : '')).trim()
+  );
+  const hasDirectSteps = Boolean(
+    (Array.isArray(resumoData.nextSteps) && resumoData.nextSteps.length > 0) ||
+    (Array.isArray(resumoData.numberedSteps) && resumoData.numberedSteps.length > 0) ||
+    (Array.isArray(resumoData.proximosPassos) && resumoData.proximosPassos.length > 0) ||
+    (Array.isArray(resumoData.planoDeAcao) && resumoData.planoDeAcao.length > 0)
+  );
+  const hasDirectTags = Boolean(
+    (Array.isArray(resumoData.parsedTags) && resumoData.parsedTags.length > 0) ||
+    (Array.isArray(resumoData.alertTags) && resumoData.alertTags.length > 0) ||
+    (Array.isArray(resumoData.achados) && resumoData.achados.length > 0)
+  );
+
+  if (hasDirectObservations || hasDirectSteps || hasDirectTags) {
+    return [
+      normalizeClinicalEvolution(
+        {
+          ...resumoData,
+          pertinentObservations:
+            resumoData.pertinentObservations ||
+            resumoData.observacoes ||
+            resumoData.observacoesPertinentes ||
+            (!isLegacyDeclinioOnly ? rawSummary : ''),
+          recordType: 'consultation_record'
+        },
+        'encounter_resumo_geral'
+      )
+    ];
+  }
+
+  return [];
+}
+
+export function buildLegacyFallbackEncountersFromRoot(_rootRaw?: any): ClinicalEvolutionItem[] {
+  // Desativado: a aba Anotações deve refletir exclusivamente o que está gravado no Firebase (/evolution/resumo_geral e /evolution)
+  return [];
+}
+
+export function normalizeWellbeingData(resumoRaw: any, rootRaw?: any): WellbeingLongitudinalData | null {
+  const rawQuestions =
+    Array.isArray(resumoRaw?.activeCheckinQuestions) && resumoRaw.activeCheckinQuestions.length > 0
+      ? resumoRaw.activeCheckinQuestions
+      : (Array.isArray(rootRaw?.activeCheckinQuestions) ? rootRaw.activeCheckinQuestions : []);
+
+  // Quando resumo_geral é deletado para recomeçar, priorizamos exclusivamente os encontros e matriz de resumoRaw
+  const rawEncounters =
+    Array.isArray(resumoRaw?.encounters) && resumoRaw.encounters.length > 0
+      ? resumoRaw.encounters
+      : (resumoRaw && Array.isArray(resumoRaw?.longitudinalEncounters)
+          ? resumoRaw.longitudinalEncounters
+          : (!hasLoadedSubEvolution && Array.isArray(rootRaw?.longitudinalEncounters)
+              ? rootRaw.longitudinalEncounters
+              : []));
+
+  const rawNeedsMatrix =
+    Array.isArray(resumoRaw?.needsMatrix) && resumoRaw.needsMatrix.length > 0
+      ? resumoRaw.needsMatrix
+      : (resumoRaw && Array.isArray(resumoRaw?.longitudinalNeedsMatrix)
+          ? resumoRaw.longitudinalNeedsMatrix
+          : (!hasLoadedSubEvolution && Array.isArray(rootRaw?.longitudinalNeedsMatrix)
+              ? rootRaw.longitudinalNeedsMatrix
+              : []));
+
+  const rawClinicalStatusMap =
+    Array.isArray(resumoRaw?.clinicalStatusMap) && resumoRaw.clinicalStatusMap.length > 0
+      ? resumoRaw.clinicalStatusMap
+      : (Array.isArray(rootRaw?.clinicalStatusMap) ? rootRaw.clinicalStatusMap : []);
+
+  const rawOverall = resumoRaw?.overallEvolution || rootRaw?.overallEvolution || null;
+
+  if (
+    rawQuestions.length === 0 &&
+    rawEncounters.length === 0 &&
+    rawNeedsMatrix.length === 0 &&
+    rawClinicalStatusMap.length === 0 &&
+    !rawOverall
+  ) {
+    return null;
+  }
+
+  const activeCheckinQuestions: CheckinQuestionItem[] = rawQuestions
+    .filter((q: any) => q && typeof q === 'object')
+    .map((q: any, idx: number) => ({
+      id: String(q.id || q.tagId || `q-${idx + 1}`),
+      tagId: String(q.tagId || q.id || `tag-${idx + 1}`),
+      label: String(q.label || q.name || 'Sintoma / Necessidade').trim(),
+      questionText: String(q.questionText || q.text || `Como está a evolução de "${q.label || 'atual'}" desde o último registro?`).trim(),
+      options: Array.isArray(q.options)
+        ? q.options.map((opt: any) => ({
+            key: String(opt?.key || ''),
+            label: String(opt?.label || ''),
+            ...(typeof (opt?.deltaPercent ?? opt?.defaultDelta) === 'number'
+              ? { deltaPercent: Number(opt?.deltaPercent ?? opt?.defaultDelta) }
+              : {})
+          }))
+        : undefined
+    }));
+
+  let encounters: LongitudinalEncounterCol[] = rawEncounters
+    .filter((enc: any) => enc && typeof enc === 'object')
+    .map((enc: any, idx: number) => ({
+      id: String(enc.id || `enc-${idx + 1}`),
+      label: String(enc.label || `${idx + 1}º Enc.`).trim(),
+      shortDateBr: enc.shortDateBr ? String(enc.shortDateBr).trim() : undefined,
+      date: enc.date ? String(enc.date).trim() : undefined
+    }));
+
+  // Se não houver encontros gravados em resumo_geral, cria apenas o marco BASE (sem inventar check-ins falsos)
+  if (encounters.length === 0 && (activeCheckinQuestions.length > 0 || rawClinicalStatusMap.length > 0)) {
+    encounters = [
+      { id: 'enc_base', label: 'BASE' }
+    ];
+  }
+
+  let needsMatrix: LongitudinalNeedRow[] = rawNeedsMatrix
+    .filter((row: any) => row && typeof row === 'object')
+    .map((row: any, idx: number) => {
+      const cumMap: Record<string, number | null> = {};
+      if (row.cumulativeByEncounter && typeof row.cumulativeByEncounter === 'object') {
+        for (const [k, v] of Object.entries(row.cumulativeByEncounter)) {
+          cumMap[k] = typeof v === 'number' && Number.isFinite(v) ? v : null;
+        }
+      }
+      return {
+        tagId: String(row.tagId || row.id || `need-${idx + 1}`),
+        label: String(row.label || 'Necessidade').trim(),
+        startEncounterId: row.startEncounterId ? String(row.startEncounterId) : undefined,
+        cumulativeByEncounter: cumMap,
+        valuesByEncounter:
+          row.valuesByEncounter && typeof row.valuesByEncounter === 'object' ? row.valuesByEncounter : undefined,
+        awaitingFirstEvaluation: Boolean(row.awaitingFirstEvaluation),
+        accumulatedPercent: typeof row.accumulatedPercent === 'number' && Number.isFinite(row.accumulatedPercent)
+          ? row.accumulatedPercent
+          : 0,
+        statusLabel: String(row.statusLabel || (row.awaitingFirstEvaluation ? 'Aguardando 1º Check-in' : 'Estável')).trim()
+      };
+    });
+
+  // Se não houver needsMatrix em resumo_geral, inicializa as linhas baseadas nas perguntas ativas (em estado Base 0% / Aguardando 1º Check-in)
+  if (needsMatrix.length === 0 && (activeCheckinQuestions.length > 0 || rawClinicalStatusMap.length > 0)) {
+    const baseEncId = encounters[0]?.id || 'enc_base';
+    const sourceItems = activeCheckinQuestions.length > 0 ? activeCheckinQuestions : rawClinicalStatusMap;
+    needsMatrix = sourceItems
+      .filter((item: any) => item && typeof item === 'object' && item.label)
+      .map((item: any, idx: number) => {
+        const tagId = String(item.tagId || item.id || `tag-${idx + 1}`);
+        return {
+          tagId,
+          label: String(item.label).trim(),
+          startEncounterId: baseEncId,
+          cumulativeByEncounter: {
+            [baseEncId]: 0
+          },
+          valuesByEncounter: {
+            [baseEncId]: { status: 'registro', deltaPercent: 0, cumulativePercent: 0 }
+          },
+          awaitingFirstEvaluation: true,
+          accumulatedPercent: 0,
+          statusLabel: 'Aguardando 1º Check-in'
+        };
+      });
+  }
+
+  const overallEvolution: OverallEvolutionSummary | undefined = rawOverall && typeof rawOverall === 'object'
+    ? {
+        averagePercent: Number(rawOverall.averagePercent ?? 0),
+        displayScore: Number(rawOverall.displayScore ?? 0),
+        statusLabel: String(rawOverall.statusLabel || 'Estável').trim()
+      }
+    : undefined;
+
+  return {
+    activeCheckinQuestions,
+    encounters,
+    needsMatrix,
+    overallEvolution,
+    updatedAt: resumoRaw?.updatedAt || rootRaw?.updatedAt || rootRaw?.lastSyncTimestamp
+  };
+}
+
+export function mergeWellbeingData(
+  primary?: WellbeingLongitudinalData | null,
+  secondary?: WellbeingLongitudinalData | null
+): WellbeingLongitudinalData | undefined {
+  if (!primary && !secondary) return undefined;
+  if (!primary) return secondary || undefined;
+  if (!secondary) return primary;
+
+  return {
+    activeCheckinQuestions:
+      primary.activeCheckinQuestions.length > 0
+        ? primary.activeCheckinQuestions
+        : secondary.activeCheckinQuestions,
+    encounters:
+      primary.encounters.length > 0 ? primary.encounters : secondary.encounters,
+    needsMatrix:
+      primary.needsMatrix.length > 0 ? primary.needsMatrix : secondary.needsMatrix,
+    overallEvolution: primary.overallEvolution || secondary.overallEvolution,
+    updatedAt: primary.updatedAt || secondary.updatedAt
+  };
 }
 
 export function normalizeClinicalSummary(raw: any, fallbackDate?: string): ClinicalSummaryInfo | null {
@@ -593,6 +1042,22 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
     professionalNotes: typeof raw.professionalNotes === 'string' ? raw.professionalNotes : (fallback.professionalNotes || ''),
     crmGeneralNotes: typeof raw.crmGeneralNotes === 'string' ? raw.crmGeneralNotes : (fallback.crmGeneralNotes || ''),
     clinicalEvolutions: (() => {
+      // Prioridade 1: patientDoc.consultationRecords espelhado diretamente no documento raiz /patients/{email}
+      if (Array.isArray(raw.consultationRecords)) {
+        const normRoot = normalizeConsultationRecordsList(raw.consultationRecords);
+        if (normRoot.length > 0) {
+          return normRoot;
+        }
+      }
+      if (cachedRootConsultationRecords.length > 0) {
+        return cachedRootConsultationRecords;
+      }
+      if (cachedResumoConsultationRecords.length > 0) {
+        return cachedResumoConsultationRecords;
+      }
+      if (hasLoadedSubEvolution && cachedSubEvolutions.length > 0) {
+        return cachedSubEvolutions;
+      }
       const rawEvs = Array.isArray(raw.clinicalEvolutions)
         ? raw.clinicalEvolutions
         : Array.isArray(raw.evolutions)
@@ -600,28 +1065,23 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
         : Array.isArray(raw.anotacoes)
         ? raw.anotacoes
         : [];
-      if (rawEvs.length > 0) {
+      const filteredEvs = rawEvs.filter((ev: any) =>
+        isConsultationEncounterDoc(String(ev?.id || ''), ev)
+      );
+      if (filteredEvs.length > 0) {
         return sortClinicalEvolutionsDesc(
-          rawEvs.map((ev: any, idx: number) => normalizeClinicalEvolution(ev, ev?.id || `ev-${idx + 1}`))
+          filteredEvs.map((ev: any, idx: number) => normalizeClinicalEvolution(ev, ev?.id || `encounter-${idx + 1}`))
         );
       }
       if (cachedSubEvolutions.length > 0) {
         return cachedSubEvolutions;
       }
-      if (typeof raw.crmGeneralNotes === 'string' && raw.crmGeneralNotes.trim().length > 0) {
-        return [
-          normalizeClinicalEvolution(
-            {
-              id: 'ev-crm-general',
-              title: 'Evolução Clínica',
-              dateStr: raw.lastSyncTimestamp ? new Date(raw.lastSyncTimestamp).toLocaleDateString('pt-BR') : '13/11/2026',
-              rawText: raw.crmGeneralNotes
-            },
-            'ev-crm-general'
-          )
-        ];
+      // Adaptador para modelo intermediário do Firebase (clinicalStatusMap + consultations) enquanto consultationRecords ou evolution/encounter_* não estão disponíveis
+      const legacyBuilt = buildLegacyFallbackEncountersFromRoot(raw);
+      if (legacyBuilt.length > 0) {
+        return legacyBuilt;
       }
-      return fallback.clinicalEvolutions || [];
+      return [];
     })(),
     clinicalSummary: typeof raw.clinicalSummary === 'string' && raw.clinicalSummary.trim()
       ? raw.clinicalSummary.trim()
@@ -639,6 +1099,10 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
         return normalizeClinicalSummary(raw.clinicalSummary, raw.clinicalSummaryDate || tsDate) || undefined;
       }
       return fallback.clinicalSummaryInfo;
+    })(),
+    wellbeingData: (() => {
+      const rootWellbeing = normalizeWellbeingData(null, raw);
+      return mergeWellbeingData(cachedWellbeingData, rootWellbeing || (raw.wellbeingData as WellbeingLongitudinalData | undefined));
     })(),
 
     lyaNotification: {
@@ -1045,6 +1509,65 @@ class CrmDataService {
           console.warn("Erro ao buscar subcoleção referrals inicial:", refErr);
         }
 
+        // Prioridade 1: consultationRecords direto do documento raiz /patients/{email}
+        const rootRawData = directSnap.data();
+        if (Array.isArray(rootRawData?.consultationRecords)) {
+          cachedRootConsultationRecords = normalizeConsultationRecordsList(rootRawData.consultationRecords);
+        }
+
+        // Busca imediata da subcoleção /evolution (resumo_geral + registros encounter_*)
+        try {
+          const evoColRef = collection(db, 'patients', cleanEmail, 'evolution');
+          let evoSnap;
+          try {
+            evoSnap = await getDocsFromServer(evoColRef);
+          } catch {
+            evoSnap = await getDocs(evoColRef);
+          }
+
+          const resumoDoc = evoSnap.docs.find(d => d.id === 'resumo_geral');
+          if (resumoDoc) {
+            const resumoData = resumoDoc.data();
+            const normSum = normalizeClinicalSummary({ ...resumoData, id: resumoDoc.id });
+            if (normSum) {
+              cachedClinicalSummaryInfo = normSum;
+              patientData.clinicalSummaryInfo = normSum;
+              patientData.clinicalSummary = normSum.summary;
+            }
+            cachedResumoConsultationRecords = extractConsultationRecordsFromResumoGeral(resumoData);
+            const normWb = normalizeWellbeingData(resumoData, rootRawData);
+            if (normWb) {
+              cachedWellbeingData = normWb;
+              patientData.wellbeingData = cachedWellbeingData;
+            }
+          } else {
+            cachedResumoConsultationRecords = [];
+            const rootWb = normalizeWellbeingData(null, rootRawData);
+            if (rootWb) {
+              cachedWellbeingData = rootWb;
+              patientData.wellbeingData = cachedWellbeingData;
+            }
+          }
+
+          const encounterDocs = evoSnap.docs.filter(d => isConsultationEncounterDoc(d.id, d.data()));
+          const fetchedEncounters = sortClinicalEvolutionsDesc(
+            encounterDocs.map(docSnap => normalizeClinicalEvolution({ ...docSnap.data(), id: docSnap.id }, docSnap.id))
+          );
+          hasLoadedSubEvolution = true;
+          lastEvolutionsError = null;
+          cachedSubEvolutions = fetchedEncounters;
+        } catch (evoErr: any) {
+          lastEvolutionsError = evoErr?.code || 'permission-denied';
+          console.warn("Erro ao buscar subcoleção evolution inicial:", evoErr);
+        }
+
+        const authoritativeRecords = resolveAuthoritativeConsultationRecords(
+          cachedRootConsultationRecords,
+          cachedResumoConsultationRecords,
+          cachedSubEvolutions
+        );
+        patientData.clinicalEvolutions = authoritativeRecords;
+
         const all = this.getAllLocalPatients();
         all[patientData.id] = patientData;
         all['paciente-template-01'] = patientData;
@@ -1232,8 +1755,25 @@ class CrmDataService {
                 // Preserva prescrições com ativos reais vindos da subcoleção oficial
                 const mergedProtocols = resolveAuthoritativeProtocols(remotePatient.protocols, currentP.protocols);
 
+                if (Array.isArray(raw?.consultationRecords)) {
+                  cachedRootConsultationRecords = normalizeConsultationRecordsList(raw.consultationRecords);
+                }
+
                 const resolvedSummaryInfo = cachedClinicalSummaryInfo || remotePatient.clinicalSummaryInfo || currentP.clinicalSummaryInfo;
                 const resolvedSummaryText = resolvedSummaryInfo?.summary || remotePatient.clinicalSummary || currentP.clinicalSummary;
+                const resolvedWellbeing = mergeWellbeingData(
+                  remotePatient.wellbeingData,
+                  mergeWellbeingData(cachedWellbeingData, currentP.wellbeingData)
+                );
+                if (resolvedWellbeing) {
+                  cachedWellbeingData = resolvedWellbeing;
+                }
+
+                const resolvedConsultationRecords = resolveAuthoritativeConsultationRecords(
+                  Array.isArray(raw?.consultationRecords) ? cachedRootConsultationRecords : undefined,
+                  cachedResumoConsultationRecords,
+                  cachedSubEvolutions
+                );
 
                 const mergedPatient: PatientProfile = {
                   ...remotePatient,
@@ -1247,11 +1787,12 @@ class CrmDataService {
                   referrals: hasLoadedSubReferrals
                     ? cachedSubReferrals
                     : (remotePatient.referrals || []),
-                  clinicalEvolutions: cachedSubEvolutions.length > 0
-                    ? cachedSubEvolutions
-                    : (remotePatient.clinicalEvolutions || currentP.clinicalEvolutions || []),
+                  clinicalEvolutions: resolvedConsultationRecords.length > 0
+                    ? resolvedConsultationRecords
+                    : (remotePatient.clinicalEvolutions || []),
                   ...(resolvedSummaryText ? { clinicalSummary: resolvedSummaryText } : {}),
-                  ...(resolvedSummaryInfo ? { clinicalSummaryInfo: resolvedSummaryInfo } : {})
+                  ...(resolvedSummaryInfo ? { clinicalSummaryInfo: resolvedSummaryInfo } : {}),
+                  ...(resolvedWellbeing ? { wellbeingData: resolvedWellbeing } : {})
                 };
                 callback(mergedPatient);
               }
@@ -1531,36 +2072,104 @@ class CrmDataService {
             console.warn("Erro no listener da subcoleção metabolic_map:", mErr);
           }
 
-          // Escuta em tempo real na subcoleção /evolutions (Anotações por e-mail) e /evolution/resumo_geral (Resumo dos Registros)
+          // Escuta em tempo real na subcoleção /evolution (resumo_geral + registros encounter_*)
           try {
-            const evolutionsRef = collection(firestoreDb, 'patients', targetDocId, 'evolutions');
-            unsubscribeEvolutionsFirestore = onSnapshot(evolutionsRef, (snap) => {
-              if (!snap.empty) {
-                const summaryDoc = snap.docs.find(d => d.id === 'resumo_geral');
-                if (summaryDoc) {
-                  const normSummary = normalizeClinicalSummary({ ...summaryDoc.data(), id: summaryDoc.id });
-                  if (normSummary) {
-                    cachedClinicalSummaryInfo = normSummary;
-                  }
-                }
+            const evolutionColRef = collection(firestoreDb, 'patients', targetDocId, 'evolution');
+            unsubscribeEvolutionsFirestore = onSnapshot(evolutionColRef, (snap) => {
+              const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
 
-                const regularDocs = snap.docs.filter(d => d.id !== 'resumo_geral');
-                const subEvs = sortClinicalEvolutionsDesc(
-                  regularDocs.map(docSnap => normalizeClinicalEvolution({ ...docSnap.data(), id: docSnap.id }, docSnap.id))
-                );
-                if (subEvs.length > 0) {
-                  cachedSubEvolutions = subEvs;
+              const resumoDoc = snap.docs.find(d => d.id === 'resumo_geral');
+              if (resumoDoc) {
+                const resumoData = resumoDoc.data();
+                const normSummary = normalizeClinicalSummary({ ...resumoData, id: resumoDoc.id });
+                if (normSummary) {
+                  cachedClinicalSummaryInfo = normSummary;
+                }
+                if (Array.isArray(resumoData?.consultationRecords)) {
+                  cachedResumoConsultationRecords = normalizeConsultationRecordsList(resumoData.consultationRecords);
+                }
+                const normWb = normalizeWellbeingData(resumoData, currentP.wellbeingData);
+                if (normWb) {
+                  cachedWellbeingData = mergeWellbeingData(normWb, cachedWellbeingData) || normWb;
+                }
+              }
+
+              const encounterDocs = snap.docs.filter(d => isConsultationEncounterDoc(d.id, d.data()));
+              const subEvs = sortClinicalEvolutionsDesc(
+                encounterDocs.map(docSnap => normalizeClinicalEvolution({ ...docSnap.data(), id: docSnap.id }, docSnap.id))
+              );
+              hasLoadedSubEvolution = true;
+              cachedSubEvolutions = subEvs;
+              lastEvolutionsError = null;
+
+              const resolvedWellbeing = mergeWellbeingData(cachedWellbeingData, currentP.wellbeingData);
+              const resolvedConsultationRecords = resolveAuthoritativeConsultationRecords(
+                cachedRootConsultationRecords,
+                cachedResumoConsultationRecords,
+                subEvs
+              );
+              const effectiveEvs =
+                resolvedConsultationRecords.length > 0
+                  ? resolvedConsultationRecords
+                  : (currentP.clinicalEvolutions || []);
+
+              const updatedPatient: PatientProfile = {
+                ...currentP,
+                clinicalEvolutions: effectiveEvs,
+                ...(cachedClinicalSummaryInfo ? {
+                  clinicalSummary: cachedClinicalSummaryInfo.summary,
+                  clinicalSummaryInfo: cachedClinicalSummaryInfo
+                } : {}),
+                ...(resolvedWellbeing ? { wellbeingData: resolvedWellbeing } : {})
+              };
+              const all = this.getAllLocalPatients();
+              all[patientId] = updatedPatient;
+              all['paciente-template-01'] = updatedPatient;
+              all[targetDocId] = updatedPatient;
+              this.saveAllLocalPatients(all);
+              callback(updatedPatient);
+            }, (err) => {
+              lastEvolutionsError = err?.code || 'permission-denied';
+              console.info("🔒 [Vittáre Data] Subcoleção evolution em modo seguro:", err.code);
+            });
+          } catch (evErr) {
+            console.warn("Erro no listener da subcoleção evolution:", evErr);
+          }
+
+          try {
+            const evolutionSummaryRef = doc(firestoreDb, 'patients', targetDocId, 'evolution', 'resumo_geral');
+            unsubscribeEvolutionSummaryFirestore = onSnapshot(evolutionSummaryRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const resumoData = docSnap.data();
+                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const normSummary = normalizeClinicalSummary({ ...resumoData, id: docSnap.id });
+                if (normSummary) {
+                  cachedClinicalSummaryInfo = normSummary;
+                }
+                if (Array.isArray(resumoData?.consultationRecords)) {
+                  cachedResumoConsultationRecords = normalizeConsultationRecordsList(resumoData.consultationRecords);
+                }
+                const normWb = normalizeWellbeingData(resumoData, currentP.wellbeingData);
+                if (normWb) {
+                  cachedWellbeingData = mergeWellbeingData(normWb, cachedWellbeingData) || normWb;
                 }
                 lastEvolutionsError = null;
 
-                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
+                const resolvedWellbeing = mergeWellbeingData(cachedWellbeingData, currentP.wellbeingData);
+                const resolvedConsultationRecords = resolveAuthoritativeConsultationRecords(
+                  cachedRootConsultationRecords,
+                  cachedResumoConsultationRecords,
+                  cachedSubEvolutions
+                );
+
                 const updatedPatient: PatientProfile = {
                   ...currentP,
-                  ...(subEvs.length > 0 ? { clinicalEvolutions: subEvs } : {}),
-                  ...(cachedClinicalSummaryInfo ? {
-                    clinicalSummary: cachedClinicalSummaryInfo.summary,
-                    clinicalSummaryInfo: cachedClinicalSummaryInfo
-                  } : {})
+                  ...(resolvedConsultationRecords.length > 0 ? { clinicalEvolutions: resolvedConsultationRecords } : {}),
+                  ...(normSummary ? {
+                    clinicalSummary: normSummary.summary,
+                    clinicalSummaryInfo: normSummary
+                  } : {}),
+                  ...(resolvedWellbeing ? { wellbeingData: resolvedWellbeing } : {})
                 };
                 const all = this.getAllLocalPatients();
                 all[patientId] = updatedPatient;
@@ -1568,37 +2177,6 @@ class CrmDataService {
                 all[targetDocId] = updatedPatient;
                 this.saveAllLocalPatients(all);
                 callback(updatedPatient);
-              }
-            }, (err) => {
-              lastEvolutionsError = err?.code || 'permission-denied';
-              console.info("🔒 [Vittáre Data] Subcoleção evolutions em modo seguro:", err.code);
-            });
-          } catch (evErr) {
-            console.warn("Erro no listener da subcoleção evolutions:", evErr);
-          }
-
-          try {
-            const evolutionSummaryRef = doc(firestoreDb, 'patients', targetDocId, 'evolution', 'resumo_geral');
-            unsubscribeEvolutionSummaryFirestore = onSnapshot(evolutionSummaryRef, (docSnap) => {
-              if (docSnap.exists()) {
-                const normSummary = normalizeClinicalSummary({ ...docSnap.data(), id: docSnap.id });
-                if (normSummary) {
-                  cachedClinicalSummaryInfo = normSummary;
-                  lastEvolutionsError = null;
-
-                  const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
-                  const updatedPatient: PatientProfile = {
-                    ...currentP,
-                    clinicalSummary: normSummary.summary,
-                    clinicalSummaryInfo: normSummary
-                  };
-                  const all = this.getAllLocalPatients();
-                  all[patientId] = updatedPatient;
-                  all['paciente-template-01'] = updatedPatient;
-                  all[targetDocId] = updatedPatient;
-                  this.saveAllLocalPatients(all);
-                  callback(updatedPatient);
-                }
               }
             }, (err) => {
               console.info("🔒 [Vittáre Data] Documento evolution/resumo_geral em modo seguro:", err.code);
@@ -1615,21 +2193,9 @@ class CrmDataService {
                 const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
                 const notes = latestDoc?.crmGeneralNotes || latestDoc?.clinicalNotes || latestDoc?.notes || currentP.crmGeneralNotes;
 
-                const anamnesisEvs = snap.docs
-                  .filter(d => {
-                    const dt = d.data();
-                    return Boolean(dt.resumoGeral || dt.summary || dt.planoDeAcao || dt.proximosPassos || dt.observacoes || dt.crmGeneralNotes || dt.clinicalNotes || dt.notes);
-                  })
-                  .map(d => normalizeClinicalEvolution({ ...d.data(), id: d.id }, d.id));
-
-                const mergedEvs = cachedSubEvolutions.length > 0
-                  ? cachedSubEvolutions
-                  : sortClinicalEvolutionsDesc(anamnesisEvs);
-
                 const updatedPatient: PatientProfile = {
                   ...currentP,
-                  crmGeneralNotes: notes,
-                  ...(mergedEvs.length > 0 ? { clinicalEvolutions: mergedEvs } : {})
+                  crmGeneralNotes: notes
                 };
                 const all = this.getAllLocalPatients();
                 all[patientId] = updatedPatient;
@@ -1703,8 +2269,22 @@ class CrmDataService {
                 if (!querySnap.empty) {
                   const docSnap = querySnap.docs[0];
                   const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
-                  const remoteData = sanitizePatientPayload(docSnap.data(), docSnap.id);
+                  const rawDocData = docSnap.data();
+                  if (Array.isArray(rawDocData?.consultationRecords)) {
+                    cachedRootConsultationRecords = normalizeConsultationRecordsList(rawDocData.consultationRecords);
+                  }
+                  const remoteData = sanitizePatientPayload(rawDocData, docSnap.id);
                   const mergedProtocols = resolveAuthoritativeProtocols(remoteData.protocols, currentP.protocols);
+
+                  const resolvedWellbeing = mergeWellbeingData(
+                    remoteData.wellbeingData,
+                    mergeWellbeingData(cachedWellbeingData, currentP.wellbeingData)
+                  );
+                  const resolvedConsultationRecords = resolveAuthoritativeConsultationRecords(
+                    Array.isArray(rawDocData?.consultationRecords) ? cachedRootConsultationRecords : undefined,
+                    cachedResumoConsultationRecords,
+                    cachedSubEvolutions
+                  );
 
                   const mergedData: PatientProfile = {
                     ...remoteData,
@@ -1718,13 +2298,14 @@ class CrmDataService {
                     referrals: hasLoadedSubReferrals
                       ? cachedSubReferrals
                       : (remoteData.referrals || []),
-                    clinicalEvolutions: cachedSubEvolutions.length > 0
-                      ? cachedSubEvolutions
-                      : (remoteData.clinicalEvolutions || currentP.clinicalEvolutions || []),
+                    clinicalEvolutions: resolvedConsultationRecords.length > 0
+                      ? resolvedConsultationRecords
+                      : (remoteData.clinicalEvolutions || []),
                     ...((cachedClinicalSummaryInfo || remoteData.clinicalSummaryInfo || currentP.clinicalSummaryInfo) ? {
                       clinicalSummaryInfo: cachedClinicalSummaryInfo || remoteData.clinicalSummaryInfo || currentP.clinicalSummaryInfo,
                       clinicalSummary: (cachedClinicalSummaryInfo || remoteData.clinicalSummaryInfo || currentP.clinicalSummaryInfo)?.summary || remoteData.clinicalSummary
-                    } : {})
+                    } : {}),
+                    ...(resolvedWellbeing ? { wellbeingData: resolvedWellbeing } : {})
                   };
                   callback(mergedData);
                 }
@@ -2013,100 +2594,118 @@ class CrmDataService {
          'jcecato@gmail.com');
 
     try {
-      const colRef = collection(db, 'patients', targetDocId, 'evolutions');
-      let snap;
+      // Busca documento raiz para Prioridade 1 (consultationRecords) e espelhos longitudinais (activeCheckinQuestions, longitudinalEncounters, etc.)
+      let rootData: any = null;
       try {
-        snap = await getDocsFromServer(colRef);
+        const rootRef = doc(db, 'patients', targetDocId);
+        let rootSnap;
+        try {
+          rootSnap = await getDocFromServer(rootRef);
+        } catch {
+          rootSnap = await getDoc(rootRef);
+        }
+        if (rootSnap.exists()) {
+          rootData = rootSnap.data();
+          if (Array.isArray(rootData?.consultationRecords)) {
+            cachedRootConsultationRecords = normalizeConsultationRecordsList(rootData.consultationRecords);
+          }
+        }
       } catch {
-        snap = await getDocs(colRef);
+        // ignore root fallback read failure
       }
 
-      lastEvolutionsError = null;
-      let freshEvs: ClinicalEvolutionItem[] = [];
-
-      if (!snap.empty) {
-        const summaryDoc = snap.docs.find(d => d.id === 'resumo_geral');
-        if (summaryDoc) {
-          const normSum = normalizeClinicalSummary({ ...summaryDoc.data(), id: summaryDoc.id });
-          if (normSum) cachedClinicalSummaryInfo = normSum;
-        }
-        const regularDocs = snap.docs.filter(d => d.id !== 'resumo_geral');
-        freshEvs = sortClinicalEvolutionsDesc(
-          regularDocs.map(docSnap => normalizeClinicalEvolution({ ...docSnap.data(), id: docSnap.id }, docSnap.id))
-        );
-        if (freshEvs.length > 0) {
-          cachedSubEvolutions = freshEvs;
-        }
-      } else {
-        const anamRef = collection(db, 'patients', targetDocId, 'anamnesis');
-        let anamSnap;
-        try {
-          anamSnap = await getDocsFromServer(anamRef);
-        } catch {
-          anamSnap = await getDocs(anamRef);
-        }
-        if (!anamSnap.empty) {
-          freshEvs = sortClinicalEvolutionsDesc(
-            anamSnap.docs
-              .filter(d => {
-                const dt = d.data();
-                return Boolean(dt.resumoGeral || dt.summary || dt.planoDeAcao || dt.proximosPassos || dt.observacoes || dt.crmGeneralNotes || dt.clinicalNotes || dt.notes);
-              })
-              .map(d => normalizeClinicalEvolution({ ...d.data(), id: d.id }, d.id))
-          );
-          cachedSubEvolutions = freshEvs;
-        }
-      }
-
-      // Busca dedicada em patients/{email}/evolution/resumo_geral (prioritária)
+      let snapDocs: any[] = [];
       try {
-        const summaryRef = doc(db, 'patients', targetDocId, 'evolution', 'resumo_geral');
-        let sumSnap;
+        const colRef = collection(db, 'patients', targetDocId, 'evolution');
+        let snap;
         try {
-          sumSnap = await getDocFromServer(summaryRef);
+          snap = await getDocsFromServer(colRef);
         } catch {
-          sumSnap = await getDoc(summaryRef);
+          snap = await getDocs(colRef);
         }
-        if (sumSnap.exists()) {
-          const normSum = normalizeClinicalSummary({ ...sumSnap.data(), id: sumSnap.id });
-          if (normSum) cachedClinicalSummaryInfo = normSum;
-        }
-      } catch (sumReadErr) {
-        console.info("🔒 [Vittáre Sync] Sem acesso direto a evolution/resumo_geral:", sumReadErr);
+        snapDocs = snap.docs;
+      } catch (evoColErr: any) {
+        lastEvolutionsError = evoColErr?.code || 'permission-denied';
+        console.info("🔒 [Vittáre Sync] Subcoleção evolution protegida; utilizando espelhos no documento raiz:", evoColErr?.code);
       }
 
-      // Fallback pelo campo clinicalSummary no documento raiz patients/{email}
-      if (!cachedClinicalSummaryInfo) {
+      let freshEvs: ClinicalEvolutionItem[] = [];
+      let resumoRaw: any = null;
+
+      if (snapDocs.length > 0) {
+        const summaryDoc = snapDocs.find(d => d.id === 'resumo_geral');
+        if (summaryDoc) {
+          resumoRaw = summaryDoc.data();
+          const normSum = normalizeClinicalSummary({ ...resumoRaw, id: summaryDoc.id });
+          if (normSum) cachedClinicalSummaryInfo = normSum;
+          cachedResumoConsultationRecords = extractConsultationRecordsFromResumoGeral(resumoRaw);
+        } else {
+          cachedResumoConsultationRecords = [];
+        }
+
+        const encounterDocs = snapDocs.filter(d => isConsultationEncounterDoc(d.id, d.data()));
+        freshEvs = sortClinicalEvolutionsDesc(
+          encounterDocs.map(docSnap => normalizeClinicalEvolution({ ...docSnap.data(), id: docSnap.id }, docSnap.id))
+        );
+      } else {
+        cachedResumoConsultationRecords = [];
+      }
+
+      // Garante leitura dedicada em patients/{email}/evolution/resumo_geral caso a query da coleção falhe ou esteja parcial
+      if (!resumoRaw) {
         try {
-          const rootRef = doc(db, 'patients', targetDocId);
-          let rootSnap;
+          const summaryRef = doc(db, 'patients', targetDocId, 'evolution', 'resumo_geral');
+          let sumSnap;
           try {
-            rootSnap = await getDocFromServer(rootRef);
+            sumSnap = await getDocFromServer(summaryRef);
           } catch {
-            rootSnap = await getDoc(rootRef);
+            sumSnap = await getDoc(summaryRef);
           }
-          if (rootSnap.exists()) {
-            const rootData = rootSnap.data();
-            if (typeof rootData?.clinicalSummary === 'string' && rootData.clinicalSummary.trim()) {
-              const fallbackDate = rootData.clinicalSummaryDate || (rootData.lastSyncTimestamp ? new Date(rootData.lastSyncTimestamp).toLocaleDateString('pt-BR') : '');
-              const normRootSum = normalizeClinicalSummary(rootData.clinicalSummary, fallbackDate);
-              if (normRootSum) cachedClinicalSummaryInfo = normRootSum;
-            }
+          if (sumSnap.exists()) {
+            resumoRaw = sumSnap.data();
+            const normSum = normalizeClinicalSummary({ ...resumoRaw, id: sumSnap.id });
+            if (normSum) cachedClinicalSummaryInfo = normSum;
+            cachedResumoConsultationRecords = extractConsultationRecordsFromResumoGeral(resumoRaw);
+          } else {
+            cachedResumoConsultationRecords = [];
           }
-        } catch {
-          // ignore
+        } catch (sumReadErr) {
+          console.info("🔒 [Vittáre Sync] Sem acesso direto a evolution/resumo_geral:", sumReadErr);
         }
       }
+
+      const normWellbeing = normalizeWellbeingData(resumoRaw, rootData);
+      if (normWellbeing) {
+        cachedWellbeingData = normWellbeing;
+      }
+
+      if (!cachedClinicalSummaryInfo && typeof rootData?.clinicalSummary === 'string' && rootData.clinicalSummary.trim()) {
+        const fallbackDate = rootData.clinicalSummaryDate || (rootData.lastSyncTimestamp ? new Date(rootData.lastSyncTimestamp).toLocaleDateString('pt-BR') : '');
+        const normRootSum = normalizeClinicalSummary(rootData.clinicalSummary, fallbackDate);
+        if (normRootSum) cachedClinicalSummaryInfo = normRootSum;
+      }
+
+      hasLoadedSubEvolution = true;
+      cachedSubEvolutions = freshEvs;
+
+      const resolvedConsultationRecords = resolveAuthoritativeConsultationRecords(
+        cachedRootConsultationRecords,
+        cachedResumoConsultationRecords,
+        freshEvs
+      );
 
       const all = this.getAllLocalPatients();
       const currentP = all[patientEmailOrId] || all[targetDocId] || INITIAL_PATIENTS['paciente-template-01'];
+      const resolvedWellbeing = cachedWellbeingData || currentP.wellbeingData;
+
       const updatedPatient: PatientProfile = {
         ...currentP,
-        clinicalEvolutions: freshEvs.length > 0 ? freshEvs : (currentP.clinicalEvolutions || []),
+        clinicalEvolutions: resolvedConsultationRecords,
         ...(cachedClinicalSummaryInfo ? {
           clinicalSummary: cachedClinicalSummaryInfo.summary,
           clinicalSummaryInfo: cachedClinicalSummaryInfo
-        } : {})
+        } : {}),
+        ...(resolvedWellbeing ? { wellbeingData: resolvedWellbeing } : {})
       };
       all[patientEmailOrId] = updatedPatient;
       all[targetDocId] = updatedPatient;
@@ -2116,13 +2715,26 @@ class CrmDataService {
       if (targetDocId !== patientEmailOrId) {
         this.notifyListeners(targetDocId, updatedPatient);
       }
-      return updatedPatient.clinicalEvolutions || [];
+      return resolvedConsultationRecords;
     } catch (err: any) {
       lastEvolutionsError = err?.code || 'permission-denied';
-      console.warn("⚠️ [Vittáre Sync] Erro ao atualizar subcoleção evolutions sob demanda:", err);
+      console.warn("⚠️ [Vittáre Sync] Erro ao atualizar dados de evolução sob demanda:", err);
     }
 
-    return cachedSubEvolutions;
+    return resolveAuthoritativeConsultationRecords(
+      cachedRootConsultationRecords,
+      cachedResumoConsultationRecords,
+      cachedSubEvolutions
+    );
+  }
+
+  public async refreshWellbeingData(patientEmailOrId: string = 'jcecato@gmail.com'): Promise<WellbeingLongitudinalData | undefined> {
+    await this.refreshClinicalEvolutions(patientEmailOrId);
+    const all = this.getAllLocalPatients();
+    const targetDocId = (patientEmailOrId && patientEmailOrId.includes('@'))
+      ? patientEmailOrId.toLowerCase().trim()
+      : 'jcecato@gmail.com';
+    return cachedWellbeingData || all[targetDocId]?.wellbeingData || all[patientEmailOrId]?.wellbeingData;
   }
 
   public exportPatientJson(patientId: string): string {

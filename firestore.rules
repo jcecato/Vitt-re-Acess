@@ -3,75 +3,79 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Bloqueio Global Padrão (Zero Trust - Arquitetura de Defesa em Profundidade)
+    // 1. Bloqueio Global Padrão (Zero Trust)
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Coleção Principal de Pacientes (Prontuário Nutricional e Agenda)
-    // - Leitura: Liberada para o aplicativo carregar consultas, agenda e dados clínicos
-    // - Escrita: Bloqueada para clientes Web/Mobile. O CRM grava via Firebase Admin SDK
+    // 2. Prontuário Nutricional e Agenda (Sincronização CRM <-> App Vittáre)
     match /patients/{patientId} {
       allow read: if true;
       allow write: if false;
 
-      // Subcoleção de Avaliações e Acompanhamento de Vitalidade (Aba Meu Bem-Estar)
-      match /checkins/{checkinId} {
-        allow read: if true;
-        allow create: if true;
-        allow update, delete: if false;
-      }
-
-      // Subcoleção de Planos Alimentares (CRM grava, Paciente lê)
-      match /plans/{planId} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Subcoleção de Prescrições e Fórmulas (CRM grava, Paciente lê)
-      match /prescriptions/{prescriptionId} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Subcoleção de Exames Laboratoriais (CRM grava, Paciente lê)
-      match /exams/{examId} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Subcoleção de Avaliação Corporal (CRM grava, Paciente lê)
-      match /anthropometry/{anthroId} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Subcoleção de Mapa Funcional (CRM grava, Paciente lê)
-      match /metabolic_map/{mapId} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Subcoleção de Avaliação Integrativa (CRM grava, Paciente lê)
-      match /anamnesis/{anamnesisId} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Subcoleção de Encaminhamento Multidisciplinar (CRM grava, Paciente lê)
-      match /referrals/{referralId} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Subcoleção dedicada de Resumo Geral da Evolução (CRM grava resumo_geral, Paciente lê)
+      // Subcoleção de Evolução Clínica, Consultas Estruturadas e Painel Longitudinal (%)
       match /evolution/{evolutionId} {
         allow read: if true;
         allow write: if false;
       }
 
-      // Subcoleção de Evoluções Clínicas / Anotações (CRM grava, Paciente lê)
+      // Subcoleção legada de Evoluções (caso exista)
       match /evolutions/{evolutionId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Avaliações e Vitalidade (Aba Meu Bem-Estar / Check-in Quinzenal)
+      match /checkins/{checkinId} {
+        allow read: if true;
+        allow create, update: if true;
+        allow delete: if false;
+      }
+
+      // Subcoleção de Planos Alimentares
+      match /plans/{planId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Prescrições e Fórmulas
+      match /prescriptions/{prescriptionId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Exames Laboratoriais (Hemo Labor™)
+      match /exams/{examId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Avaliação Corporal (OnBody™)
+      match /anthropometry/{anthroId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Mapa Funcional (BioSync™)
+      match /metabolic_map/{mapId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Avaliação Integrativa (Sense App™)
+      match /anamnesis/{anamnesisId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Subcoleção de Encaminhamento Multidisciplinar
+      match /referrals/{referralId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Garantia de leitura para qualquer subdocumento adicional do paciente
+      match /{allSubcollections=**} {
         allow read: if true;
         allow write: if false;
       }
