@@ -34,7 +34,7 @@ import {
   type DocumentSnapshot 
 } from 'firebase/firestore';
 
-const STORAGE_KEY = 'vittare_patients_store_v18';
+const STORAGE_KEY = 'vittare_patients_store_v19';
 
 // Cache persistente em memória das subcoleções oficiais para blindagem contra sobrescrita pelo doc raiz
 let cachedSubPrescriptions: ProtocolItem[] = [];
@@ -602,43 +602,31 @@ export function buildLegacyFallbackEncountersFromRoot(_rootRaw?: any): ClinicalE
   return [];
 }
 
-export function normalizeWellbeingData(resumoRaw: any, rootRaw?: any): WellbeingLongitudinalData | null {
-  const rawQuestions =
-    Array.isArray(resumoRaw?.activeCheckinQuestions) && resumoRaw.activeCheckinQuestions.length > 0
-      ? resumoRaw.activeCheckinQuestions
-      : (Array.isArray(rootRaw?.activeCheckinQuestions) ? rootRaw.activeCheckinQuestions : []);
+export function normalizeWellbeingData(resumoRaw: any, _rootRaw?: any): WellbeingLongitudinalData | null {
+  // Importante: Nunca ler campos clínicos legados da raiz /patients/{email}.
+  // Ler exclusivamente de /patients/{email}/evolution/resumo_geral.
+  if (!resumoRaw || typeof resumoRaw !== 'object') {
+    return null;
+  }
 
-  // Quando resumo_geral é deletado para recomeçar, priorizamos exclusivamente os encontros e matriz de resumoRaw
-  const rawEncounters =
-    Array.isArray(resumoRaw?.encounters) && resumoRaw.encounters.length > 0
-      ? resumoRaw.encounters
-      : (resumoRaw && Array.isArray(resumoRaw?.longitudinalEncounters)
-          ? resumoRaw.longitudinalEncounters
-          : (!hasLoadedSubEvolution && Array.isArray(rootRaw?.longitudinalEncounters)
-              ? rootRaw.longitudinalEncounters
-              : []));
+  const rawQuestions = Array.isArray(resumoRaw.activeCheckinQuestions)
+    ? resumoRaw.activeCheckinQuestions
+    : [];
 
-  const rawNeedsMatrix =
-    Array.isArray(resumoRaw?.needsMatrix) && resumoRaw.needsMatrix.length > 0
-      ? resumoRaw.needsMatrix
-      : (resumoRaw && Array.isArray(resumoRaw?.longitudinalNeedsMatrix)
-          ? resumoRaw.longitudinalNeedsMatrix
-          : (!hasLoadedSubEvolution && Array.isArray(rootRaw?.longitudinalNeedsMatrix)
-              ? rootRaw.longitudinalNeedsMatrix
-              : []));
+  const rawEncounters = Array.isArray(resumoRaw.encounters) && resumoRaw.encounters.length > 0
+    ? resumoRaw.encounters
+    : (Array.isArray(resumoRaw.longitudinalEncounters) ? resumoRaw.longitudinalEncounters : []);
 
-  const rawClinicalStatusMap =
-    Array.isArray(resumoRaw?.clinicalStatusMap) && resumoRaw.clinicalStatusMap.length > 0
-      ? resumoRaw.clinicalStatusMap
-      : (Array.isArray(rootRaw?.clinicalStatusMap) ? rootRaw.clinicalStatusMap : []);
+  const rawNeedsMatrix = Array.isArray(resumoRaw.needsMatrix) && resumoRaw.needsMatrix.length > 0
+    ? resumoRaw.needsMatrix
+    : (Array.isArray(resumoRaw.longitudinalNeedsMatrix) ? resumoRaw.longitudinalNeedsMatrix : []);
 
-  const rawOverall = resumoRaw?.overallEvolution || rootRaw?.overallEvolution || null;
+  const rawOverall = resumoRaw.overallEvolution || null;
 
   if (
     rawQuestions.length === 0 &&
     rawEncounters.length === 0 &&
     rawNeedsMatrix.length === 0 &&
-    rawClinicalStatusMap.length === 0 &&
     !rawOverall
   ) {
     return null;
@@ -646,21 +634,37 @@ export function normalizeWellbeingData(resumoRaw: any, rootRaw?: any): Wellbeing
 
   const activeCheckinQuestions: CheckinQuestionItem[] = rawQuestions
     .filter((q: any) => q && typeof q === 'object')
-    .map((q: any, idx: number) => ({
-      id: String(q.id || q.tagId || `q-${idx + 1}`),
-      tagId: String(q.tagId || q.id || `tag-${idx + 1}`),
-      label: String(q.label || q.name || 'Sintoma / Necessidade').trim(),
-      questionText: String(q.questionText || q.text || `Como está a evolução de "${q.label || 'atual'}" desde o último registro?`).trim(),
-      options: Array.isArray(q.options)
-        ? q.options.map((opt: any) => ({
-            key: String(opt?.key || ''),
-            label: String(opt?.label || ''),
-            ...(typeof (opt?.deltaPercent ?? opt?.defaultDelta) === 'number'
-              ? { deltaPercent: Number(opt?.deltaPercent ?? opt?.defaultDelta) }
-              : {})
-          }))
-        : undefined
-    }));
+    .map((q: any, idx: number) => {
+      const label = String(q.label || q.name || 'Sintoma').trim();
+      return {
+        id: String(q.id || q.tagId || `q-${idx + 1}`),
+        tagId: String(q.tagId || q.id || `tag-${idx + 1}`),
+        label,
+        questionText: String(
+          q.questionText || q.text || `Desde o início do acompanhamento, como está "${label}"?`
+        ).trim(),
+        anchorQuestion: String(
+          q.anchorQuestion || 'Desde o início do acompanhamento, como está o sintoma?'
+        ).trim(),
+        anchorSubtext: String(q.anchorSubtext || 'considere as últimas 4 semanas').trim(),
+        startDate: q.startDate ? String(q.startDate).trim() : undefined,
+        options: Array.isArray(q.options)
+          ? q.options.map((opt: any) => ({
+              key: String(opt?.key || ''),
+              label: String(opt?.label || ''),
+              word: opt?.word ? String(opt.word) : undefined,
+              sym: opt?.sym ? String(opt.sym) : undefined,
+              cls: opt?.cls ? String(opt.cls) : undefined,
+              band: opt?.band ? String(opt.band) : undefined,
+              val: typeof opt?.val === 'number' ? opt.val : undefined,
+              color: opt?.color ? String(opt.color) : undefined,
+              ...(typeof (opt?.deltaPercent ?? opt?.defaultDelta) === 'number'
+                ? { deltaPercent: Number(opt?.deltaPercent ?? opt?.defaultDelta) }
+                : {})
+            }))
+          : undefined
+      };
+    });
 
   let encounters: LongitudinalEncounterCol[] = rawEncounters
     .filter((enc: any) => enc && typeof enc === 'object')
@@ -671,11 +675,8 @@ export function normalizeWellbeingData(resumoRaw: any, rootRaw?: any): Wellbeing
       date: enc.date ? String(enc.date).trim() : undefined
     }));
 
-  // Se não houver encontros gravados em resumo_geral, cria apenas o marco BASE (sem inventar check-ins falsos)
-  if (encounters.length === 0 && (activeCheckinQuestions.length > 0 || rawClinicalStatusMap.length > 0)) {
-    encounters = [
-      { id: 'enc_base', label: 'BASE' }
-    ];
+  if (encounters.length === 0 && (activeCheckinQuestions.length > 0 || rawNeedsMatrix.length > 0)) {
+    encounters = [{ id: 'enc_base', label: 'BASE' }];
   }
 
   let needsMatrix: LongitudinalNeedRow[] = rawNeedsMatrix
@@ -687,51 +688,81 @@ export function normalizeWellbeingData(resumoRaw: any, rootRaw?: any): Wellbeing
           cumMap[k] = typeof v === 'number' && Number.isFinite(v) ? v : null;
         }
       }
+      const idOrTag = String(row.tagId || row.id || `need-${idx + 1}`);
       return {
-        tagId: String(row.tagId || row.id || `need-${idx + 1}`),
-        label: String(row.label || 'Necessidade').trim(),
+        id: String(row.id || idOrTag),
+        tagId: idOrTag,
+        label: String(row.label || 'Sintoma').trim(),
+        note: row.note ? String(row.note) : undefined,
+        startDate: row.startDate ? String(row.startDate) : undefined,
+        startDateBr: row.startDateBr ? String(row.startDateBr) : undefined,
         startEncounterId: row.startEncounterId ? String(row.startEncounterId) : undefined,
         cumulativeByEncounter: cumMap,
         valuesByEncounter:
           row.valuesByEncounter && typeof row.valuesByEncounter === 'object' ? row.valuesByEncounter : undefined,
         awaitingFirstEvaluation: Boolean(row.awaitingFirstEvaluation),
-        accumulatedPercent: typeof row.accumulatedPercent === 'number' && Number.isFinite(row.accumulatedPercent)
-          ? row.accumulatedPercent
-          : 0,
-        statusLabel: String(row.statusLabel || (row.awaitingFirstEvaluation ? 'Aguardando 1º Check-in' : 'Estável')).trim()
+        confirmedRemission: Boolean(row.confirmedRemission),
+        statusKey: row.statusKey ? String(row.statusKey) : undefined,
+        statusWord: row.statusWord ? String(row.statusWord) : undefined,
+        statusSym: row.statusSym ? String(row.statusSym) : undefined,
+        statusLabel: String(row.statusLabel || (row.awaitingFirstEvaluation ? '— sem resposta' : 'Estável ↔')).trim(),
+        statusCls: row.statusCls ? String(row.statusCls) : undefined,
+        statusColor: row.statusColor ? String(row.statusColor) : undefined,
+        band: row.band ? String(row.band) : undefined,
+        val: typeof row.val === 'number' && Number.isFinite(row.val) ? row.val : undefined,
+        accumulatedPercent:
+          typeof row.accumulatedPercent === 'number' && Number.isFinite(row.accumulatedPercent)
+            ? row.accumulatedPercent
+            : (typeof row.val === 'number' && Number.isFinite(row.val) ? row.val : 0),
+        initialPoint: row.initialPoint && typeof row.initialPoint === 'object' ? row.initialPoint : undefined,
+        currentPoint: row.currentPoint && typeof row.currentPoint === 'object' ? row.currentPoint : null,
+        initialVsCurrentPoints: Array.isArray(row.initialVsCurrentPoints) ? row.initialVsCurrentPoints : undefined
       };
     });
 
-  // Se não houver needsMatrix em resumo_geral, inicializa as linhas baseadas nas perguntas ativas (em estado Base 0% / Aguardando 1º Check-in)
-  if (needsMatrix.length === 0 && (activeCheckinQuestions.length > 0 || rawClinicalStatusMap.length > 0)) {
-    const baseEncId = encounters[0]?.id || 'enc_base';
-    const sourceItems = activeCheckinQuestions.length > 0 ? activeCheckinQuestions : rawClinicalStatusMap;
-    needsMatrix = sourceItems
-      .filter((item: any) => item && typeof item === 'object' && item.label)
-      .map((item: any, idx: number) => {
-        const tagId = String(item.tagId || item.id || `tag-${idx + 1}`);
-        return {
-          tagId,
-          label: String(item.label).trim(),
-          startEncounterId: baseEncId,
-          cumulativeByEncounter: {
-            [baseEncId]: 0
-          },
-          valuesByEncounter: {
-            [baseEncId]: { status: 'registro', deltaPercent: 0, cumulativePercent: 0 }
-          },
-          awaitingFirstEvaluation: true,
-          accumulatedPercent: 0,
-          statusLabel: 'Aguardando 1º Check-in'
-        };
-      });
+  if (needsMatrix.length === 0 && activeCheckinQuestions.length > 0) {
+    needsMatrix = activeCheckinQuestions.map((item, idx) => {
+      const tagId = String(item.tagId || item.id || `tag-${idx + 1}`);
+      return {
+        id: tagId,
+        tagId,
+        label: item.label,
+        startDate: item.startDate,
+        awaitingFirstEvaluation: true,
+        confirmedRemission: false,
+        statusKey: 'base',
+        statusWord: 'Base',
+        statusSym: '·',
+        statusLabel: '— sem resposta',
+        statusCls: 'flat',
+        statusColor: '#93a4bd',
+        band: 'referência 0%',
+        val: 0,
+        accumulatedPercent: 0
+      };
+    });
   }
 
   const overallEvolution: OverallEvolutionSummary | undefined = rawOverall && typeof rawOverall === 'object'
     ? {
-        averagePercent: Number(rawOverall.averagePercent ?? 0),
-        displayScore: Number(rawOverall.displayScore ?? 0),
-        statusLabel: String(rawOverall.statusLabel || 'Estável').trim()
+        exactMean: typeof rawOverall.exactMean === 'number' ? rawOverall.exactMean : undefined,
+        roundedR5: typeof rawOverall.roundedR5 === 'number' ? rawOverall.roundedR5 : undefined,
+        formattedR5: rawOverall.formattedR5 ? String(rawOverall.formattedR5) : undefined,
+        statusKey: rawOverall.statusKey ? String(rawOverall.statusKey) : undefined,
+        statusWord: rawOverall.statusWord ? String(rawOverall.statusWord) : undefined,
+        statusSym: rawOverall.statusSym ? String(rawOverall.statusSym) : undefined,
+        statusLabel: String(rawOverall.statusLabel || 'Estável ↔').trim(),
+        statusCls: rawOverall.statusCls ? String(rawOverall.statusCls) : undefined,
+        statusColor: rawOverall.statusColor ? String(rawOverall.statusColor) : undefined,
+        band: rawOverall.band ? String(rawOverall.band) : undefined,
+        isMisto: Boolean(rawOverall.isMisto),
+        hasAnyPior: Boolean(rawOverall.hasAnyPior),
+        evaluatedCount: typeof rawOverall.evaluatedCount === 'number' ? rawOverall.evaluatedCount : undefined,
+        bipolarBar: rawOverall.bipolarBar && typeof rawOverall.bipolarBar === 'object' ? rawOverall.bipolarBar : undefined,
+        summaryCountsText: rawOverall.summaryCountsText ? String(rawOverall.summaryCountsText) : undefined,
+        interpretationText: rawOverall.interpretationText ? String(rawOverall.interpretationText) : undefined,
+        averagePercent: Number(rawOverall.roundedR5 ?? rawOverall.averagePercent ?? 0),
+        displayScore: Number(rawOverall.displayScore ?? Math.abs(Number(rawOverall.roundedR5 ?? rawOverall.averagePercent ?? 0)))
       }
     : undefined;
 
@@ -740,7 +771,7 @@ export function normalizeWellbeingData(resumoRaw: any, rootRaw?: any): Wellbeing
     encounters,
     needsMatrix,
     overallEvolution,
-    updatedAt: resumoRaw?.updatedAt || rootRaw?.updatedAt || rootRaw?.lastSyncTimestamp
+    updatedAt: resumoRaw.updatedAt
   };
 }
 
@@ -1100,10 +1131,7 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
       }
       return fallback.clinicalSummaryInfo;
     })(),
-    wellbeingData: (() => {
-      const rootWellbeing = normalizeWellbeingData(null, raw);
-      return mergeWellbeingData(cachedWellbeingData, rootWellbeing || (raw.wellbeingData as WellbeingLongitudinalData | undefined));
-    })(),
+    wellbeingData: cachedWellbeingData || undefined,
 
     lyaNotification: {
       active: Boolean(raw.lyaNotification?.active ?? fallback.lyaNotification.active),
@@ -1130,7 +1158,23 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
     examsRequested: raw.examsRequested && typeof raw.examsRequested === 'object' && !Array.isArray(raw.examsRequested) 
       ? raw.examsRequested 
       : (fallback.examsRequested || { id: 'req-1', title: 'Painel Integrativo', dateStr: 'Aguardando' }),
-    examResults: Array.isArray(raw.examResults) ? raw.examResults : (fallback.examResults || []),
+    examResults: Array.isArray(raw.examResults)
+      ? raw.examResults.map((r: any, idx: number) => {
+          const st = String(r.status || '').toLowerCase();
+          const resolvedStatus: 'ok' | 'atenção' | 'baixo' | 'alto' =
+            (st === 'alto' || st === 'baixo' || st === 'atenção') ? st : 'ok';
+          return {
+            id: r.id || `root-res-${idx + 1}`,
+            name: r.name || r.analyte || 'Biomarcador',
+            value: String(r.value ?? ''),
+            reference: r.reference || '',
+            status: resolvedStatus,
+            category: r.category || r.area || r.group || undefined,
+            unit: r.unit || undefined,
+            dateStr: r.dateStr || undefined
+          };
+        })
+      : (fallback.examResults || []),
     examBatches: (() => {
       if (Array.isArray(raw.examBatches)) {
         return raw.examBatches.map((b: any, bIdx: number) => ({
@@ -1140,15 +1184,39 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
           status: b.status || 'Disponível',
           pdfAvailable: Boolean(b.pdfAvailable || b.laudoPdfUrl),
           results: Array.isArray(b.results)
-            ? b.results
+            ? b.results.map((r: any, rIdx: number) => {
+                const st = String(r.status || '').toLowerCase();
+                const resolvedStatus: 'ok' | 'atenção' | 'baixo' | 'alto' =
+                  (st === 'alto' || st === 'baixo' || st === 'atenção') ? st : 'ok';
+                return {
+                  id: r.id || `res-${rIdx + 1}`,
+                  name: r.name || r.analyte || 'Biomarcador',
+                  value: String(r.value ?? ''),
+                  reference: r.reference || '',
+                  status: resolvedStatus,
+                  category: r.category || r.area || r.group || b.category || undefined,
+                  unit: r.unit || undefined,
+                  dateStr: r.dateStr || b.dateStr || undefined
+                };
+              })
             : (Array.isArray(b.exams)
-                ? b.exams.map((e: any, eIdx: number) => ({
-                    id: e.id || `exam-${eIdx + 1}`,
-                    name: e.name || e.analyte || 'Biomarcador',
-                    value: String(e.value ?? ''),
-                    reference: e.reference || '',
-                    status: (e.status?.toLowerCase() === 'normal' || e.status?.toLowerCase() === 'ok') ? 'ok' : 'atenção'
-                  }))
+                ? b.exams.map((e: any, eIdx: number) => {
+                    const st = String(e.status || '').toLowerCase();
+                    const resolvedStatus: 'ok' | 'atenção' | 'baixo' | 'alto' =
+                      (st === 'alto' || st === 'baixo' || st === 'atenção')
+                        ? st
+                        : ((st === 'normal' || st === 'ok' || !st) ? 'ok' : 'atenção');
+                    return {
+                      id: e.id || `exam-${eIdx + 1}`,
+                      name: e.name || e.analyte || 'Biomarcador',
+                      value: String(e.value ?? ''),
+                      reference: e.reference || '',
+                      status: resolvedStatus,
+                      category: e.category || e.area || e.group || b.category || undefined,
+                      unit: e.unit || undefined,
+                      dateStr: e.dateStr || b.dateStr || undefined
+                    };
+                  })
                 : [])
         }));
       }
@@ -1264,43 +1332,6 @@ export function sanitizePatientPayload(raw: any, fallbackId: string = 'paciente-
             pdfUrl: r.pdfUrl || ''
           };
         });
-      }
-      return [];
-    })(),
-
-    metabolicAxes: Array.isArray(raw.metabolicAxes)
-      ? raw.metabolicAxes
-      : (Array.isArray(raw.functionalAxes) ? raw.functionalAxes : []),
-
-    chrononutrition: (() => {
-      const rawCrono = raw.chrononutrition || raw.chrononutritionSchedule || raw.cronobiologySchedule;
-      if (Array.isArray(rawCrono) && rawCrono.length > 0) {
-        if (rawCrono[0]?.periodo || rawCrono[0]?.horario) {
-          const colors = ['#2fd575', '#e8930c', '#22d3ee', '#38bdf8', '#a78bfa'];
-          return rawCrono.map((item: any, i: number) => {
-            let w12: [number, number][] = [[8, 9.5]];
-            if (typeof item.horario === 'string' && item.horario.includes('-')) {
-              const parts = item.horario.split('-').map((p: string) => p.trim());
-              const parseH = (s: string) => {
-                const [h, m] = s.split(':').map(Number);
-                return (h || 0) + ((m || 0) / 60);
-              };
-              if (parts.length === 2) {
-                const h0 = parseH(parts[0]);
-                const h1 = parseH(parts[1]);
-                w12 = [[(h0 % 12) || 12, (h1 % 12) || 12]];
-              }
-            }
-            return {
-              n: item.periodo || `Período ${i + 1}`,
-              c: colors[i % colors.length],
-              horarios: [item.horario || ''],
-              w12,
-              comentario: item.foco || ''
-            };
-          });
-        }
-        return rawCrono;
       }
       return [];
     })(),
@@ -1438,6 +1469,7 @@ class CrmDataService {
             patientData.examBatches = examsSnap.docs.map(docSnap => {
               const data = docSnap.data();
               const rawResults = Array.isArray(data.results) ? data.results : (Array.isArray(data.exams) ? data.exams : []);
+              const batchDate = data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026');
               const results = rawResults.map((r: any, idx: number) => {
                 const st = String(r.status || '').toLowerCase();
                 const resolvedStatus: 'ok' | 'atenção' | 'baixo' | 'alto' = 
@@ -1447,14 +1479,17 @@ class CrmDataService {
                   name: r.name || r.analyte || 'Biomarcador',
                   value: String(r.value ?? ''),
                   reference: r.reference || '',
-                  status: resolvedStatus
+                  status: resolvedStatus,
+                  category: r.category || r.area || r.group || data.category || undefined,
+                  unit: r.unit || undefined,
+                  dateStr: r.dateStr || batchDate
                 };
               });
 
               return {
                 id: docSnap.id,
                 title: data.title || data.name || data.examTitle || (docSnap.id.startsWith('req-') ? 'Requisição de Exames' : 'Painel Laboratorial'),
-                dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026'),
+                dateStr: batchDate,
                 status: data.status || 'Solicitado',
                 pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl || data.laudoPdfUrl || true),
                 results
@@ -1535,18 +1570,13 @@ class CrmDataService {
               patientData.clinicalSummary = normSum.summary;
             }
             cachedResumoConsultationRecords = extractConsultationRecordsFromResumoGeral(resumoData);
-            const normWb = normalizeWellbeingData(resumoData, rootRawData);
-            if (normWb) {
-              cachedWellbeingData = normWb;
-              patientData.wellbeingData = cachedWellbeingData;
-            }
+            const normWb = normalizeWellbeingData(resumoData);
+            cachedWellbeingData = normWb;
+            patientData.wellbeingData = cachedWellbeingData || undefined;
           } else {
             cachedResumoConsultationRecords = [];
-            const rootWb = normalizeWellbeingData(null, rootRawData);
-            if (rootWb) {
-              cachedWellbeingData = rootWb;
-              patientData.wellbeingData = cachedWellbeingData;
-            }
+            cachedWellbeingData = null;
+            patientData.wellbeingData = undefined;
           }
 
           const encounterDocs = evoSnap.docs.filter(d => isConsultationEncounterDoc(d.id, d.data()));
@@ -1723,7 +1753,6 @@ class CrmDataService {
     let unsubscribePrescriptionsFirestore: (() => void) | null = null;
     let unsubscribeExamsFirestore: (() => void) | null = null;
     let unsubscribeAnthroFirestore: (() => void) | null = null;
-    let unsubscribeMapFirestore: (() => void) | null = null;
     let unsubscribeAnamnesisFirestore: (() => void) | null = null;
     let unsubscribeEvolutionsFirestore: (() => void) | null = null;
     let unsubscribeEvolutionSummaryFirestore: (() => void) | null = null;
@@ -1918,6 +1947,7 @@ class CrmDataService {
                 const subBatches: ExamBatch[] = snap.docs.map(docSnap => {
                   const data = docSnap.data();
                   const rawResults = Array.isArray(data.results) ? data.results : (Array.isArray(data.exams) ? data.exams : []);
+                  const batchDate = data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026');
                   const results = rawResults.map((r: any, idx: number) => {
                     const st = String(r.status || '').toLowerCase();
                     const resolvedStatus: 'ok' | 'atenção' | 'baixo' | 'alto' = 
@@ -1927,14 +1957,17 @@ class CrmDataService {
                       name: r.name || r.analyte || 'Biomarcador',
                       value: String(r.value ?? ''),
                       reference: r.reference || '',
-                      status: resolvedStatus
+                      status: resolvedStatus,
+                      category: r.category || r.area || r.group || data.category || undefined,
+                      unit: r.unit || undefined,
+                      dateStr: r.dateStr || batchDate
                     };
                   });
 
                   return {
                     id: docSnap.id,
                     title: data.title || data.name || data.examTitle || (docSnap.id.startsWith('req-') ? 'Requisição de Exames' : 'Painel Laboratorial'),
-                    dateStr: data.dateStr || (data.createdAt ? new Date(data.createdAt.seconds ? data.createdAt.seconds * 1000 : data.createdAt).toLocaleDateString('pt-BR') : '11/11/2026'),
+                    dateStr: batchDate,
                     status: data.status || 'Solicitado',
                     pdfAvailable: Boolean(data.pdfAvailable || data.pdfUrl || data.laudoPdfUrl || true),
                     results
@@ -2045,33 +2078,6 @@ class CrmDataService {
             console.warn("Erro no listener da subcoleção anthropometry:", aErr);
           }
 
-          // Escuta em tempo real na subcoleção /metabolic_map (BioSync™ - Mapa Funcional)
-          try {
-            const mapRef = collection(firestoreDb, 'patients', targetDocId, 'metabolic_map');
-            unsubscribeMapFirestore = onSnapshot(mapRef, (snap) => {
-              if (!snap.empty) {
-                const latestDoc = snap.docs[0]?.data();
-                const currentP = this.getAllLocalPatients()[patientId] || INITIAL_PATIENTS['paciente-template-01'];
-                const updatedAxes = Array.isArray(latestDoc?.axes) ? latestDoc.axes : currentP.metabolicAxes;
-                const updatedCrono = Array.isArray(latestDoc?.chrononutrition) ? latestDoc.chrononutrition : currentP.chrononutrition;
-
-                const updatedPatient: PatientProfile = {
-                  ...currentP,
-                  metabolicAxes: updatedAxes,
-                  chrononutrition: updatedCrono
-                };
-                const all = this.getAllLocalPatients();
-                all[patientId] = updatedPatient;
-                this.saveAllLocalPatients(all);
-                callback(updatedPatient);
-              }
-            }, (err) => {
-              console.info("🔒 [Vittáre Data] Subcoleção metabolic_map em modo seguro:", err.code);
-            });
-          } catch (mErr) {
-            console.warn("Erro no listener da subcoleção metabolic_map:", mErr);
-          }
-
           // Escuta em tempo real na subcoleção /evolution (resumo_geral + registros encounter_*)
           try {
             const evolutionColRef = collection(firestoreDb, 'patients', targetDocId, 'evolution');
@@ -2088,10 +2094,10 @@ class CrmDataService {
                 if (Array.isArray(resumoData?.consultationRecords)) {
                   cachedResumoConsultationRecords = normalizeConsultationRecordsList(resumoData.consultationRecords);
                 }
-                const normWb = normalizeWellbeingData(resumoData, currentP.wellbeingData);
-                if (normWb) {
-                  cachedWellbeingData = mergeWellbeingData(normWb, cachedWellbeingData) || normWb;
-                }
+                const normWb = normalizeWellbeingData(resumoData);
+                cachedWellbeingData = normWb;
+              } else {
+                cachedWellbeingData = null;
               }
 
               const encounterDocs = snap.docs.filter(d => isConsultationEncounterDoc(d.id, d.data()));
@@ -2102,7 +2108,7 @@ class CrmDataService {
               cachedSubEvolutions = subEvs;
               lastEvolutionsError = null;
 
-              const resolvedWellbeing = mergeWellbeingData(cachedWellbeingData, currentP.wellbeingData);
+              const resolvedWellbeing = cachedWellbeingData || undefined;
               const resolvedConsultationRecords = resolveAuthoritativeConsultationRecords(
                 cachedRootConsultationRecords,
                 cachedResumoConsultationRecords,
@@ -2149,13 +2155,11 @@ class CrmDataService {
                 if (Array.isArray(resumoData?.consultationRecords)) {
                   cachedResumoConsultationRecords = normalizeConsultationRecordsList(resumoData.consultationRecords);
                 }
-                const normWb = normalizeWellbeingData(resumoData, currentP.wellbeingData);
-                if (normWb) {
-                  cachedWellbeingData = mergeWellbeingData(normWb, cachedWellbeingData) || normWb;
-                }
+                const normWb = normalizeWellbeingData(resumoData);
+                cachedWellbeingData = normWb;
                 lastEvolutionsError = null;
 
-                const resolvedWellbeing = mergeWellbeingData(cachedWellbeingData, currentP.wellbeingData);
+                const resolvedWellbeing = cachedWellbeingData || undefined;
                 const resolvedConsultationRecords = resolveAuthoritativeConsultationRecords(
                   cachedRootConsultationRecords,
                   cachedResumoConsultationRecords,
@@ -2339,9 +2343,6 @@ class CrmDataService {
       }
       if (unsubscribeAnthroFirestore) {
         unsubscribeAnthroFirestore();
-      }
-      if (unsubscribeMapFirestore) {
-        unsubscribeMapFirestore();
       }
       if (unsubscribeAnamnesisFirestore) {
         unsubscribeAnamnesisFirestore();
@@ -2674,10 +2675,8 @@ class CrmDataService {
         }
       }
 
-      const normWellbeing = normalizeWellbeingData(resumoRaw, rootData);
-      if (normWellbeing) {
-        cachedWellbeingData = normWellbeing;
-      }
+      const normWellbeing = normalizeWellbeingData(resumoRaw);
+      cachedWellbeingData = normWellbeing;
 
       if (!cachedClinicalSummaryInfo && typeof rootData?.clinicalSummary === 'string' && rootData.clinicalSummary.trim()) {
         const fallbackDate = rootData.clinicalSummaryDate || (rootData.lastSyncTimestamp ? new Date(rootData.lastSyncTimestamp).toLocaleDateString('pt-BR') : '');

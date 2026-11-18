@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { PatientProfile, ReferralItem } from '../../types/patient';
 import { ExamsTab } from '../exams/ExamsTab';
 import { PhysicalAssessmentTab } from '../physical-assessment/PhysicalAssessmentTab';
-import { MetabolicProfileTab } from '../metabolic-profile/MetabolicProfileTab';
 import { TextDocumentModal } from '../../components/common/TextDocumentModal';
 import { ReferralPdfModal } from '../../components/common/ReferralPdfModal';
 import { crmDataService } from '../../services/crmDataService';
@@ -10,7 +9,7 @@ import { crmDataService } from '../../services/crmDataService';
 interface ExamesGuiasTabProps {
   patient: PatientProfile;
   onOpenPdf: (title: string) => void;
-  defaultSubTab?: 'exames' | 'corporal' | 'mapa' | 'integrativa' | 'encaminhamentos';
+  defaultSubTab?: 'exames' | 'corporal' | 'integrativa' | 'encaminhamentos';
 }
 
 export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
@@ -19,7 +18,7 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
   defaultSubTab = 'exames'
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'exames' | 'corporal' | 'mapa' | 'integrativa' | 'encaminhamentos'
+    'exames' | 'corporal' | 'integrativa' | 'encaminhamentos'
   >(defaultSubTab);
 
   const [isAnamneseModalOpen, setIsAnamneseModalOpen] = useState(false);
@@ -105,13 +104,6 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
       icon: 'ti ti-barbell' 
     },
     { 
-      id: 'mapa' as const, 
-      line1: 'Mapa', 
-      line2: 'Funcional', 
-      brand: 'BioSync™', 
-      icon: 'ti ti-dna' 
-    },
-    { 
       id: 'integrativa' as const, 
       line1: 'Avaliação', 
       line2: 'Integrativa', 
@@ -120,8 +112,8 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
     },
     { 
       id: 'encaminhamentos' as const, 
-      line1: 'Encaminhamento', 
-      line2: 'Multidisciplinar', 
+      line1: 'Multidisciplinar', 
+      line2: '', 
       brand: 'Multidisciplinar', 
       icon: 'ti ti-send' 
     }
@@ -129,36 +121,44 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
 
   return (
     <div className="w-full space-y-4 font-['Plus_Jakarta_Sans',sans-serif]">
-      {/* Grade Visual de Botões Expostos em 18px (2 pares + 1 largura total) */}
+      {/* Grade Limpa 2×2 Simétrica em 18px com alvos táteis amplos */}
       <div className="pt-1 pb-2 border-b border-white/[0.08]">
         <div className="grid grid-cols-2 gap-2.5">
-          {subTabs.map((tab, idx) => {
+          {subTabs.map((tab) => {
             const isActive = activeSubTab === tab.id;
-            const isFullWidth = idx === 4; // 5º item: Encaminhamento Multidisciplinar ocupa toda a largura
 
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`py-2.5 px-3 rounded-2xl text-[18px] transition-all duration-200 cursor-pointer flex flex-col items-center justify-center text-center min-h-[64px] ${
-                  isFullWidth ? 'col-span-2' : 'col-span-1'
-                } ${
+                className={`col-span-1 py-2.5 px-2 rounded-2xl text-[17px] transition-all duration-200 cursor-pointer flex flex-col items-center justify-center text-center min-h-[72px] overflow-hidden ${
                   isActive
                     ? 'bg-[#5eea8f] text-[#0a0d12] shadow-lg shadow-[#5eea8f]/25 font-extrabold border-2 border-[#5eea8f]'
                     : 'bg-white/[0.04] text-[#d5dee4] border-[1px] border-white/50 hover:bg-white/[0.08] font-medium'
                 }`}
               >
-                {/* Linhas de texto estruturadas em bloco vertical para não truncar */}
-                <div className="flex items-center gap-1.5 leading-tight">
-                  <i className={`${tab.icon} text-[20px] shrink-0 ${isActive ? 'text-[#0a0d12]' : 'text-[#5eea8f]'}`}></i>
-                  <span className="font-bold">
-                    {tab.line1}
-                  </span>
-                </div>
-                <div className="text-[17px] font-semibold leading-tight mt-0.5">
-                  {tab.line2}
-                </div>
+                {/* Linhas de texto estruturadas em bloco vertical para nunca vazar nem truncar */}
+                {tab.line2 ? (
+                  <>
+                    <div className="flex items-center justify-center gap-1.5 leading-tight max-w-full">
+                      <i className={`${tab.icon} text-[19px] shrink-0 ${isActive ? 'text-[#0a0d12]' : 'text-[#5eea8f]'}`}></i>
+                      <span className="font-bold">
+                        {tab.line1}
+                      </span>
+                    </div>
+                    <div className="text-[16.5px] font-semibold leading-tight mt-0.5 break-words max-w-full">
+                      {tab.line2}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-1 leading-tight max-w-full">
+                    <i className={`${tab.icon} text-[21px] shrink-0 ${isActive ? 'text-[#0a0d12]' : 'text-[#5eea8f]'}`}></i>
+                    <span className="font-bold text-[17px] leading-tight">
+                      {tab.line1}
+                    </span>
+                  </div>
+                )}
 
                 {/* Na aba selecionada exibe o selo oficial da marca com destaque */}
                 {isActive && (
@@ -190,17 +190,7 @@ export const ExamesGuiasTab: React.FC<ExamesGuiasTabProps> = ({
           />
         )}
 
-        {/* 3. Mapa Funcional | BioSync™ */}
-        {activeSubTab === 'mapa' && (
-          <div className="space-y-4 select-none animate-fadeIn">
-            <div className="mb-3">
-              <div className="text-[23px] font-['Cormorant_Garamond',serif] font-bold tracking-[0.02em] text-[#5eea8f] leading-tight">
-                Mapa Funcional | BioSync™
-              </div>
-            </div>
-            <MetabolicProfileTab patient={patient} />
-          </div>
-        )}
+
 
         {/* 4. Avaliação Integrativa | Sense App™ */}
         {activeSubTab === 'integrativa' && (

@@ -25,7 +25,6 @@ import { MeuPerfilTab } from './modules/profile/MeuPerfilTab';
 // Individual Tabs (Preservadas para retrocompatibilidade e navegação interna direta)
 import { ExamsTab } from './modules/exams/ExamsTab';
 import { PhysicalAssessmentTab } from './modules/physical-assessment/PhysicalAssessmentTab';
-import { MetabolicProfileTab } from './modules/metabolic-profile/MetabolicProfileTab';
 import { ProtocolTab } from './modules/protocol/ProtocolTab';
 import { MarketplaceTab } from './modules/marketplace/MarketplaceTab';
 import { GuiasTab } from './modules/guias/GuiasTab';
@@ -183,15 +182,19 @@ function PatientAppContent() {
             />
           )}
 
-          {/* 6. Meus Exames & Guias (Exames + Avaliação Corporal + Mapa Funcional + Integrativa + Encaminhamentos) */}
-          {(activeTab === 'exames-guias' || activeTab === 'exames' || activeTab === 'avaliacao' || activeTab === 'perfil-metabolico') && (
+          {/* 6. Meus Exames & Guias (Grade 2x2: Exames + Avaliação Corporal + Integrativa + Encaminhamentos) */}
+          {(activeTab === 'exames-guias' || activeTab === 'exames' || activeTab === 'avaliacao' || activeTab === 'integrativa' || activeTab === 'multidisciplinar') && (
             <ExamesGuiasTab
               patient={currentPatient}
               onOpenPdf={handleOpenPdf}
               defaultSubTab={
-                activeTab === 'avaliacao' ? 'corporal' :
-                activeTab === 'perfil-metabolico' ? 'mapa' :
-                'exames'
+                activeTab === 'avaliacao'
+                  ? 'corporal'
+                  : activeTab === 'integrativa'
+                  ? 'integrativa'
+                  : activeTab === 'multidisciplinar'
+                  ? 'encaminhamentos'
+                  : 'exames'
               }
             />
           )}

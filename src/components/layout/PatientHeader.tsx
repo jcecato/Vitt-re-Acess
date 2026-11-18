@@ -56,8 +56,8 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({ patient, activeTab
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Botão Contextual "i" (Regra dos 3 Pontos) */}
             <ContextualHelpButton
-              title="Aba Meu Dia"
-              whatItIs="Nesta tela você acompanha sua rotina do dia, horário da próxima consulta e lembretes prioritários."
+              title="Aba Meus Registros"
+              whatItIs="Nesta tela você acompanha seus registros clínicos, horário da próxima consulta e linha do tempo do acompanhamento."
               yourAction="Confira os horários das suas medicações e confirme sua presença na próxima consulta."
               doctorTip="Marque suas tarefas do dia concluídas pela manhã para garantir 100% de aderência ao plano!"
             />

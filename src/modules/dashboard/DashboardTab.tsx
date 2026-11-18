@@ -1,5 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PatientProfile } from '../../types/patient';
+import {
+  Archive,
+  CalendarCheck,
+  FileText,
+  CheckCircle2,
+  FlaskConical,
+  ShoppingBag,
+  TestTube2,
+  Activity,
+  HeartPulse,
+  Send,
+  Clock
+} from 'lucide-react';
+import { db, isFirebaseConfigured } from '../../config/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 
 interface DashboardTabProps {
   patient: PatientProfile;
@@ -16,9 +31,61 @@ interface TimelineRecord {
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({
-  patient
+  patient,
+  onNavigateTab
 }) => {
   const [showAll, setShowAll] = useState<boolean>(false);
+  const [checkinsCount, setCheckinsCount] = useState<number>(0);
+  const [latestCheckinInfo, setLatestCheckinInfo] = useState<{ dateStr: string; timestampMs: number } | null>(null);
+
+  const targetPatientEmail = (patient.email && patient.email.includes('@'))
+    ? patient.email.trim().toLowerCase()
+    : (patient.id && patient.id.includes('@') ? patient.id.trim().toLowerCase() : 'jcecato@gmail.com');
+
+  // Escuta em tempo real da subcoleção /checkins (conta apenas check-ins realizados, nunca sintomas unitários)
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !db) return;
+
+    try {
+      const colRef = collection(db, 'patients', targetPatientEmail, 'checkins');
+      const unsubscribe = onSnapshot(
+        colRef,
+        (snapshot) => {
+          let validCount = 0;
+          let latestMs = 0;
+          let latestDateStr = '';
+
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data && data.answers && typeof data.answers === 'object') {
+              validCount += 1;
+              const rawCreated = typeof data.createdAt === 'string' ? Date.parse(data.createdAt) : 0;
+              const rawDateStr = String(data.dateStr || '').trim();
+              const ptMatch = rawDateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+              const parsedFromStr = ptMatch
+                ? new Date(parseInt(ptMatch[3], 10), parseInt(ptMatch[2], 10) - 1, parseInt(ptMatch[1], 10)).getTime()
+                : 0;
+              const candidateMs = Math.max(Number.isFinite(rawCreated) ? rawCreated : 0, parsedFromStr);
+              if (candidateMs >= latestMs) {
+                latestMs = candidateMs;
+                latestDateStr = rawDateStr || (candidateMs > 0 ? new Date(candidateMs).toLocaleDateString('pt-BR') : '');
+              }
+            }
+          });
+
+          setCheckinsCount(validCount);
+          setLatestCheckinInfo(latestMs > 0 && latestDateStr ? { dateStr: latestDateStr, timestampMs: latestMs } : null);
+        },
+        (err) => {
+          console.info('🔒 [Vittáre Registros] Leitura de check-ins em modo seguro:', err?.code);
+        }
+      );
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn('Falha ao ouvir check-ins na aba Meus Registros:', e);
+    }
+  }, [targetPatientEmail]);
 
   // Parser de data para string limpa DD/MM/AAAA
   const extractCleanDate = (rawDateStr: string): string => {
@@ -142,6 +209,142 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
     patient.activities
   ]);
 
+  // Cálculo determinístico por categoria (sempre por documento/registro, nunca itens unitários)
+  const categoryCounters = useMemo(() => {
+    const validConsultationsCount = (patient.consultations || []).filter((c) => {
+      const cleanDate = extractCleanDate(c.dateStr || '');
+      const statusNorm = (c.status || '').toLowerCase().trim();
+      const isCompleted = statusNorm === 'concluída' || statusNorm === 'concluida' || statusNorm === 'realizada';
+      const hasValidDate = Boolean(cleanDate && cleanDate !== '-' && /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(cleanDate));
+      return isCompleted || hasValidDate;
+    }).length;
+
+    const annotationsCount = (patient.clinicalEvolutions || []).length;
+    const checkinsTotalCount = checkinsCount;
+    const formulasCount = (patient.protocols || []).length;
+    const quickAccessCount = (patient.marketplace || []).length;
+    const labExamsCount = (patient.examBatches || []).length;
+    const bodyAssessmentsCount = (patient.physicalAssessments || []).length;
+    const integrativeCount = patient.crmGeneralNotes && patient.crmGeneralNotes.trim().length > 0 ? 1 : 0;
+    const multidisciplinaryCount = (patient.referrals || []).length;
+
+    return [
+      {
+        id: 'consultas',
+        label: 'Consultas',
+        count: validConsultationsCount,
+        targetTab: 'consultas',
+        icon: CalendarCheck,
+        iconColor: '#5eea8f'
+      },
+      {
+        id: 'anotacoes',
+        label: 'Anotações',
+        count: annotationsCount,
+        targetTab: 'anotacoes',
+        icon: FileText,
+        iconColor: '#38bdf8'
+      },
+      {
+        id: 'bem-estar',
+        label: 'Check-ins',
+        count: checkinsTotalCount,
+        targetTab: 'evolucao',
+        icon: CheckCircle2,
+        iconColor: '#a78bfa'
+      },
+      {
+        id: 'formulas',
+        label: 'Minhas Fórmulas',
+        count: formulasCount,
+        targetTab: 'formulas-suprimentos',
+        icon: FlaskConical,
+        iconColor: '#fbbf24'
+      },
+      {
+        id: 'acesso-agil',
+        label: 'Acesso Ágil',
+        count: quickAccessCount,
+        targetTab: 'marketplace',
+        icon: ShoppingBag,
+        iconColor: '#2dd4bf'
+      },
+      {
+        id: 'exames',
+        label: 'Exames Laboratoriais',
+        count: labExamsCount,
+        targetTab: 'exames-guias',
+        icon: TestTube2,
+        iconColor: '#60a5fa'
+      },
+      {
+        id: 'corporal',
+        label: 'Avaliação Corporal',
+        count: bodyAssessmentsCount,
+        targetTab: 'avaliacao',
+        icon: Activity,
+        iconColor: '#34d399'
+      },
+      {
+        id: 'integrativa',
+        label: 'Avaliação Integrativa',
+        count: integrativeCount,
+        targetTab: 'integrativa',
+        icon: HeartPulse,
+        iconColor: '#f472b6'
+      },
+      {
+        id: 'multidisciplinar',
+        label: 'Multidisciplinar',
+        count: multidisciplinaryCount,
+        targetTab: 'multidisciplinar',
+        icon: Send,
+        iconColor: '#fb923c',
+        fullWidth: true
+      }
+    ];
+  }, [
+    patient.consultations,
+    patient.clinicalEvolutions,
+    checkinsCount,
+    patient.protocols,
+    patient.marketplace,
+    patient.examBatches,
+    patient.physicalAssessments,
+    patient.crmGeneralNotes,
+    patient.referrals
+  ]);
+
+  const totalRecordsSum = useMemo(
+    () => categoryCounters.reduce((acc, item) => acc + item.count, 0),
+    [categoryCounters]
+  );
+
+  // Último registro cronológico (entre linha do tempo e check-ins)
+  const latestRecordFooterText = useMemo(() => {
+    const latestTimeline = timelineRecords[0];
+    let bestMs = latestTimeline?.timestampMs || 0;
+    let bestDateStr = latestTimeline?.dateStr || '';
+
+    if (latestCheckinInfo && latestCheckinInfo.timestampMs >= bestMs) {
+      bestMs = latestCheckinInfo.timestampMs;
+      bestDateStr = latestCheckinInfo.dateStr;
+    }
+
+    if (!bestMs || !bestDateStr) return null;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const recordDate = new Date(bestMs);
+    const recordStart = new Date(recordDate.getFullYear(), recordDate.getMonth(), recordDate.getDate()).getTime();
+    const diffDays = Math.round((todayStart - recordStart) / 86400000);
+
+    if (diffDays === 0) return `Último registro hoje · ${bestDateStr}`;
+    if (diffDays === 1) return `Último registro há 1 dia · ${bestDateStr}`;
+    if (diffDays > 1 && diffDays <= 365) return `Último registro há ${diffDays} dias · ${bestDateStr}`;
+    return `Último registro · ${bestDateStr}`;
+  }, [timelineRecords, latestCheckinInfo]);
+
   const displayedRecords = showAll ? timelineRecords : timelineRecords.slice(0, 5);
 
   const scrollToTop = () => {
@@ -244,6 +447,68 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         </div>
       </div>
 
+      {/* Card Moderno Consolidado: Seus Registros Totais + 9 Categorias */}
+      <div className="bg-[#0e131b] border border-[#1c2432] rounded-3xl p-4 shadow-xl space-y-3.5">
+        {/* Cabeçalho com ícone + título + caixa total verde */}
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#5eea8f]/12 border border-[#5eea8f]/35 flex items-center justify-center text-[#5eea8f] shrink-0">
+              <Archive className="w-5 h-5" strokeWidth={2} />
+            </div>
+            <span className="text-[18px] font-bold text-[#f2f6fc] leading-snug">
+              Seus registros totais:
+            </span>
+          </div>
+
+          <div
+            className="min-w-[56px] min-h-[46px] px-3.5 py-1.5 rounded-xl bg-[#5eea8f]/18 border-2 border-[#5eea8f] text-[#5eea8f] shadow-md shadow-[#5eea8f]/15 flex items-center justify-center shrink-0"
+            aria-label={`Seus registros totais: ${totalRecordsSum}`}
+          >
+            <span className="text-[22px] font-extrabold leading-none tabular-nums">
+              {totalRecordsSum}
+            </span>
+          </div>
+        </div>
+
+        {/* Lista Horizontal Individual de 9 Categorias (1 por linha, borda branca clara, Icone + N° + Nome em 18px Times New Roman) */}
+        <div className="flex flex-col gap-2.5">
+          {categoryCounters.map((cat) => {
+            const IconComponent = cat.icon;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => onNavigateTab(cat.targetTab)}
+                className="w-full min-h-[48px] bg-[#131823]/95 border-[1px] border-white/50 hover:border-[#5eea8f] active:scale-[0.99] rounded-2xl px-3.5 py-2.5 shadow-sm transition-all cursor-pointer flex items-center justify-start text-left gap-3"
+              >
+                <IconComponent
+                  className="w-5 h-5 shrink-0"
+                  style={{ color: cat.iconColor }}
+                  strokeWidth={2}
+                />
+                <span className="min-w-[28px] text-center text-[20px] font-extrabold text-white leading-none tabular-nums shrink-0">
+                  {cat.count}
+                </span>
+                <span
+                  className="text-[#e8eef5] font-medium leading-tight"
+                  style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '18px' }}
+                >
+                  {cat.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Rodapé discreto com data do último registro */}
+        {latestRecordFooterText && (
+          <div className="pt-1 flex items-center gap-1.5 text-[13px] text-[#8b98a6] font-medium">
+            <Clock className="w-3.5 h-3.5 text-[#8b98a6] shrink-0" />
+            <span>{latestRecordFooterText}</span>
+          </div>
+        )}
+      </div>
+
       {/* Linha do Tempo Enxuta (Registro cronológico das coleções do Firebase, sem acordeon) */}
       <div className="mt-5">
         <div className="flex items-center justify-between mb-3 px-0.5">
@@ -251,9 +516,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             <h2 className="text-[20px] font-bold tracking-tight text-[#e8eef5]">
               Linha do tempo
             </h2>
-            <span className="text-[15px] font-medium px-2.5 py-0.5 rounded-full bg-white/[0.06] text-[#8b98a6] border border-white/20">
-              {timelineRecords.length} {timelineRecords.length === 1 ? 'registro' : 'registros'}
-            </span>
           </div>
         </div>
 
@@ -291,7 +553,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
                   {/* Card Enxuto de Registro (Somente leitura cronológica, sem acordeon) */}
                   <div className="grow min-w-0 bg-[#121722]/85 border border-white/35 rounded-2xl px-3.5 py-2.5 -ml-[5px] mr-[4px] shadow-sm">
-                    <h3 className="text-[16.5px] font-semibold text-[#e8eef5] leading-snug">
+                    <h3
+                      className="text-[16.5px] font-normal text-[#eef1f4] leading-snug"
+                      style={{ fontWeight: 'normal', borderColor: '#eef1f4' }}
+                    >
                       {rec.title}
                     </h3>
 

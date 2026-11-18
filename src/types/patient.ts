@@ -4,6 +4,9 @@ export interface ExamResult {
   value: string;
   reference: string;
   status: 'ok' | 'atenção' | 'baixo' | 'alto';
+  category?: string;
+  unit?: string;
+  dateStr?: string;
 }
 
 export interface ExamBatch {
@@ -227,9 +230,17 @@ export interface ClinicalSummaryInfo {
   updatedAt?: string | number;
 }
 
+export type MapaGeralStateKey = 'base' | 'pior' | 'igual' | 'pouco' | 'muito' | 'sem' | 'misto';
+
 export interface CheckinQuestionOption {
-  key: 'declinio' | 'estavel' | 'em_melhora' | 'recuperado_100' | string;
+  key: 'pior' | 'igual' | 'pouco' | 'muito' | 'sem' | string;
   label: string;
+  word?: string;
+  sym?: string;
+  cls?: string;
+  band?: string;
+  val?: number;
+  color?: string;
   deltaPercent?: number;
 }
 
@@ -238,6 +249,9 @@ export interface CheckinQuestionItem {
   tagId: string;
   label: string;
   questionText: string;
+  anchorQuestion?: string;
+  anchorSubtext?: string;
+  startDate?: string;
   options?: CheckinQuestionOption[];
 }
 
@@ -254,21 +268,69 @@ export interface LongitudinalEncounterValue {
   cumulativePercent?: number;
 }
 
+export interface MapaGeralPoint {
+  key: MapaGeralStateKey | string;
+  optionLabel: string;
+  word: string;
+  sym: string;
+  cls: string;
+  color: string;
+  band: string;
+  val: number;
+  date?: string;
+  dateBr?: string;
+  shortDateBr?: string;
+}
+
 export interface LongitudinalNeedRow {
+  id?: string;
   tagId: string;
   label: string;
+  note?: string;
+  startDate?: string;
+  startDateBr?: string;
   startEncounterId?: string;
-  cumulativeByEncounter: Record<string, number | null>;
+  cumulativeByEncounter?: Record<string, number | null>;
   valuesByEncounter?: Record<string, LongitudinalEncounterValue>;
   awaitingFirstEvaluation?: boolean;
-  accumulatedPercent: number;
+  confirmedRemission?: boolean;
+  statusKey?: string;
+  statusWord?: string;
+  statusSym?: string;
   statusLabel: string;
+  statusCls?: string;
+  statusColor?: string;
+  band?: string;
+  val?: number;
+  accumulatedPercent?: number;
+  initialPoint?: MapaGeralPoint;
+  currentPoint?: MapaGeralPoint | null;
+  initialVsCurrentPoints?: MapaGeralPoint[];
 }
 
 export interface OverallEvolutionSummary {
+  exactMean?: number;
+  roundedR5?: number;
+  formattedR5?: string;
+  statusKey?: string;
+  statusWord?: string;
+  statusSym?: string;
+  statusLabel: string;
+  statusCls?: string;
+  statusColor?: string;
+  band?: string;
+  isMisto?: boolean;
+  hasAnyPior?: boolean;
+  evaluatedCount?: number;
+  bipolarBar?: {
+    r5: number;
+    widthPercent: number;
+    direction: 'right' | 'left' | 'center';
+  };
+  summaryCountsText?: string;
+  interpretationText?: string;
   averagePercent: number;
   displayScore: number;
-  statusLabel: string;
 }
 
 export interface WellbeingLongitudinalData {
@@ -348,10 +410,6 @@ export interface PatientProfile {
 
   lastSyncTimestamp: string;
   syncedByProgram: string;
-
-  // Dados clínicos integrativos e circadianos (BioSync™ e Cronobiologia)
-  metabolicAxes?: any[];
-  chrononutrition?: any[];
 
   // Ciclo de vida de tratamento e aceite de termos (Segurança e Contrato LGPD)
   startDate?: string;
