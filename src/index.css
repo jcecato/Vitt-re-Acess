@@ -70,6 +70,21 @@ body {
   animation: pl 2s infinite;
 }
 
+@keyframes pulseMedium {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.88;
+    transform: scale(1.022);
+  }
+}
+
+.anim-pulse-medium {
+  animation: pulseMedium 2.4s ease-in-out infinite;
+}
+
 /* Custom scrollbar hiding */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

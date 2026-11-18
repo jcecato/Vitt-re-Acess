@@ -6,8 +6,7 @@ export interface NavigationTab {
 
 export const NAVIGATION_TABS: NavigationTab[] = [
   { id: 'inicio', label: 'Meus Registros', iconClass: 'ti ti-home' },
-  { id: 'anotacoes', label: 'Anotações', iconClass: 'ti ti-notes' },
-  { id: 'consultas', label: 'Minha Agenda', iconClass: 'ti ti-calendar' },
+  { id: 'consultas', label: 'Agenda & Plano de Ação', iconClass: 'ti ti-calendar' },
   { id: 'evolucao', label: 'Meu Bem-Estar', iconClass: 'ti ti-chart-line' },
   { id: 'guia', label: 'Rotina Alimentar', iconClass: 'ti ti-salad' },
   { id: 'formulas-suprimentos', label: 'Fórmulas & Suprimentos', iconClass: 'ti ti-pill' },

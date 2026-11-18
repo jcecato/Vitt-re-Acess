@@ -31,7 +31,7 @@ export const MealGuideTab: React.FC<MealGuideTabProps> = ({ patient, onOpenPdf }
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-8">
             {patient.mealGuides.map((guide, index) => {
             const displayTitle = `GUIA ${String(index + 1).padStart(2, '0')}`;
             return (

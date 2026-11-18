@@ -128,6 +128,8 @@ export interface ProtocolItem {
   expirationDate?: string;
   posology?: string;
   observations?: string;
+  attentionPoint?: string;
+  routineSupport?: string[];
   actives?: ActiveIngredient[];
   formulas?: ProtocolFormula[];
 }
@@ -140,6 +142,7 @@ export interface MarketplaceProduct {
   icon: string;
   gradient: string;
   description?: string;
+  routineSupport?: string;
 }
 
 export interface DocumentItem {
@@ -209,6 +212,12 @@ export interface ClinicalEvolutionItem {
   pertinentObservations?: string;
   alertTags?: string[];
   parsedTags?: ParsedEncounterTag[];
+  positiveFindings?: string[];
+  negativeFindings?: string[];
+  whyItMatters?: string;
+  positiveRoutineImpacts?: string[];
+  negativeRoutineImpacts?: string[];
+  includedInLocations?: string[];
   nextSteps?: string[];
   predictability?: string[];
   numberedSteps?: NumberedStepItem[];

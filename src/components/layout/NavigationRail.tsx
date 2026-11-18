@@ -129,7 +129,10 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
                   />
                 )}
                 <i className={`${tab.iconClass} text-[20px]`}></i>
-                <span className="text-[16px] font-medium leading-none">
+                <span
+                  className="text-[18px] font-medium leading-none whitespace-nowrap text-center"
+                  style={tab.id === 'consultas' ? { fontSize: '17px' } : undefined}
+                >
                   {tab.label}
                 </span>
               </button>

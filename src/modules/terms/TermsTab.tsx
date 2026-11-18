@@ -32,7 +32,7 @@ export const TermsTab: React.FC<TermsTabProps> = ({ patient }) => {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-8">
             {patient.terms.map((term) => (
               <div
                 key={term.id}

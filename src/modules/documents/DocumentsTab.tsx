@@ -21,7 +21,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
           Apresente eles a sua equipe multiprofissional de forma organizada tudo em um só lugar.
         </p>
 
-        <div className="space-y-4">
+        <div className="space-y-8">
           {patient.documents.map((doc) => {
             const firstWord = (doc.name || '').split(' ')[0].toUpperCase();
             return (

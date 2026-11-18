@@ -85,7 +85,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentTabProps> = ({
             </div>
           )
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-8">
             {sortedAssessments.map((item, index) => {
             const isReady = item.status === 'laudo';
             const displayTitle = item.title 

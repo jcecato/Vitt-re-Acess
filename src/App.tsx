@@ -13,7 +13,6 @@ import { NavigationRail } from './components/layout/NavigationRail';
 
 // Modular Clinical Tabs
 import { DashboardTab } from './modules/dashboard/DashboardTab';
-import { NotesTab } from './modules/notes/NotesTab';
 import { EvolutionTab } from './modules/evolution/EvolutionTab';
 import { ConsultationsTab } from './modules/consultations/ConsultationsTab';
 import { MealGuideTab } from './modules/meal-guide/MealGuideTab';
@@ -69,11 +68,15 @@ function PatientAppContent() {
   };
 
   const handleSelectTab = (tabId: string) => {
-    setActiveTab(tabId);
+    const resolvedTab = tabId === 'anotacoes' ? 'consultas' : tabId;
+    setActiveTab(resolvedTab);
     // Reconhece e baixa a notificação assim que a aba é aberta pelo paciente
-    if (tabId !== 'inicio' && currentPatient) {
-      crmDataService.acknowledgeTabUpdate(currentPatient.id, tabId);
-      if (tabId === 'guias') {
+    if (resolvedTab !== 'inicio' && currentPatient) {
+      crmDataService.acknowledgeTabUpdate(currentPatient.id, resolvedTab);
+      if (resolvedTab === 'consultas') {
+        crmDataService.acknowledgeTabUpdate(currentPatient.id, 'anotacoes');
+      }
+      if (resolvedTab === 'guias') {
         crmDataService.acknowledgeTabUpdate(currentPatient.id, 'docs');
         crmDataService.acknowledgeTabUpdate(currentPatient.id, 'saude');
         crmDataService.acknowledgeTabUpdate(currentPatient.id, 'encam');
@@ -147,13 +150,8 @@ function PatientAppContent() {
             />
           )}
 
-          {/* 1.b Anotações (Evolução Clínica em Acordeon por Data) */}
-          {activeTab === 'anotacoes' && (
-            <NotesTab patient={currentPatient} />
-          )}
-
-          {/* 2. Minha Agenda */}
-          {activeTab === 'consultas' && (
+          {/* 2. Minha Agenda (Inclui Registros & Ações por Sessão) */}
+          {(activeTab === 'consultas' || activeTab === 'anotacoes') && (
             <ConsultationsTab
               patient={currentPatient}
               onOpenReschedule={() => setIsRescheduleOpen(true)}

@@ -27,7 +27,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({ patient, onOpenPdf }
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-8">
           {sortedFinancial.map((item) => {
             const isPaid = (item.status || '').toLowerCase() === 'pago';
 

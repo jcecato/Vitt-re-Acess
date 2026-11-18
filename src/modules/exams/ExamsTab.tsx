@@ -287,7 +287,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient }) => {
               </div>
             </div>
             <i
-              className={`ti ${isPrepExpanded ? 'ti-chevron-up' : 'ti-chevron-down'} text-[22px] text-[#fbbf24] shrink-0`}
+              className={`ti ${isPrepExpanded ? 'ti-chevron-up' : 'ti-chevron-down'} text-[36px] leading-none text-[#fbbf24] shrink-0`}
             ></i>
           </button>
 
@@ -333,7 +333,7 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient }) => {
             </p>
           </div>
         ) : (
-          <div className="space-y-3.5">
+          <div className="space-y-8">
             {batches.map((batch) => (
               <div
                 key={batch.id}
@@ -657,39 +657,122 @@ export const ExamsTab: React.FC<ExamsTabProps> = ({ patient }) => {
                 </div>
               )}
 
-              {modalBatchData.items.map((item, idx) => {
-                const meta = getStatusMeta(item.status);
-                const displayValue = [item.value, item.unit].filter(Boolean).join(' ');
+              {(() => {
+                const resolveFunctionalGroup = (name: string, rawCategory?: string): { title: string; subtitle: string; order: number } => {
+                  const n = `${name || ''} ${rawCategory || ''}`.toLowerCase();
+                  if (/vitamina d|25-hidroxi|zinco|leuc|eosin|linf|neutr|bas[oó]f|mon[oó]c|imun|igg|igm|anticorp|vitamina c|sel[eê]nio/.test(n)) {
+                    return {
+                      title: 'Imunidade & Defesa Celular',
+                      subtitle: 'Proteção imunológica, modulação inflamatória e resposta de defesa',
+                      order: 1
+                    };
+                  }
+                  if (/ferritina|ferro|hemoglobina|hemat[oó]crito|eritr[oó]c|hem[aá]cia|vcm|hcm|rdw|transferrina|b12|cobalamina|folato|[aá]cido f[oó]lico|oxig/.test(n)) {
+                    return {
+                      title: 'Manutenção de Oxigenação & Energia',
+                      subtitle: 'Transporte de oxigênio celular, estoque de ferro e disposição física',
+                      order: 2
+                    };
+                  }
+                  if (/glicose|glicemia|insulina|hba1c|glicada|homa|colesterol|hdl|ldl|vldl|triglic|[aá]cido [uú]rico|lip[ií]d|metabol/.test(n)) {
+                    return {
+                      title: 'Equilíbrio Metabólico & Glicêmico',
+                      subtitle: 'Controle de energia pós-refeição, saciedade e oxidação de gorduras',
+                      order: 3
+                    };
+                  }
+                  if (/tsh|t4|t3|tireo|cortisol|testosterona|estradiol|progesterona|dhea|shbg|lh|fsh|prolactina|hormon/.test(n)) {
+                    return {
+                      title: 'Sinalização Hormonal & Vitalidade',
+                      subtitle: 'Ritmo circadiano, taxa metabólica, recuperação e disposição',
+                      order: 4
+                    };
+                  }
+                  return {
+                    title: 'Equilíbrio Sistêmico, Hepático & Renal',
+                    subtitle: 'Detoxificação metabólica, filtração renal e marcadores de base',
+                    order: 5
+                  };
+                };
+
+                const groupedMap = new Map<
+                  string,
+                  { title: string; subtitle: string; order: number; items: typeof modalBatchData.items }
+                >();
+
+                modalBatchData.items.forEach((item) => {
+                  const grp = resolveFunctionalGroup(item.name, item.category);
+                  const existing = groupedMap.get(grp.title);
+                  if (existing) {
+                    existing.items.push(item);
+                  } else {
+                    groupedMap.set(grp.title, {
+                      ...grp,
+                      items: [item]
+                    });
+                  }
+                });
+
+                const sortedGroups = Array.from(groupedMap.values()).sort((a, b) => a.order - b.order);
 
                 return (
-                  <div
-                    key={item.id || `res-${idx}`}
-                    className={`bg-white/[0.04] border ${meta.borderClass} rounded-2xl p-3.5 space-y-2`}
-                  >
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="text-[18px] font-bold text-white leading-snug break-words">
-                        {item.name}
-                      </div>
+                  <div className="space-y-6">
+                    {sortedGroups.map((group) => (
+                      <div key={group.title} className="space-y-2.5">
+                        <div className="px-1 pb-1 border-b border-white/15">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-[18px] font-bold text-[#5eea8f] leading-snug">
+                              {group.title}
+                            </h3>
+                            <span className="text-[14px] font-semibold text-[#cfd3dc] px-2.5 py-0.5 rounded-lg bg-white/[0.06] border border-white/15 shrink-0">
+                              {group.items.length} {group.items.length === 1 ? 'exame' : 'exames'}
+                            </span>
+                          </div>
+                          <p className="text-[15px] text-[#cfd3dc] leading-snug mt-0.5">
+                            {group.subtitle}
+                          </p>
+                        </div>
 
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border text-[16px] font-extrabold shrink-0 ${meta.pillClass}`}
-                      >
-                        <ModernStatusArrow kind={meta.kind} size={24} />
-                        <span>{meta.label}</span>
-                      </span>
-                    </div>
+                        <div className="space-y-3">
+                          {group.items.map((item, idx) => {
+                            const meta = getStatusMeta(item.status);
+                            const displayValue = [item.value, item.unit].filter(Boolean).join(' ');
 
-                    <div className="flex flex-wrap items-baseline justify-between gap-2 pt-2 border-t border-white/[0.08]">
-                      <div className="text-[20px] font-extrabold text-white">
-                        {displayValue || '—'}
+                            return (
+                              <div
+                                key={item.id || `${group.title}-res-${idx}`}
+                                className={`bg-white/[0.04] border ${meta.borderClass} rounded-2xl p-3.5 space-y-2`}
+                              >
+                                <div className="flex items-start justify-between gap-2.5">
+                                  <div className="text-[18px] font-normal text-white leading-snug break-words">
+                                    {item.name}
+                                  </div>
+
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border text-[16px] font-extrabold shrink-0 ${meta.pillClass}`}
+                                  >
+                                    <ModernStatusArrow kind={meta.kind} size={24} />
+                                    <span>{meta.label}</span>
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap items-baseline justify-between gap-2 pt-2 border-t border-white/[0.08]">
+                                  <div className="text-[20px] font-extrabold text-white">
+                                    {displayValue || '—'}
+                                  </div>
+                                  <div className="text-[16px] text-[#cfd3dc]">
+                                    Ref.: {item.reference || 'Padrão laboratorial'}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div className="text-[16px] text-[#cfd3dc]">
-                        Ref.: {item.reference || 'Padrão laboratorial'}
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 );
-              })}
+              })()}
             </div>
 
             {/* Rodapé do Modal */}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PatientProfile } from '../../types/patient';
+import { PatientProfile, MarketplaceProduct } from '../../types/patient';
 import { Check, ExternalLink, ShoppingBasket } from 'lucide-react';
 
 interface MarketplaceTabProps {
@@ -45,6 +45,26 @@ function getShortenedDisplayUrl(link: string, name: string): string {
   }
 }
 
+function resolveMarketplaceSupportTag(item: MarketplaceProduct): string {
+  if (item.routineSupport && item.routineSupport.trim()) {
+    return item.routineSupport.trim();
+  }
+  const lower = `${item.name || ''} ${item.description || ''}`.toLowerCase();
+  if (lower.includes('creatina')) {
+    return 'Preserva força muscular e apoia reserva de energia física e mental';
+  }
+  if (lower.includes('whey') || lower.includes('prote')) {
+    return 'Suporte prático de saciedade e manutenção de massa magra na rotina';
+  }
+  if (lower.includes('omega') || lower.includes('ômega')) {
+    return 'Modulação inflamatória celular e suporte cognitivo diário';
+  }
+  if (lower.includes('magn')) {
+    return 'Relaxamento neuromuscular, recuperação e qualidade do sono';
+  }
+  return 'Suporte funcional diário alinhado às metas da sua avaliação clínica';
+}
+
 export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
@@ -52,12 +72,11 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
     e.stopPropagation();
     if (!fullLink) return;
 
-    // Normaliza para protocolo seguro https://
-    const targetUrl = fullLink.startsWith('http://') || fullLink.startsWith('https://')
-      ? fullLink
-      : `https://${fullLink}`;
+    const targetUrl =
+      fullLink.startsWith('http://') || fullLink.startsWith('https://')
+        ? fullLink
+        : `https://${fullLink}`;
 
-    // Copia silenciosamente a URL completa para a área de transferência
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(targetUrl);
@@ -69,7 +88,6 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
     setCopiedLink(fullLink);
     setTimeout(() => setCopiedLink(null), 2500);
 
-    // Abre a URL externa em nova aba segura
     window.open(targetUrl, '_blank', 'noopener,noreferrer');
   };
 
@@ -85,59 +103,72 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
 
       {/* Texto de Curadoria com texto justificado e instrução à esquerda */}
       <div className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 shadow-sm">
-        <p className="text-[18px] text-white leading-relaxed text-justify">
+        <p className="text-[17px] text-[#ffffff] leading-relaxed text-justify">
           Nossa Curadoria pensa nos mínimos detalhes, e você ganha tempo nas pesquisas e segurança na compra verificada.
         </p>
-        <p className="text-[18px] text-[#5eea8f] italic mt-2 font-medium text-left">
+        <p className="text-[17px] text-[#5eea8f] italic mt-2 font-medium text-left">
           Clique no link verde abaixo
         </p>
       </div>
 
       {marketplaceItems.length === 0 ? (
-        /* Estado Vazio Elegante quando o CRM ainda não cadastrou links */
-        <div className="bg-white/[0.04] border border-white/20 rounded-2xl p-6 text-center shadow-sm">
-          <div className="w-12 h-12 rounded-full bg-white/[0.05] border border-white/10 flex items-center justify-center text-amber-400 mx-auto mb-2.5">
-            <ShoppingBasket className="w-7 h-7 text-amber-400" strokeWidth={1.9} />
+        <div className="bg-white/[0.04] border border-white/50 rounded-2xl p-6 text-center shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-[#fbbf24]/15 border border-[#fbbf24]/45 flex items-center justify-center text-[#fbbf24] mx-auto mb-2.5">
+            <ShoppingBasket className="w-7 h-7 text-[#fbbf24]" strokeWidth={1.9} />
           </div>
-          <div className="text-[18px] font-semibold text-white mb-1">
+          <div className="text-[18px] font-semibold text-[#ffffff] mb-1">
             Curadoria em Preparação
           </div>
-          <p className="text-[14px] text-[#a5a4b8] leading-relaxed max-w-[290px] mx-auto">
+          <p className="text-[17px] text-[#ffffff]/80 leading-relaxed max-w-[290px] mx-auto">
             Os links diretos e verificados de farmácias parceiras e suplementos recomendados pelo Dr. João Paulo Cecato serão listados aqui.
           </p>
         </div>
       ) : (
-        /* Lista de Produtos / Links com Formatação Encurtada */
-        <div className="space-y-2.5 pt-1">
+        <div className="space-y-8 pt-1">
           {marketplaceItems.map((item) => {
             const shortenedLabel = getShortenedDisplayUrl(item.link, item.name);
+            const supportTagText = resolveMarketplaceSupportTag(item);
 
             return (
-              <div key={item.id} className="bg-white/[0.03] border-[1px] border-white/50 rounded-2xl p-3 flex items-start sm:items-center gap-3">
-                {/* Contêiner de Ícone proporcional 42x43px com -ml-[5px] e cesta moderna */}
-                <div className="w-[42px] h-[43px] -ml-[5px] rounded-xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-amber-400 shadow-sm shrink-0 mt-0.5 sm:mt-0">
-                  <ShoppingBasket className="w-[26px] h-[26px] text-amber-400 shrink-0" strokeWidth={1.9} />
-                </div>
-
-                <div className="grow min-w-0 flex flex-col">
-                  {/* 1. Nome do Produto (ex.: Creatina) */}
-                  <div className="text-[19px] font-semibold text-white leading-snug truncate">
-                    {item.name}
+              <div
+                key={item.id}
+                className="bg-white/[0.04] border-[1px] border-white/50 rounded-2xl p-3.5 space-y-2.5"
+              >
+                <div className="flex items-start gap-3">
+                  {/* Contêiner de Ícone proporcional 42x43px em Âmbar */}
+                  <div className="w-[42px] h-[43px] rounded-xl bg-[#fbbf24]/15 border border-[#fbbf24]/45 flex items-center justify-center text-[#fbbf24] shadow-sm shrink-0 mt-0.5">
+                    <ShoppingBasket className="w-[26px] h-[26px] text-[#fbbf24] shrink-0" strokeWidth={1.9} />
                   </div>
 
-                  {/* 2. Posologia / Descrição (ex.: 1 dosador ao dia) */}
-                  {item.description && (
-                    <div className="text-[17px] sm:text-[18px] text-[#e0e0ed] mt-0.5 leading-snug">
-                      {item.description}
+                  <div className="grow min-w-0 flex flex-col">
+                    {/* 1. Nome do Produto */}
+                    <div className="text-[19px] font-semibold text-[#ffffff] leading-snug break-words">
+                      {item.name}
                     </div>
-                  )}
 
-                  {/* 3. Link de Acesso Rápido */}
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {/* 2. Posologia / Descrição */}
+                    {item.description && (
+                      <div className="text-[17px] text-[#ffffff] mt-0.5 leading-snug">
+                        {item.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Propósito na Rotina em itálico fora de caixa */}
+                <p className="text-[17px] italic text-[#e8eef5] leading-snug">
+                  <span className="font-semibold text-[#fbbf24]">Fórmula Tarde</span>
+                  <span className="text-[#5eea8f] font-semibold"> &gt; </span>
+                  <span>{supportTagText}</span>
+                </p>
+
+                {/* 4. Link de Acesso Rápido + Data */}
+                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-white/15 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={(e) => handleOpenAndCopyLink(e, item.link)}
-                      className="inline-flex items-center gap-1.5 text-[15px] sm:text-[16px] text-[#5eea8f] hover:underline transition cursor-pointer font-medium max-w-full"
+                      className="inline-flex items-center gap-1.5 text-[17px] text-[#5eea8f] hover:underline transition cursor-pointer font-semibold max-w-full"
                       title="Abrir link verificado"
                     >
                       <ExternalLink className="w-4 h-4 shrink-0" />
@@ -145,16 +176,15 @@ export const MarketplaceTab: React.FC<MarketplaceTabProps> = ({ patient }) => {
                     </button>
 
                     {copiedLink === item.link && (
-                      <span className="text-[12px] bg-[#0f7a3a] text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1 font-semibold animate-fadeIn">
-                        <Check className="w-3 h-3" /> Link Aberto e Copiado
+                      <span className="text-[15px] bg-[#0f7a3a] text-[#ffffff] px-2.5 py-0.5 rounded-lg inline-flex items-center gap-1 font-semibold animate-fadeIn">
+                        <Check className="w-3.5 h-3.5" /> Link Aberto e Copiado
                       </span>
                     )}
                   </div>
 
-                  {/* 4. Data de Atualização no Rodapé */}
-                  <div className="text-[13px] sm:text-[14px] text-[#8e8da8] mt-1.5 flex items-center gap-1">
-                    <span>Atualizado: {item.dateStr}</span>
-                  </div>
+                  <span className="text-[15px] text-[#ffffff]/75">
+                    Data: {item.dateStr}
+                  </span>
                 </div>
               </div>
             );

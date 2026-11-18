@@ -128,12 +128,12 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       });
     };
 
-    // 1. Evoluções Clínicas / Anotações (/evolutions)
+    // 1. Evoluções Clínicas / Registros & Ações (/evolutions)
     (patient.clinicalEvolutions || []).forEach((ev, idx) => {
       pushUnique(
         `tl-ev-${ev.id || idx}`,
         ev.title || 'Evolução Clínica',
-        'Anotações',
+        'Agenda & Plano de Ação',
         ev.dateStr
       );
     });
@@ -239,9 +239,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       },
       {
         id: 'anotacoes',
-        label: 'Anotações',
+        label: 'Registros & Ações',
         count: annotationsCount,
-        targetTab: 'anotacoes',
+        targetTab: 'consultas',
         icon: FileText,
         iconColor: '#38bdf8'
       },
@@ -437,11 +437,11 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#5eea8f]"></span>
           </span>
           {nextConsultationDisplay !== '-' ? (
-            <span className="text-[18px]">Próxima Agenda: <strong className="text-white">{nextConsultationDisplay}</strong></span>
+            <span className="text-[17px]">Próxima Agenda: <strong className="text-white">{nextConsultationDisplay}</strong></span>
           ) : (
-            <span className="text-[18px] text-[#e0e0ed] flex items-center gap-1">
+            <span className="text-[17px] text-[#e0e0ed] flex items-center gap-1">
               <span>Próxima Agenda:</span>
-              <strong className="text-white font-bold text-lg leading-none">-</strong>
+              <strong className="text-white font-bold text-[17px] leading-none">-</strong>
             </span>
           )}
         </div>
@@ -491,7 +491,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </span>
                 <span
                   className="text-[#e8eef5] font-medium leading-tight"
-                  style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '18px' }}
+                  style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '20px' }}
                 >
                   {cat.label}
                 </span>

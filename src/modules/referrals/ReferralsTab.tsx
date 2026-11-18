@@ -14,7 +14,7 @@ export const ReferralsTab: React.FC<ReferralsTabProps> = ({ patient, onOpenPdf }
           Encaminhamentos
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-8">
           {patient.referrals.map((ref) => {
             const cleanDate = ref.dateStr.replace('PDF · ', '').replace('PDF . ', '');
 
